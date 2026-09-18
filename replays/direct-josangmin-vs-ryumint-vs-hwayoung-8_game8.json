@@ -1,0 +1,6857 @@
+{
+  "meta": {
+    "simulationLabel": "direct-josangmin-vs-ryumint-vs-hwayoung-8",
+    "gameIndex": 8,
+    "gameSeed": "direct-josangmin-vs-ryumint-vs-hwayoung-8",
+    "rules": {
+      "removeManzu2to8": true,
+      "kitaEnabled": true,
+      "akaDoraCount": {
+        "man": 0,
+        "pin": 1,
+        "sou": 1
+      },
+      "kuitan": true,
+      "atozuke": true,
+      "kuikae": false,
+      "tsumoSplitEven": false,
+      "startingScore": 35000,
+      "returnScore": 40000,
+      "uma": [
+        15000,
+        0,
+        -15000
+      ],
+      "gameLength": "east",
+      "renchanOnDealerWin": true,
+      "renchanOnDealerTenpaiDraw": true,
+      "doubleRonMode": "all",
+      "chiForbidden": true,
+      "maxKans": 4,
+      "northIsYakuhai": false,
+      "notenPenaltyTotal": 2000,
+      "honbaValue": 200,
+      "kazoeYakumanEnabled": true,
+      "doubleYakumanEnabled": true,
+      "kiriageMangan": false,
+      "doubleWindFuStacks": true
+    },
+    "seats": [
+      {
+        "seat": 0,
+        "kind": "characterAI",
+        "characterId": "josangmin"
+      },
+      {
+        "seat": 1,
+        "kind": "characterAI",
+        "characterId": "ryumint"
+      },
+      {
+        "seat": 2,
+        "kind": "characterAI",
+        "characterId": "hwayoung"
+      }
+    ]
+  },
+  "events": [
+    {
+      "type": "hand_start",
+      "handIndex": 0,
+      "roundWind": 1,
+      "roundHandNumber": 1,
+      "dealer": 0,
+      "honba": 0,
+      "kyotaku": 0,
+      "scores": [
+        35000,
+        35000,
+        35000
+      ],
+      "wallSeed": 1047853843
+    },
+    {
+      "type": "deal",
+      "hands": [
+        [
+          "s7",
+          "s6",
+          "s3",
+          "z3",
+          "p3",
+          "m9",
+          "s5",
+          "p1",
+          "z6",
+          "m9",
+          "s2",
+          "m1",
+          "p5"
+        ],
+        [
+          "z1",
+          "p2",
+          "p6",
+          "p7",
+          "p7",
+          "p4",
+          "z5",
+          "z7",
+          "s2",
+          "s8",
+          "m9",
+          "s5",
+          "p1"
+        ],
+        [
+          "z5",
+          "s8",
+          "s6",
+          "p8",
+          "s9",
+          "p1",
+          "s6",
+          "m1",
+          "z5",
+          "p1",
+          "m1",
+          "s1",
+          "s9"
+        ]
+      ],
+      "doraIndicator": "s8"
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "p9",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "p5",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "p9",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "s8",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "z2",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "p8",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "s2",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "s3",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "z1",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "p2",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "s5",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "s1",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "z4",
+      "source": "wall"
+    },
+    {
+      "type": "kita",
+      "player": 0,
+      "tile": "z4"
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "p9",
+      "source": "rinshan"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "z6",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "s7",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "p7",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "s8",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "z2",
+      "tsumogiri": false,
+      "riichiDeclaration": true
+    },
+    {
+      "type": "riichi",
+      "player": 2
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "z4",
+      "source": "wall"
+    },
+    {
+      "type": "kita",
+      "player": 0,
+      "tile": "z4"
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "s7",
+      "source": "rinshan"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "s6",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "p5",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "s2",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "z7",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "z7",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "p8",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "p8",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "p4",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "p1",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "s1",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "s1",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "z3",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "m1",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "p4",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "z7",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "s6",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "s6",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "p6",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "p3",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "s3",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "p9",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "p5",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "p5",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "s3",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "s3",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "p8",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "s3",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "s4",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "s4",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "s4",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "s4",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "s4",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "s4",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "z4",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "z4",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "z1",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "s5",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "win",
+      "player": 2,
+      "isTsumo": false,
+      "ronFrom": 0,
+      "yaku": [
+        {
+          "name": "Chiitoitsu",
+          "han": 2
+        },
+        {
+          "name": "Riichi",
+          "han": 1
+        },
+        {
+          "name": "Dora",
+          "han": 4
+        }
+      ],
+      "han": 7,
+      "fu": 25,
+      "yakumanUnits": 0,
+      "points": 12000,
+      "deltas": {
+        "0": -12000,
+        "1": 0,
+        "2": 12000
+      }
+    },
+    {
+      "type": "hand_end",
+      "scores": [
+        23000,
+        35000,
+        47000
+      ],
+      "nextDealer": 1,
+      "honba": 0,
+      "kyotaku": 0
+    },
+    {
+      "type": "hand_start",
+      "handIndex": 1,
+      "roundWind": 1,
+      "roundHandNumber": 2,
+      "dealer": 1,
+      "honba": 0,
+      "kyotaku": 0,
+      "scores": [
+        23000,
+        35000,
+        47000
+      ],
+      "wallSeed": 1031076224
+    },
+    {
+      "type": "deal",
+      "hands": [
+        [
+          "s9",
+          "p3",
+          "s7",
+          "p4",
+          "p7",
+          "p3",
+          "z6",
+          "p5",
+          "z2",
+          "p5",
+          "z2",
+          "p7",
+          "m9"
+        ],
+        [
+          "z4",
+          "p8",
+          "m1",
+          "s4",
+          "z3",
+          "s2",
+          "p6",
+          "z6",
+          "s2",
+          "z4",
+          "s1",
+          "p9",
+          "p8"
+        ],
+        [
+          "s5",
+          "z2",
+          "s7",
+          "s4",
+          "z1",
+          "s5",
+          "s7",
+          "p8",
+          "p7",
+          "s7",
+          "s6",
+          "z4",
+          "p5"
+        ]
+      ],
+      "doraIndicator": "p2"
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "p1",
+      "source": "wall"
+    },
+    {
+      "type": "kita",
+      "player": 1,
+      "tile": "z4"
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "m1",
+      "source": "rinshan"
+    },
+    {
+      "type": "kita",
+      "player": 1,
+      "tile": "z4"
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "s4",
+      "source": "rinshan"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "z3",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "p4",
+      "source": "wall"
+    },
+    {
+      "type": "kita",
+      "player": 2,
+      "tile": "z4"
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "p6",
+      "source": "rinshan"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "s5",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "z1",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "s9",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "p6",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "p1",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "p1",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "z2",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "z3",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "z3",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "s1",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "p9",
+      "tsumogiri": false,
+      "riichiDeclaration": true
+    },
+    {
+      "type": "riichi",
+      "player": 1
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "s6",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "s6",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "z1",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "p4",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "p2",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "p2",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "z3",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "p1",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "z6",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "s7",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "p7",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "p7",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "s6",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "z3",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "s3",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "s3",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "m9",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "m9",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "win",
+      "player": 0,
+      "isTsumo": false,
+      "ronFrom": 1,
+      "yaku": [
+        {
+          "name": "Chiitoitsu",
+          "han": 2
+        },
+        {
+          "name": "Dora",
+          "han": 3
+        }
+      ],
+      "han": 5,
+      "fu": 25,
+      "yakumanUnits": 0,
+      "points": 8000,
+      "deltas": {
+        "0": 8000,
+        "1": -8000,
+        "2": 0
+      }
+    },
+    {
+      "type": "hand_end",
+      "scores": [
+        32000,
+        26000,
+        47000
+      ],
+      "nextDealer": 2,
+      "honba": 0,
+      "kyotaku": 0
+    },
+    {
+      "type": "hand_start",
+      "handIndex": 2,
+      "roundWind": 1,
+      "roundHandNumber": 3,
+      "dealer": 2,
+      "honba": 0,
+      "kyotaku": 0,
+      "scores": [
+        32000,
+        26000,
+        47000
+      ],
+      "wallSeed": 1081409081
+    },
+    {
+      "type": "deal",
+      "hands": [
+        [
+          "z2",
+          "p3",
+          "s5",
+          "z5",
+          "s2",
+          "s6",
+          "s8",
+          "m9",
+          "p8",
+          "p9",
+          "s3",
+          "z1",
+          "p6"
+        ],
+        [
+          "s7",
+          "s4",
+          "z3",
+          "m9",
+          "s9",
+          "s7",
+          "z6",
+          "p3",
+          "s3",
+          "s2",
+          "p4",
+          "s4",
+          "z7"
+        ],
+        [
+          "p5",
+          "z1",
+          "s4",
+          "p1",
+          "p9",
+          "s1",
+          "z5",
+          "m1",
+          "z7",
+          "m9",
+          "s1",
+          "p1",
+          "s8"
+        ]
+      ],
+      "doraIndicator": "p7"
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "z7",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "p9",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "z1",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "p3",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "z2",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "s4",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "p2",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "z1",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "call",
+      "call": "pon",
+      "player": 0,
+      "kind": "z1",
+      "fromPlayer": 2
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "m9",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "s7",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "z3",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "z4",
+      "source": "wall"
+    },
+    {
+      "type": "kita",
+      "player": 2,
+      "tile": "z4"
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "p9",
+      "source": "rinshan"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "s4",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "p4",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "z2",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "s2",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "z7",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "p8",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "p2",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "s6",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "s2",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "s9",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "m9",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "p1",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "p8",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "z3",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "s8",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "p5",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "z2",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "z4",
+      "source": "wall"
+    },
+    {
+      "type": "kita",
+      "player": 2,
+      "tile": "z4"
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "p5",
+      "source": "rinshan"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "p9",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "p2",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "p2",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "s1",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "z6",
+      "tsumogiri": false,
+      "riichiDeclaration": true
+    },
+    {
+      "type": "riichi",
+      "player": 1
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "p9",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "m1",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "s6",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "z3",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "p6",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "p6",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "s4",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "m9",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "p7",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "p6",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "p7",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "p7",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "m1",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "p1",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "s6",
+      "source": "wall"
+    },
+    {
+      "type": "call",
+      "call": "kan_closed",
+      "player": 0,
+      "kind": "s6"
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "z6",
+      "source": "rinshan"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "z6",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "z4",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "z4",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "p6",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "s4",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "s7",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "s7",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "p2",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "p2",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "s5",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "p6",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "s1",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "p4",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "z6",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "z6",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "p6",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "p9",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "p4",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "p4",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "p4",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 1,
+      "tile": "p4",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 2,
+      "tile": "p2",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 2,
+      "tile": "p2",
+      "tsumogiri": true,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 0,
+      "tile": "s9",
+      "source": "wall"
+    },
+    {
+      "type": "discard",
+      "player": 0,
+      "tile": "s1",
+      "tsumogiri": false,
+      "riichiDeclaration": false
+    },
+    {
+      "type": "draw",
+      "player": 1,
+      "tile": "s3",
+      "source": "wall"
+    },
+    {
+      "type": "win",
+      "player": 1,
+      "isTsumo": true,
+      "yaku": [
+        {
+          "name": "Riichi",
+          "han": 1
+        },
+        {
+          "name": "Menzen Tsumo",
+          "han": 1
+        },
+        {
+          "name": "Dora",
+          "han": 2
+        }
+      ],
+      "han": 4,
+      "fu": 30,
+      "yakumanUnits": 0,
+      "points": 5900,
+      "deltas": {
+        "0": -2000,
+        "1": 5900,
+        "2": -3900
+      }
+    },
+    {
+      "type": "hand_end",
+      "scores": [
+        30000,
+        31900,
+        43100
+      ],
+      "nextDealer": 0,
+      "honba": 0,
+      "kyotaku": 0
+    },
+    {
+      "type": "game_end",
+      "finalScores": [
+        30000,
+        31900,
+        43100
+      ]
+    }
+  ],
+  "aiDecisions": [
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "p5",
+      "topCandidates": [
+        {
+          "kind": "p5",
+          "score": -29.72320869111456
+        },
+        {
+          "kind": "p9",
+          "score": -29.86377492961474
+        },
+        {
+          "kind": "z6",
+          "score": -30.029448727439156
+        },
+        {
+          "kind": "z3",
+          "score": -30.05306116612628
+        },
+        {
+          "kind": "p1",
+          "score": -30.076978120235726
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "s8",
+      "topCandidates": [
+        {
+          "kind": "s5",
+          "score": -49.08372013566333
+        },
+        {
+          "kind": "p1",
+          "score": -49.38895339389021
+        },
+        {
+          "kind": "p2",
+          "score": -49.46017763110499
+        },
+        {
+          "kind": "s2",
+          "score": -49.50928782716642
+        },
+        {
+          "kind": "p4",
+          "score": -49.58316291099104
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "p8",
+      "topCandidates": [
+        {
+          "kind": "s8",
+          "score": -9.26863065464034
+        },
+        {
+          "kind": "p8",
+          "score": -9.326811444860262
+        },
+        {
+          "kind": "s1",
+          "score": -9.788630815556584
+        },
+        {
+          "kind": "z2",
+          "score": -10.07875052827488
+        },
+        {
+          "kind": "p1",
+          "score": -19.542260968651778
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "s3",
+      "topCandidates": [
+        {
+          "kind": "s2",
+          "score": -29.730534165843856
+        },
+        {
+          "kind": "s3",
+          "score": -29.77709823314644
+        },
+        {
+          "kind": "p9",
+          "score": -29.807189364082493
+        },
+        {
+          "kind": "m1",
+          "score": -29.914728338910113
+        },
+        {
+          "kind": "z3",
+          "score": -29.972446258909383
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "p2",
+      "topCandidates": [
+        {
+          "kind": "s5",
+          "score": -39.00579424190024
+        },
+        {
+          "kind": "p7",
+          "score": -39.102982763821885
+        },
+        {
+          "kind": "m9",
+          "score": -39.13415960031251
+        },
+        {
+          "kind": "p6",
+          "score": -39.24281998341282
+        },
+        {
+          "kind": "p9",
+          "score": -39.426753625267494
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "s1",
+      "topCandidates": [
+        {
+          "kind": "z2",
+          "score": -9.67494268190172
+        },
+        {
+          "kind": "s1",
+          "score": -9.681814822352802
+        },
+        {
+          "kind": "s5",
+          "score": -9.773901895511274
+        },
+        {
+          "kind": "s8",
+          "score": -10.213060133981829
+        },
+        {
+          "kind": "z5",
+          "score": -19.29671945908707
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "z6",
+      "topCandidates": [
+        {
+          "kind": "z6",
+          "score": -19.87573885548394
+        },
+        {
+          "kind": "z3",
+          "score": -20.049910097431855
+        },
+        {
+          "kind": "m1",
+          "score": -20.091244293830822
+        },
+        {
+          "kind": "p3",
+          "score": -29.606233408474363
+        },
+        {
+          "kind": "s7",
+          "score": -29.647729397292714
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "p7",
+      "topCandidates": [
+        {
+          "kind": "p9",
+          "score": -39.17913089381841
+        },
+        {
+          "kind": "m9",
+          "score": -39.21451638352436
+        },
+        {
+          "kind": "p1",
+          "score": -39.48322756229279
+        },
+        {
+          "kind": "p4",
+          "score": -39.52246154431564
+        },
+        {
+          "kind": "z5",
+          "score": -39.81219384279412
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "z2",
+      "topCandidates": [
+        {
+          "kind": "z2",
+          "score": 0.6498319217345931
+        },
+        {
+          "kind": "s5",
+          "score": 0.26401668477477513
+        },
+        {
+          "kind": "z5",
+          "score": -9.261091028629435
+        },
+        {
+          "kind": "p1",
+          "score": -9.545853580293091
+        },
+        {
+          "kind": "m1",
+          "score": -9.939814395006591
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "s6",
+      "topCandidates": [
+        {
+          "kind": "s6",
+          "score": -26.01573815931438
+        },
+        {
+          "kind": "z3",
+          "score": -26.038582315292327
+        },
+        {
+          "kind": "p3",
+          "score": -26.067752543060227
+        },
+        {
+          "kind": "s5",
+          "score": -26.11965894119686
+        },
+        {
+          "kind": "m1",
+          "score": -26.221475942999707
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "s2",
+      "topCandidates": [
+        {
+          "kind": "z5",
+          "score": -29.695934245148653
+        },
+        {
+          "kind": "m9",
+          "score": -29.999786283019912
+        },
+        {
+          "kind": "s2",
+          "score": -30.182105427719634
+        },
+        {
+          "kind": "p1",
+          "score": -30.593822932085004
+        },
+        {
+          "kind": "z7",
+          "score": -30.808062176844086
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "p8",
+      "topCandidates": [
+        {
+          "kind": "p8",
+          "score": -19.89166227101969
+        },
+        {
+          "kind": "m1",
+          "score": -25.850917686485804
+        },
+        {
+          "kind": "p1",
+          "score": -25.951558661487535
+        },
+        {
+          "kind": "p3",
+          "score": -26.09569214688719
+        },
+        {
+          "kind": "s5",
+          "score": -26.18616513284261
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "p1",
+      "topCandidates": [
+        {
+          "kind": "p1",
+          "score": -29.253517796977714
+        },
+        {
+          "kind": "p9",
+          "score": -29.61842862789828
+        },
+        {
+          "kind": "z7",
+          "score": -29.927861414271717
+        },
+        {
+          "kind": "p4",
+          "score": -30.181413198327625
+        },
+        {
+          "kind": "m9",
+          "score": -30.64407809399687
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "m1",
+      "topCandidates": [
+        {
+          "kind": "m1",
+          "score": -14.558240517407782
+        },
+        {
+          "kind": "s5",
+          "score": -14.578021530948707
+        },
+        {
+          "kind": "p3",
+          "score": -14.598561954178974
+        },
+        {
+          "kind": "p1",
+          "score": -14.611737162212037
+        },
+        {
+          "kind": "s2",
+          "score": -24.516451276694863
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "z7",
+      "topCandidates": [
+        {
+          "kind": "z7",
+          "score": -19.28659770184755
+        },
+        {
+          "kind": "z5",
+          "score": -20.456973750304968
+        },
+        {
+          "kind": "m9",
+          "score": -20.659283210402272
+        },
+        {
+          "kind": "p9",
+          "score": -20.751562915599514
+        },
+        {
+          "kind": "p4",
+          "score": -29.272361015835695
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "p3",
+      "topCandidates": [
+        {
+          "kind": "p3",
+          "score": -14.548455967616416
+        },
+        {
+          "kind": "p6",
+          "score": -14.899697428780735
+        },
+        {
+          "kind": "p1",
+          "score": -14.916025668687313
+        },
+        {
+          "kind": "s5",
+          "score": -14.948900502295826
+        },
+        {
+          "kind": "p9",
+          "score": -24.703834343816126
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "p9",
+      "topCandidates": [
+        {
+          "kind": "z5",
+          "score": -19.443139130395444
+        },
+        {
+          "kind": "s7",
+          "score": -19.733605584467366
+        },
+        {
+          "kind": "s3",
+          "score": -19.75320111559944
+        },
+        {
+          "kind": "p9",
+          "score": -19.89899765843207
+        },
+        {
+          "kind": "m9",
+          "score": -20.432303801274465
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "s3",
+      "topCandidates": [
+        {
+          "kind": "s3",
+          "score": -11.72961774661803
+        },
+        {
+          "kind": "p1",
+          "score": -14.58252419430263
+        },
+        {
+          "kind": "s5",
+          "score": -14.611237674313259
+        },
+        {
+          "kind": "p6",
+          "score": -14.782175862923857
+        },
+        {
+          "kind": "s2",
+          "score": -24.7311706028301
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "s3",
+      "topCandidates": [
+        {
+          "kind": "s3",
+          "score": -19.33629806786084
+        },
+        {
+          "kind": "p5",
+          "score": -19.56644205913879
+        },
+        {
+          "kind": "p8",
+          "score": -20.22057047760114
+        },
+        {
+          "kind": "s7",
+          "score": -20.580227105247396
+        },
+        {
+          "kind": "z5",
+          "score": -20.747558520069884
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "s4",
+      "topCandidates": [
+        {
+          "kind": "s4",
+          "score": -9.56780475530851
+        },
+        {
+          "kind": "p1",
+          "score": -14.62511903499452
+        },
+        {
+          "kind": "p6",
+          "score": -14.678277944714889
+        },
+        {
+          "kind": "s5",
+          "score": -14.836272505228068
+        },
+        {
+          "kind": "s7",
+          "score": -21.383661001422205
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "s4",
+      "topCandidates": [
+        {
+          "kind": "s4",
+          "score": -19.197541100695727
+        },
+        {
+          "kind": "p8",
+          "score": -19.335457533914596
+        },
+        {
+          "kind": "p5",
+          "score": -19.53780348274857
+        },
+        {
+          "kind": "s7",
+          "score": -19.73993172320777
+        },
+        {
+          "kind": "m9",
+          "score": -19.836947572885617
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 0,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "s5",
+      "topCandidates": [
+        {
+          "kind": "s5",
+          "score": -14.516166099842765
+        },
+        {
+          "kind": "p6",
+          "score": -14.539799213981848
+        },
+        {
+          "kind": "p1",
+          "score": -14.665973437928722
+        },
+        {
+          "kind": "z1",
+          "score": -14.679376437507697
+        },
+        {
+          "kind": "s7",
+          "score": -21.650777690412706
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 1,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "z3",
+      "topCandidates": [
+        {
+          "kind": "p1",
+          "score": -19.11373877065877
+        },
+        {
+          "kind": "s1",
+          "score": -19.181149479110417
+        },
+        {
+          "kind": "z6",
+          "score": -19.469379364472506
+        },
+        {
+          "kind": "z3",
+          "score": -19.487175579356652
+        },
+        {
+          "kind": "p6",
+          "score": -19.95169234204727
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 1,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "s5",
+      "topCandidates": [
+        {
+          "kind": "s5",
+          "score": -9.499025033938233
+        },
+        {
+          "kind": "z1",
+          "score": -9.91573732654797
+        },
+        {
+          "kind": "z2",
+          "score": -9.94056013089139
+        },
+        {
+          "kind": "p6",
+          "score": -19.261290259742896
+        },
+        {
+          "kind": "p8",
+          "score": -19.473582493399523
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 1,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "s9",
+      "topCandidates": [
+        {
+          "kind": "s7",
+          "score": -19.390520077552644
+        },
+        {
+          "kind": "p4",
+          "score": -19.502875041469622
+        },
+        {
+          "kind": "s9",
+          "score": -19.601087489014024
+        },
+        {
+          "kind": "z1",
+          "score": -19.602930027630336
+        },
+        {
+          "kind": "m9",
+          "score": -19.749988532122224
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 1,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "p1",
+      "topCandidates": [
+        {
+          "kind": "p1",
+          "score": -9.235699024501567
+        },
+        {
+          "kind": "s1",
+          "score": -9.404174414941421
+        },
+        {
+          "kind": "p9",
+          "score": -10.001981143768257
+        },
+        {
+          "kind": "z6",
+          "score": -10.367564257721728
+        },
+        {
+          "kind": "p6",
+          "score": -19.332770806315047
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 1,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "z2",
+      "topCandidates": [
+        {
+          "kind": "p1",
+          "score": -9.502991637284868
+        },
+        {
+          "kind": "z2",
+          "score": -9.604762234014924
+        },
+        {
+          "kind": "z1",
+          "score": -10.153980651556049
+        },
+        {
+          "kind": "p7",
+          "score": -19.601384610834067
+        },
+        {
+          "kind": "s4",
+          "score": -19.64450552875642
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 1,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "z3",
+      "topCandidates": [
+        {
+          "kind": "z3",
+          "score": -19.413825484025292
+        },
+        {
+          "kind": "p4",
+          "score": -19.600106989207365
+        },
+        {
+          "kind": "s7",
+          "score": -19.649629847702258
+        },
+        {
+          "kind": "m9",
+          "score": -19.691824762815763
+        },
+        {
+          "kind": "z1",
+          "score": -19.768471943777985
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 1,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "p9",
+      "topCandidates": [
+        {
+          "kind": "p9",
+          "score": 1.182673237312585
+        },
+        {
+          "kind": "z6",
+          "score": 0.4518229356016964
+        },
+        {
+          "kind": "p6",
+          "score": -9.302475940625495
+        },
+        {
+          "kind": "s2",
+          "score": -9.442319570056474
+        },
+        {
+          "kind": "s1",
+          "score": -9.448372956610596
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 1,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "s6",
+      "topCandidates": [
+        {
+          "kind": "p1",
+          "score": -9.721453605464195
+        },
+        {
+          "kind": "s6",
+          "score": -10.163594430454806
+        },
+        {
+          "kind": "z1",
+          "score": -11.12667486786636
+        },
+        {
+          "kind": "p6",
+          "score": -20.23633101968942
+        },
+        {
+          "kind": "p4",
+          "score": -20.32106148673836
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 1,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "p4",
+      "topCandidates": [
+        {
+          "kind": "p4",
+          "score": -11.348739309186502
+        },
+        {
+          "kind": "z6",
+          "score": -14.284245298083842
+        },
+        {
+          "kind": "m9",
+          "score": -14.677484751317776
+        },
+        {
+          "kind": "s7",
+          "score": -14.689121449498586
+        },
+        {
+          "kind": "p5",
+          "score": -24.335601867116495
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 1,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "p1",
+      "topCandidates": [
+        {
+          "kind": "p1",
+          "score": -9.720107742131223
+        },
+        {
+          "kind": "z3",
+          "score": -10.350295557489153
+        },
+        {
+          "kind": "z1",
+          "score": -10.824548025001105
+        },
+        {
+          "kind": "p4",
+          "score": -19.7338313488747
+        },
+        {
+          "kind": "p8",
+          "score": -20.139382300249096
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 1,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "s7",
+      "topCandidates": [
+        {
+          "kind": "s7",
+          "score": -0.07186479419535993
+        },
+        {
+          "kind": "m9",
+          "score": -0.17828757140851614
+        },
+        {
+          "kind": "p5",
+          "score": -9.930195835297372
+        },
+        {
+          "kind": "z1",
+          "score": -10.217032943588922
+        },
+        {
+          "kind": "z6",
+          "score": -10.504474488997142
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "riichi_decision",
+      "handIndex": 1,
+      "player": 0,
+      "characterId": "josangmin",
+      "riichiScore": 0.3266104795385152,
+      "damaScore": 0.73,
+      "commitmentCost": 0.0912,
+      "declared": false,
+      "baselineRiichiScore": 0.4185,
+      "baselineDamaScore": 0.73,
+      "adjustedRiichiScore": 0.3273,
+      "adjustedDamaScore": 0.73,
+      "baselineDecision": "dama",
+      "adjustedDecision": "dama",
+      "mechanicChangedDecision": false,
+      "actualDecision": "dama"
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 1,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "z3",
+      "topCandidates": [
+        {
+          "kind": "z3",
+          "score": -9.803938556218053
+        },
+        {
+          "kind": "z1",
+          "score": -10.284247714807544
+        },
+        {
+          "kind": "s6",
+          "score": -10.482199126286696
+        },
+        {
+          "kind": "p4",
+          "score": -19.614067565569535
+        },
+        {
+          "kind": "p7",
+          "score": -20.043692439633677
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 1,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "s3",
+      "topCandidates": [
+        {
+          "kind": "s3",
+          "score": 0.07532144611635205
+        },
+        {
+          "kind": "m9",
+          "score": -0.008573219848992675
+        },
+        {
+          "kind": "p5",
+          "score": -9.577719320062924
+        },
+        {
+          "kind": "p7",
+          "score": -9.760484676586376
+        },
+        {
+          "kind": "z6",
+          "score": -10.444743440667873
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "riichi_decision",
+      "handIndex": 1,
+      "player": 0,
+      "characterId": "josangmin",
+      "riichiScore": 0.31663773379772897,
+      "damaScore": 0.73,
+      "commitmentCost": 0.0912,
+      "declared": false,
+      "baselineRiichiScore": 0.4185,
+      "baselineDamaScore": 0.73,
+      "adjustedRiichiScore": 0.3273,
+      "adjustedDamaScore": 0.73,
+      "baselineDecision": "dama",
+      "adjustedDecision": "dama",
+      "mechanicChangedDecision": false,
+      "actualDecision": "dama"
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "p9",
+      "topCandidates": [
+        {
+          "kind": "p9",
+          "score": -29.40742720250506
+        },
+        {
+          "kind": "s8",
+          "score": -29.57580402165186
+        },
+        {
+          "kind": "z5",
+          "score": -29.623684601034036
+        },
+        {
+          "kind": "m1",
+          "score": -29.64809457914904
+        },
+        {
+          "kind": "s4",
+          "score": -29.778845684870614
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "p3",
+      "topCandidates": [
+        {
+          "kind": "p6",
+          "score": -39.634362471265874
+        },
+        {
+          "kind": "p3",
+          "score": -39.73891113807835
+        },
+        {
+          "kind": "m9",
+          "score": -39.88260671059058
+        },
+        {
+          "kind": "z5",
+          "score": -39.904173323038655
+        },
+        {
+          "kind": "p9",
+          "score": -39.976518866623906
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "s4",
+      "topCandidates": [
+        {
+          "kind": "p3",
+          "score": -39.078525777483975
+        },
+        {
+          "kind": "s4",
+          "score": -39.21478877593453
+        },
+        {
+          "kind": "z7",
+          "score": -39.259070169207945
+        },
+        {
+          "kind": "s9",
+          "score": -39.263301368470614
+        },
+        {
+          "kind": "s7",
+          "score": -39.368842732633155
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "z1",
+      "topCandidates": [
+        {
+          "kind": "s4",
+          "score": -29.27162967190612
+        },
+        {
+          "kind": "p2",
+          "score": -29.377939497204498
+        },
+        {
+          "kind": "z1",
+          "score": -29.583345154842828
+        },
+        {
+          "kind": "s8",
+          "score": -29.585885640934574
+        },
+        {
+          "kind": "m9",
+          "score": -29.675581289776602
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "call_decision",
+      "handIndex": 2,
+      "player": 0,
+      "characterId": "josangmin",
+      "callKind": "pon",
+      "callScore": 0.5391950408872217,
+      "effortAversionCost": 0.07600000000000001,
+      "shantenGain": 1,
+      "called": true,
+      "baselineCallScore": 0.6125,
+      "adjustedCallScore": 0.5365,
+      "effortModifier": 0,
+      "commitmentModifier": 0.07600000000000001,
+      "baselineDecision": "call",
+      "adjustedDecision": "call",
+      "mechanicChangedDecision": false,
+      "actualDecision": "call"
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "m9",
+      "topCandidates": [
+        {
+          "kind": "p9",
+          "score": -29.603881111855156
+        },
+        {
+          "kind": "m9",
+          "score": -29.60455614740029
+        },
+        {
+          "kind": "p6",
+          "score": -29.946663407078013
+        },
+        {
+          "kind": "s2",
+          "score": -29.98782273262041
+        },
+        {
+          "kind": "z2",
+          "score": -30.007387469841632
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "z3",
+      "topCandidates": [
+        {
+          "kind": "z7",
+          "score": -29.47240588448569
+        },
+        {
+          "kind": "z6",
+          "score": -29.57718990938365
+        },
+        {
+          "kind": "z2",
+          "score": -29.59041066717915
+        },
+        {
+          "kind": "s9",
+          "score": -29.778390099704268
+        },
+        {
+          "kind": "m9",
+          "score": -29.818309021371725
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "s4",
+      "topCandidates": [
+        {
+          "kind": "s8",
+          "score": -29.32019724215148
+        },
+        {
+          "kind": "m1",
+          "score": -29.38246401936747
+        },
+        {
+          "kind": "s4",
+          "score": -29.48006533474196
+        },
+        {
+          "kind": "p9",
+          "score": -29.82958757448476
+        },
+        {
+          "kind": "p2",
+          "score": -29.854834038044793
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "z2",
+      "topCandidates": [
+        {
+          "kind": "z2",
+          "score": -29.725648463387042
+        },
+        {
+          "kind": "z5",
+          "score": -29.83274553084746
+        },
+        {
+          "kind": "p9",
+          "score": -29.83419592393795
+        },
+        {
+          "kind": "p6",
+          "score": -29.885835891799072
+        },
+        {
+          "kind": "s2",
+          "score": -29.898728382422124
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "z7",
+      "topCandidates": [
+        {
+          "kind": "z7",
+          "score": -29.10189005132144
+        },
+        {
+          "kind": "z2",
+          "score": -29.743695424910015
+        },
+        {
+          "kind": "m9",
+          "score": -30.235475661668307
+        },
+        {
+          "kind": "z6",
+          "score": -30.267413528043157
+        },
+        {
+          "kind": "s9",
+          "score": -30.283551924106973
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "p2",
+      "topCandidates": [
+        {
+          "kind": "p2",
+          "score": -29.232577797772827
+        },
+        {
+          "kind": "s8",
+          "score": -29.374918391709215
+        },
+        {
+          "kind": "p8",
+          "score": -29.724601899483243
+        },
+        {
+          "kind": "p9",
+          "score": -29.808747267602012
+        },
+        {
+          "kind": "z5",
+          "score": -29.864354235441425
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "s2",
+      "topCandidates": [
+        {
+          "kind": "s2",
+          "score": -19.90911187374033
+        },
+        {
+          "kind": "s8",
+          "score": -20.111832678278443
+        },
+        {
+          "kind": "z5",
+          "score": -20.20017998653697
+        },
+        {
+          "kind": "s5",
+          "score": -20.309968291663097
+        },
+        {
+          "kind": "p6",
+          "score": -29.531965323062614
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "m9",
+      "topCandidates": [
+        {
+          "kind": "m9",
+          "score": -18.934244889253748
+        },
+        {
+          "kind": "z2",
+          "score": -19.219434569599105
+        },
+        {
+          "kind": "s2",
+          "score": -19.77206161557697
+        },
+        {
+          "kind": "z6",
+          "score": -19.969865062385797
+        },
+        {
+          "kind": "s9",
+          "score": -28.99556607023192
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "p8",
+      "topCandidates": [
+        {
+          "kind": "z5",
+          "score": -29.37294944147114
+        },
+        {
+          "kind": "m1",
+          "score": -29.425655677269678
+        },
+        {
+          "kind": "p8",
+          "score": -29.801476853096393
+        },
+        {
+          "kind": "p1",
+          "score": -29.92988337514922
+        },
+        {
+          "kind": "s8",
+          "score": -30.168478970383294
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "s8",
+      "topCandidates": [
+        {
+          "kind": "s8",
+          "score": -19.69285556237912
+        },
+        {
+          "kind": "z3",
+          "score": -20.117106996444054
+        },
+        {
+          "kind": "z5",
+          "score": -20.2659260284761
+        },
+        {
+          "kind": "p6",
+          "score": -29.54929663842777
+        },
+        {
+          "kind": "p8",
+          "score": -29.899733507379423
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "z2",
+      "topCandidates": [
+        {
+          "kind": "z2",
+          "score": -9.260486289234832
+        },
+        {
+          "kind": "z6",
+          "score": -9.417325536180288
+        },
+        {
+          "kind": "s2",
+          "score": -9.991760359629989
+        },
+        {
+          "kind": "s7",
+          "score": -18.889119188003242
+        },
+        {
+          "kind": "s9",
+          "score": -19.15421355906874
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "p9",
+      "topCandidates": [
+        {
+          "kind": "p9",
+          "score": -19.344773764362717
+        },
+        {
+          "kind": "m1",
+          "score": -19.635672697426443
+        },
+        {
+          "kind": "z5",
+          "score": -19.917654552614938
+        },
+        {
+          "kind": "p1",
+          "score": -20.027616996780658
+        },
+        {
+          "kind": "s8",
+          "score": -20.111644564519327
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "p2",
+      "topCandidates": [
+        {
+          "kind": "p6",
+          "score": -19.7319573824713
+        },
+        {
+          "kind": "p2",
+          "score": -19.761010792681482
+        },
+        {
+          "kind": "p9",
+          "score": -19.947233417369425
+        },
+        {
+          "kind": "z5",
+          "score": -20.172064487424212
+        },
+        {
+          "kind": "z3",
+          "score": -20.18093352568569
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 1,
+      "characterId": "ryumint",
+      "chosenKind": "z6",
+      "topCandidates": [
+        {
+          "kind": "z6",
+          "score": -0.10858116051726618
+        },
+        {
+          "kind": "s2",
+          "score": -9.20417865132913
+        },
+        {
+          "kind": "s1",
+          "score": -9.223330992348492
+        },
+        {
+          "kind": "s7",
+          "score": -9.47031661788933
+        },
+        {
+          "kind": "s3",
+          "score": -9.774644581098109
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "m1",
+      "topCandidates": [
+        {
+          "kind": "z5",
+          "score": -20.236215183292668
+        },
+        {
+          "kind": "m9",
+          "score": -20.277116181179107
+        },
+        {
+          "kind": "m1",
+          "score": -20.280031197217912
+        },
+        {
+          "kind": "s8",
+          "score": -20.4682993610717
+        },
+        {
+          "kind": "p1",
+          "score": -20.473556327189005
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "z3",
+      "topCandidates": [
+        {
+          "kind": "z3",
+          "score": -19.8663805492199
+        },
+        {
+          "kind": "p9",
+          "score": -25.986597918355336
+        },
+        {
+          "kind": "p6",
+          "score": -26.03436954572281
+        },
+        {
+          "kind": "p4",
+          "score": -26.03707039726382
+        },
+        {
+          "kind": "z5",
+          "score": -26.337591641970874
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "m9",
+      "topCandidates": [
+        {
+          "kind": "m9",
+          "score": -19.61383283476035
+        },
+        {
+          "kind": "s4",
+          "score": -20.250816615521135
+        },
+        {
+          "kind": "p9",
+          "score": -20.294144990739426
+        },
+        {
+          "kind": "s8",
+          "score": -20.34506860394279
+        },
+        {
+          "kind": "z5",
+          "score": -20.56957801579513
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "p6",
+      "topCandidates": [
+        {
+          "kind": "p6",
+          "score": -10.090371856617276
+        },
+        {
+          "kind": "p9",
+          "score": -11.686517254738678
+        },
+        {
+          "kind": "p4",
+          "score": -15.108367597054507
+        },
+        {
+          "kind": "s6",
+          "score": -15.200378797882053
+        },
+        {
+          "kind": "z5",
+          "score": -15.3277617481526
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "p1",
+      "topCandidates": [
+        {
+          "kind": "p1",
+          "score": -20.25528473200059
+        },
+        {
+          "kind": "p9",
+          "score": -20.2562338228007
+        },
+        {
+          "kind": "z5",
+          "score": -20.263392517496985
+        },
+        {
+          "kind": "s4",
+          "score": -20.28211543548542
+        },
+        {
+          "kind": "s8",
+          "score": -20.32075679387447
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "z6",
+      "topCandidates": [
+        {
+          "kind": "z6",
+          "score": -9.746616084729322
+        },
+        {
+          "kind": "p4",
+          "score": -11.662412101985497
+        },
+        {
+          "kind": "z5",
+          "score": -14.899959801993148
+        },
+        {
+          "kind": "p7",
+          "score": -19.565906855564098
+        },
+        {
+          "kind": "p9",
+          "score": -21.912435100814868
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "s4",
+      "topCandidates": [
+        {
+          "kind": "s4",
+          "score": -19.443129587675603
+        },
+        {
+          "kind": "p6",
+          "score": -20.124121285441024
+        },
+        {
+          "kind": "p9",
+          "score": -20.20068202084118
+        },
+        {
+          "kind": "m1",
+          "score": -20.233132240271814
+        },
+        {
+          "kind": "s8",
+          "score": -20.318308010210902
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "s7",
+      "topCandidates": [
+        {
+          "kind": "p4",
+          "score": -11.783953749538476
+        },
+        {
+          "kind": "s7",
+          "score": -11.990158350535744
+        },
+        {
+          "kind": "z5",
+          "score": -14.75240685488896
+        },
+        {
+          "kind": "s3",
+          "score": -15.321775377442876
+        },
+        {
+          "kind": "p7",
+          "score": -19.922307283985894
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "p6",
+      "topCandidates": [
+        {
+          "kind": "p6",
+          "score": -19.299280817505593
+        },
+        {
+          "kind": "p9",
+          "score": -20.52316420282192
+        },
+        {
+          "kind": "s8",
+          "score": -20.5722358349037
+        },
+        {
+          "kind": "m1",
+          "score": -20.645734690597898
+        },
+        {
+          "kind": "z5",
+          "score": -21.023039786613232
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "p4",
+      "topCandidates": [
+        {
+          "kind": "p4",
+          "score": -11.587918834312429
+        },
+        {
+          "kind": "s1",
+          "score": -11.945184022063
+        },
+        {
+          "kind": "z5",
+          "score": -14.82858882156068
+        },
+        {
+          "kind": "s5",
+          "score": -15.322696839369648
+        },
+        {
+          "kind": "p7",
+          "score": -20.07616747241514
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "p9",
+      "topCandidates": [
+        {
+          "kind": "p9",
+          "score": -20.067870436727084
+        },
+        {
+          "kind": "p6",
+          "score": -20.136830778770772
+        },
+        {
+          "kind": "m1",
+          "score": -20.318553931617796
+        },
+        {
+          "kind": "z5",
+          "score": -20.682193487722113
+        },
+        {
+          "kind": "s5",
+          "score": -20.781216100093594
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "p4",
+      "topCandidates": [
+        {
+          "kind": "p4",
+          "score": -11.750202767451835
+        },
+        {
+          "kind": "s1",
+          "score": -12.084107461521011
+        },
+        {
+          "kind": "z5",
+          "score": -14.920837458654843
+        },
+        {
+          "kind": "s5",
+          "score": -15.55916645860188
+        },
+        {
+          "kind": "p7",
+          "score": -19.657734762803187
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 2,
+      "characterId": "hwayoung",
+      "chosenKind": "p2",
+      "topCandidates": [
+        {
+          "kind": "p2",
+          "score": -19.882845696005194
+        },
+        {
+          "kind": "p6",
+          "score": -20.0497213781594
+        },
+        {
+          "kind": "m1",
+          "score": -20.65507307666369
+        },
+        {
+          "kind": "z5",
+          "score": -20.73961185674664
+        },
+        {
+          "kind": "s5",
+          "score": -20.905130036736526
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    },
+    {
+      "type": "discard_decision",
+      "handIndex": 2,
+      "player": 0,
+      "characterId": "josangmin",
+      "chosenKind": "s1",
+      "topCandidates": [
+        {
+          "kind": "s1",
+          "score": -11.92358156941699
+        },
+        {
+          "kind": "z5",
+          "score": -14.799796551472282
+        },
+        {
+          "kind": "s9",
+          "score": -15.164961760264637
+        },
+        {
+          "kind": "s5",
+          "score": -15.231787933473758
+        },
+        {
+          "kind": "p7",
+          "score": -19.595197243508416
+        }
+      ],
+      "sandbagged": false,
+      "overloadTriggered": false,
+      "experimentRouteActive": null,
+      "baselineBestKind": null,
+      "specialAdjustedBestKind": null,
+      "ariChoiceChanged": null,
+      "chosenBaselineScore": null,
+      "chosenSpecialScore": null,
+      "chosenShapeCleanlinessDelta": null,
+      "chosenContaminationDelta": null,
+      "mageunaRoute": null,
+      "mageunaRouteConsistent": null,
+      "mageunaDisruptionActive": null,
+      "mageunaDisruptionTurnsLeft": null,
+      "mageunaPlanBonusApplied": null,
+      "effieChosenTurnsHeld": null,
+      "effieChosenAttachmentDelta": null,
+      "optimaEffectiveEntropy": null,
+      "optimaState": null,
+      "ariBaselineBestKind": null,
+      "ariAdjustedBestKind": null,
+      "ariMechanicChangedBest": null,
+      "mageunaBaselineBestKind": null,
+      "mageunaAdjustedBestKind": null,
+      "mageunaMechanicChangedBest": null,
+      "effieBaselineBestKind": null,
+      "effieAdjustedBestKind": null,
+      "effieMechanicChangedBest": null,
+      "optimaScoreGap": null,
+      "optimaPoolSize": null,
+      "optimaBaselinePoolSize": null,
+      "optimaChosenRank": null,
+      "optimaBaseEntropy": null,
+      "optimaEntropyModifier": null,
+      "kyleBaselineBestKind": null,
+      "kyleAdjustedBestKind": null,
+      "kyleMechanicChangedBest": null,
+      "kyleRouteState": null,
+      "nahuiBaselineBestKind": null,
+      "nahuiOverloadPoolBestKind": null,
+      "nahuiActualChosenKind": null,
+      "nahuiOverloadChangedChoice": null,
+      "tosukeSandbaggingActive": null,
+      "tosukeInterventionTriggered": null,
+      "tosukeBaselineBestKind": null,
+      "tosukeAdjustedBestKind": null,
+      "tosukeMechanicChangedBest": null,
+      "tosukeSandbaggingDelta": null,
+      "tosukeReason": null
+    }
+  ],
+  "finalStandings": [
+    {
+      "player": 2,
+      "rawScore": 43100,
+      "placement": 1,
+      "points": 18.1
+    },
+    {
+      "player": 1,
+      "rawScore": 31900,
+      "placement": 2,
+      "points": -8.1
+    },
+    {
+      "player": 0,
+      "rawScore": 30000,
+      "placement": 3,
+      "points": -25
+    }
+  ]
+}
