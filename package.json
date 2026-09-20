@@ -1,0 +1,20 @@
+{
+  "name": "sanma-riichi-engine",
+  "version": "0.1.0",
+  "description": "3-player (sanma) riichi mahjong simulation engine",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "sim": "tsx src/sim/comparativeCharacterSim.ts",
+    "sim:ari-ab": "tsx src/sim/ariSpecialLogicAB.ts",
+    "analyze:ari": "tsx src/sim/ariDiagnosticStats.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
