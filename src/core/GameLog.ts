@@ -10,13 +10,13 @@ export interface HandStartEvent {
   dealer: number;
   honba: number;
   kyotaku: number;
-  scores: [number, number, number];
+  scores: number[];
   wallSeed: number;
 }
 
 export interface DealEvent {
   type: "deal";
-  hands: [TileKind[], TileKind[], TileKind[]];
+  hands: TileKind[][];
   doraIndicator: TileKind;
 }
 
@@ -37,7 +37,7 @@ export interface DiscardEvent {
 
 export interface CallEvent {
   type: "call";
-  call: "pon" | "kan_open" | "kan_closed" | "kan_added";
+  call: "chi" | "pon" | "kan_open" | "kan_closed" | "kan_added";
   player: number;
   kind: TileKind;
   fromPlayer?: number;
@@ -73,21 +73,89 @@ export interface DrawGameEvent {
   deltas: Record<number, number>;
 }
 
+export interface AbortiveDrawEvent {
+  type: "abortive_draw";
+  reason: import("./abortiveDraw.js").AbortiveDrawReason;
+}
+
+export interface HandEndTransition {
+  roundWind: number;
+  roundHandNumber: number;
+  dealerSeat: number;
+  dealerContinues: boolean;
+  nextDealer: number;
+  nextRoundWind: number;
+  nextRoundHandNumber: number;
+  honbaBefore: number;
+  honbaAfter: number;
+  kyotakuBefore: number;
+  kyotakuAfter: number;
+  scoresBeforeSettlement: number[];
+  scoresAfterSettlement: number[];
+  pointDeltas: Record<number, number>;
+}
+
+export interface AuditableWinResult {
+  winnerSeat: number;
+  loserSeat: number | null;
+  method: "ron" | "tsumo";
+  winningTile: { kind: TileKind; id: number };
+  isDealer: boolean;
+  yaku: YakuHit[];
+  han: number;
+  fu: number;
+  yakumanUnits: number;
+  basePoints: number;
+  totalPoints: number;
+  paymentDeltas: Record<number, number>;
+  scoringFlags: {
+    riichi: boolean;
+    doubleRiichi: boolean;
+    ippatsu: boolean;
+    rinshan: boolean;
+    chankan: boolean;
+    haitei: boolean;
+    houtei: boolean;
+    tenhou: boolean;
+    chiihou: boolean;
+  };
+}
+
+export type HandResultSnapshot =
+  | ({
+      kind: "agari";
+      winners: AuditableWinResult[];
+      kyotakuRecipient: number | null;
+      kyotakuAwarded: number;
+    } & HandEndTransition)
+  | ({
+      kind: "exhaustive_draw";
+      tenpaiSeats: number[];
+      notenSeats: number[];
+      nagashiManganSeats: number[];
+    } & HandEndTransition)
+  | ({
+      kind: "abortive_draw";
+      reason: import("./abortiveDraw.js").AbortiveDrawReason;
+    } & HandEndTransition);
+
 export interface HandEndEvent {
   type: "hand_end";
-  scores: [number, number, number];
+  scores: number[];
   nextDealer: number;
   honba: number;
   kyotaku: number;
+  /** Additive authoritative snapshot. Historical replay records may omit this field. */
+  result?: HandResultSnapshot;
 }
 
 export interface GameEndEvent {
   type: "game_end";
-  finalScores: [number, number, number];
+  finalScores: number[];
   /** "length" = ended right at the scheduled last hand (someone had already reached
-   *  rules.returnScore by then, so no extension was needed); "extension_end" = the schedule
-   *  was exhausted but nobody had reached returnScore yet, so 1+ extra hands were played
-   *  (Mahjong Soul sanma's target-score extension) until someone did; "tobi" = a player's
+   *  rules.targetScore by then, so no extension was needed); "extension_end" = the schedule
+   *  was exhausted but nobody had reached targetScore yet, so 1+ extra hands were played
+   *  (the configured target-score extension) until someone did; "tobi" = a player's
    *  score went below 0 at the end of some hand's scoring, ending the whole game
    *  immediately regardless of schedule/target. finalScores already reflects any leftover
    *  riichi-stick (kyotaku) settlement to the 1st-place player. */
@@ -106,6 +174,7 @@ export type GameEvent =
   | RiichiEvent
   | WinEvent
   | DrawGameEvent
+  | AbortiveDrawEvent
   | HandEndEvent
   | GameEndEvent;
 
@@ -118,8 +187,8 @@ export interface GameRecord {
 /**
  * CharacterAI decision-debug entries, kept in a layer SEPARATE from the rule-accurate
  * GameEvent log above: this is instrumentation for external analysis/replay tooling, not
- * part of the engine's own state machine. Only discard decisions are captured, since
- * that's where CharacterAI's scored-candidate pool and special-mechanic flags live.
+ * part of the engine's own state machine. Discard, riichi, and call decisions have distinct
+ * entries so scored candidates and character-specific modifiers remain observable.
  */
 export interface AiDiscardDecisionEntry {
   type: "discard_decision";
@@ -205,13 +274,8 @@ export interface AiDiscardDecisionEntry {
   tosukeReason: "sandbag" | "intervention" | "none" | null;
 }
 
-/**
- * Jo Sangmin-only diagnostic entries for riichi and call decisions, kept separate from
- * discard_decision above since effortAversion/commitmentAversion act on those decisions,
- * not on chooseDiscard. Only pushed for a profile with effortAversion/commitmentAversion
- * defined; other characters' riichi/call decisions aren't logged (matches the existing
- * discard_decision entry, which is likewise CharacterAI-only instrumentation).
- */
+/** Riichi and call diagnostics remain separate from rule events. Riichi detail is emitted
+ * for the existing supported path; call detail is emitted for every CharacterAI candidate. */
 export interface AiRiichiDecisionEntry {
   type: "riichi_decision";
   handIndex: number;
@@ -239,10 +303,23 @@ export interface AiCallDecisionEntry {
   handIndex: number;
   player: number;
   characterId: string;
-  callKind: "pon" | "daiminkan";
+  callKind: "chi" | "pon" | "daiminkan";
+  fromPlayer: number;
+  tile: TileKind;
+  /** Stable within one discard-response window; chi sequences distinguish alternatives. */
+  candidateId: string;
+  sequence?: [TileKind, TileKind, TileKind];
+  shantenBefore: number;
+  shantenAfter: number;
   callScore: number;
   effortAversionCost: number;
   shantenGain: number;
+  ukeireBefore: number;
+  ukeireAfter: number;
+  ukeireGain: number;
+  openMeldCount: number;
+  isFirstOpen: boolean | null;
+  yakuSecured: boolean;
   called: boolean;
   baselineCallScore: number;
   adjustedCallScore: number;
@@ -251,7 +328,26 @@ export interface AiCallDecisionEntry {
   baselineDecision: "call" | "pass";
   adjustedDecision: "call" | "pass";
   mechanicChangedDecision: boolean;
+  /** Evaluator willingness before arbitration; actualDecision reflects the selected action. */
+  evaluatorDecision: "call" | "pass";
   actualDecision: "call" | "pass";
+  components: {
+    base?: number;
+    shantenBonus: number;
+    ukeireBonus: number;
+    callBias: number;
+    aggression: number;
+    defense: number;
+    yakuBonus: number;
+    opportunityCost?: number;
+    noYakuCost?: number;
+    neutralShantenCost?: number;
+    continuationBonus?: number;
+    effort: number;
+    commitment: number;
+    entropyJitter: number;
+    mistakeJitter: number;
+  };
 }
 
 export type AiDecisionEntry = AiDiscardDecisionEntry | AiRiichiDecisionEntry | AiCallDecisionEntry;

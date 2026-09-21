@@ -60,7 +60,7 @@ export function allKindsForRules(rules: RuleConfig): TileKind[] {
 
 /**
  * Builds the full set of physical tiles for this rule set, unshuffled, in canonical
- * (kind, then copy-index) order. Exactly 4 copies of every kind; red fives are marked
+ * (kind, then copy-index) order. Copies per kind come from the ruleset; red fives are marked
  * via isRed on as many of the rank-5 copies as akaDoraCount specifies.
  */
 export function buildTileSet(rules: RuleConfig): Tile[] {
@@ -75,7 +75,7 @@ export function buildTileSet(rules: RuleConfig): Tile[] {
   for (const kind of allKindsForRules(rules)) {
     const { suit, rank } = parseKind(kind);
     const akaRemainingForKind = rank === 5 && suit !== "z" ? (akaBySuit[suit] ?? 0) : 0;
-    for (let copy = 0; copy < 4; copy++) {
+    for (let copy = 0; copy < rules.tileCopiesPerKind; copy++) {
       const isRed = copy < akaRemainingForKind;
       tiles.push({ id: nextId++, kind, suit, rank, isRed });
     }
@@ -84,5 +84,5 @@ export function buildTileSet(rules: RuleConfig): Tile[] {
 }
 
 export function totalTileCount(rules: RuleConfig): number {
-  return allKindsForRules(rules).length * 4;
+  return allKindsForRules(rules).length * rules.tileCopiesPerKind;
 }

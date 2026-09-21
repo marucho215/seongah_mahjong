@@ -26,6 +26,33 @@ export interface EvaluateWinInput {
 export interface FullWinResult extends EvaluatedWin {
   yakumanUnits: number;
   score: ScoreResult;
+  /** Exact tile interpretation committed by the scorer. */
+  winningTile: Tile;
+  context: WinContext;
+}
+
+/**
+ * Mahjong Soul treats the dealer's initial 14-tile Tenhou as having no uniquely fixed
+ * agari tile. Evaluate each distinct kind as the final tile and keep the highest-valued
+ * legal interpretation. Ordinary ron/tsumo must continue to call evaluateWin directly.
+ */
+export function evaluateInitialDealerWin(
+  input: Omit<EvaluateWinInput, "winTile">
+): FullWinResult | null {
+  const candidates = [...input.concealedTiles]
+    .sort((a, b) => kindToSlot(a.kind) - kindToSlot(b.kind) || a.id - b.id)
+    .filter((tile, index, tiles) => index === 0 || tiles[index - 1]!.kind !== tile.kind);
+  let best: FullWinResult | null = null;
+  for (const candidate of candidates) {
+    const preWinTiles = input.concealedTiles.filter((tile) => tile.id !== candidate.id);
+    const result = evaluateWin({
+      ...input,
+      concealedTiles: [...preWinTiles, candidate],
+      winTile: candidate,
+    });
+    if (result && (!best || result.score.totalPoints > best.score.totalPoints)) best = result;
+  }
+  return best;
 }
 
 function applyRonConcealment(groups: Group[], winGroupIndex: number, isTsumo: boolean): Group[] {
@@ -44,6 +71,7 @@ function evaluateChiitoiYaku(allKinds: TileKind[], isMenzen: boolean, ctx: WinCo
   if (ctx.isTsumo && isMenzen) hits.push({ name: "Menzen Tsumo", han: 1 });
   if (ctx.isHaitei) hits.push({ name: "Haitei Raoyue", han: 1 });
   if (ctx.isHoutei) hits.push({ name: "Houtei Raoyui", han: 1 });
+  if (ctx.isRinshan) hits.push({ name: "Rinshan Kaihou", han: 1 });
   if (isTanyaoHand(allKinds)) hits.push({ name: "Tanyao", han: 1 });
   if (isHonitsuHand(allKinds)) hits.push({ name: "Honitsu", han: 3 });
   if (isChinitsuHand(allKinds)) hits.push({ name: "Chinitsu", han: 6 });
@@ -132,12 +160,15 @@ export function evaluateWin(input: EvaluateWinInput): FullWinResult | null {
     const allKinds = concealedTiles.map((t) => t.kind);
     const hit = kokushiYakuman(allKinds, winTile.kind);
     if (hit) {
-      const units = unitsOf(hit.units);
+      const contextualHits = standardYakuman([], "tanki", allKinds, winTile.kind, isMenzen, ctx)
+        .filter((candidate) => candidate.name === "Tenhou" || candidate.name === "Chiihou");
+      const yakumanHits = [hit, ...contextualHits];
+      const units = yakumanHits.reduce((sum, candidate) => sum + unitsOf(candidate.units), 0);
       candidates.push({
         groups: [],
         waitType: "tanki",
         fu: 0,
-        yaku: [{ name: hit.name, han: 13 * units }],
+        yaku: yakumanHits.map((candidate) => ({ name: candidate.name, han: 13 * unitsOf(candidate.units) })),
         yakumanUnits: units,
       });
     }
@@ -165,7 +196,7 @@ export function evaluateWin(input: EvaluateWinInput): FullWinResult | null {
       isTsumo: ctx.isTsumo,
       ronFrom: input.ronFrom,
       honba: input.honba,
-      playerCount: 3,
+      playerCount: input.rules.playerCount,
       rules,
     });
     if (!best || score.totalPoints > best.score.totalPoints) {
@@ -188,5 +219,7 @@ export function evaluateWin(input: EvaluateWinInput): FullWinResult | null {
     isMenzen,
     yakumanUnits: best.effectiveYakumanUnits,
     score: best.score,
+    winningTile: winTile,
+    context: { ...ctx },
   };
 }

@@ -105,7 +105,7 @@ function recordOutcome(gs: GameState, stats: GameOutcomeStats) {
     // manually-reported win/riichi/call/dealIn counts and confirmed exact)
     const dealEvt = slice.find((e) => e.type === "deal")! as Extract<GameEvent, { type: "deal" }>;
     const counts = new Array(34).fill(0);
-    for (const k of dealEvt.hands[ARI_SEAT]) counts[kindToSlot(k)]++;
+    for (const k of dealEvt.hands[ARI_SEAT]!) counts[kindToSlot(k)]++;
     let melds = 0;
     let discardIdx = 0;
     let tenpaiTurn: number | null = null;

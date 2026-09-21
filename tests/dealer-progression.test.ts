@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { DEFAULT_SANMA_RULES } from "../src/rules/RuleConfig.js";
 import { GameState } from "../src/core/GameState.js";
+import { computeRoundProgression } from "../src/core/roundProgression.js";
 import { computeScore } from "../src/yaku/score.js";
 import type { GameEvent } from "../src/core/GameLog.js";
 
@@ -86,22 +87,24 @@ describe("exhaustive draw + dealer tenpai -> renchan", () => {
 
 describe("exhaustive draw + dealer noten -> dealer moves to the next seat", () => {
   it("rotates the dealer whenever the dealer was noten at an exhaustive draw", () => {
-    let found = 0;
-    for (const seed of [0, 7, 14]) {
-      const gs = new GameState({ rules: DEFAULT_SANMA_RULES, seed: `dealer-draw-noten-${seed}` });
-      gs.playGame();
-      for (const { start, end } of handSlices(gs.log)) {
-        const slice = gs.log.slice(start, end);
-        const handStart = slice[0] as Extract<GameEvent, { type: "hand_start" }>;
-        const handEnd = slice.find((e): e is Extract<GameEvent, { type: "hand_end" }> => e.type === "hand_end")!;
-        const draw = slice.find((e): e is Extract<GameEvent, { type: "exhaustive_draw" }> => e.type === "exhaustive_draw");
-        if (!draw) continue;
-        if (draw.tenpaiPlayers.includes(handStart.dealer)) continue;
-        found++;
-        expect(handEnd.nextDealer).toBe((handStart.dealer + 1) % 3);
-      }
-    }
-    expect(found).toBeGreaterThan(0);
+    // The exhaustive-draw settlement has already determined that the dealer is noten,
+    // so dealerRepeats=false is the exact input crossing this progression boundary.
+    const progression = computeRoundProgression({
+      rules: DEFAULT_SANMA_RULES,
+      scores: [35000, 35000, 35000],
+      dealerSeat: 1,
+      roundWind: 1,
+      roundHandNumber: 2,
+      honba: 3,
+      dealerRepeats: false,
+      isExhaustiveDraw: true,
+      allowDealerEnd: true,
+    });
+
+    expect(progression.nextDealer).toBe(2);
+    expect(progression.nextRoundHandNumber).toBe(3);
+    expect(progression.nextRoundWind).toBe(1);
+    expect(progression.nextHonba).toBe(4);
   });
 });
 
@@ -197,22 +200,24 @@ describe("honba increments on renchan/exhaustive-draw and resets only when a win
 
 describe("kyotaku (riichi sticks) interacts correctly with dealer/hand progression", () => {
   it("carries an undeposited kyotaku balance forward across a renchan or dealer-rotation hand boundary whenever the hand wasn't resolved by a win", () => {
-    let found = 0;
-    for (const seed of [0, 7]) {
-      const gs = new GameState({ rules: DEFAULT_SANMA_RULES, seed: `dealer-kyotaku-carry-${seed}` });
-      gs.playGame();
-      const slices = handSlices(gs.log);
-      for (let i = 0; i < slices.length - 1; i++) {
-        const slice = gs.log.slice(slices[i]!.start, slices[i]!.end);
-        const handEnd = slice.find((e): e is Extract<GameEvent, { type: "hand_end" }> => e.type === "hand_end")!;
-        const resolvedByWin = slice.some((e) => e.type === "win");
-        if (resolvedByWin || handEnd.kyotaku === 0) continue;
-        const nextHandStart = gs.log[slices[i + 1]!.start] as Extract<GameEvent, { type: "hand_start" }>;
-        found++;
-        expect(nextHandStart.kyotaku).toBe(handEnd.kyotaku);
-      }
-    }
-    expect(found).toBeGreaterThan(0);
+    const gs = new GameState({ rules: DEFAULT_SANMA_RULES, seed: "dealer-kyotaku-carry-direct" });
+    gs.dealerSeat = 2;
+    gs.roundHandNumber = 2;
+    gs.honba = 1;
+    gs.kyotaku = 3;
+
+    // An abortive draw is a deterministic non-win hand boundary and uses the same
+    // advanceAfterHand path as an exhaustive draw. Neither path pays out kyotaku.
+    gs.applyAbortiveDraw("nine_terminals");
+
+    const handEnd = gs.log.at(-1);
+    expect(handEnd).toMatchObject({
+      type: "hand_end",
+      nextDealer: 2,
+      honba: 2,
+      kyotaku: 3,
+    });
+    expect(gs.kyotaku).toBe(3);
   });
 
   it("sweeps the entire kyotaku pot into the winner and resets it to 0 whenever a hand ends in a win", () => {

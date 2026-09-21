@@ -45,12 +45,12 @@ describe("returnScore + uma feed a real final-standings calculation", () => {
     expect(standings.map((s) => s.player)).toEqual([0, 1, 2]); // already in descending score order
     expect(standings[0]!.placement).toBe(1);
     expect(standings[2]!.placement).toBe(3);
-    // player 0: (40000 - 40000)/1000 + 15000/1000 = 15
-    expect(standings[0]!.points).toBe(15);
-    // player 1: (38000 - 40000)/1000 + 0/1000 = -2
-    expect(standings[1]!.points).toBe(-2);
-    // player 2: (32000 - 40000)/1000 + (-15000)/1000 = -23
-    expect(standings[2]!.points).toBe(-23);
+    // player 0: (40000 - 35000)/1000 + 15000/1000 = 20
+    expect(standings[0]!.points).toBe(20);
+    // player 1: (38000 - 35000)/1000 + 0/1000 = 3
+    expect(standings[1]!.points).toBe(3);
+    // player 2: (32000 - 35000)/1000 + (-15000)/1000 = -18
+    expect(standings[2]!.points).toBe(-18);
     // raw scores are untouched - the conservation invariant used elsewhere still holds
     expect(gs.scores).toEqual([40000, 38000, 32000]);
   });

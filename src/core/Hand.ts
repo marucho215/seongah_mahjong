@@ -1,6 +1,6 @@
 import type { Tile } from "./tiles.js";
 
-export type MeldType = "pon" | "kan_open" | "kan_closed" | "kan_added";
+export type MeldType = "chi" | "pon" | "kan_open" | "kan_closed" | "kan_added";
 
 export interface Meld {
   type: MeldType;
@@ -14,7 +14,7 @@ export interface Meld {
 
 export interface DiscardEntry {
   tile: Tile;
-  /** True if this discard was claimed by another player's pon/kan call. This is bookkeeping
+  /** True if this discard was claimed by another player's chi/pon/kan call. This is bookkeeping
    *  for replay/debug and discard-history display only - a called-away tile still counts
    *  for this player's own-discard furiten (discarding your own winning tile makes you
    *  furiten regardless of whether someone later calls it). */
@@ -23,6 +23,11 @@ export interface DiscardEntry {
   isRiichiDeclaration: boolean;
   /** True if this tile was drawn and discarded immediately (tsumogiri). */
   tsumogiri: boolean;
+}
+
+export interface PaoLiability {
+  daisangen?: number;
+  daisuushii?: number;
 }
 
 /**
@@ -37,6 +42,8 @@ export class Hand {
   kitaTiles: Tile[] = [];
   riichi = false;
   doubleRiichi = false;
+  /** Per-hand responsibility created only by the decisive open honor call. */
+  paoLiability: PaoLiability = {};
 
   dealIn(tiles: Tile[]): void {
     this.concealed.push(...tiles);

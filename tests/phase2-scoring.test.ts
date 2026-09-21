@@ -103,40 +103,30 @@ describe("2-A: double ron honba is paid once total, not once per winner", () => 
 
 describe("2-B: leftover kyotaku is swept to the 1st-place player at game end", () => {
   it("game_end's finalScores reflect any leftover kyotaku paid to whoever is in 1st place, and total raw points are conserved", () => {
-    let foundNonZeroKyotaku = 0;
-    for (const seed of [8]) {
-      const gs = new GameState({ rules: DEFAULT_SANMA_RULES, seed: `kyotaku-settlement-${seed}` });
-      // manually track kyotaku right before the game-ending hand's advanceAfterHand by
-      // reading the log's last hand_end (kyotaku field there is PRE-settlement, since
-      // settlement only happens once, after the loop, in playGame())
-      gs.playGame();
-      const log = gs.log;
-      const gameEnd = log[log.length - 1]!;
-      expect(gameEnd.type).toBe("game_end");
-      if (gameEnd.type !== "game_end") continue;
-      const lastHandEnd = [...log].reverse().find((e): e is Extract<GameEvent, { type: "hand_end" }> => e.type === "hand_end");
-      expect(lastHandEnd).toBeDefined();
-      if (!lastHandEnd) continue;
-      const leftoverKyotaku = lastHandEnd.kyotaku;
-      // total raw points must always be conserved: starting pool, since kyotaku (which came
-      // out of players' own scores when riichi was declared) is now fully back in the pool
-      const totalRaw = gameEnd.finalScores.reduce((a, b) => a + b, 0);
-      expect(totalRaw).toBe(DEFAULT_SANMA_RULES.startingScore * 3);
-      if (leftoverKyotaku > 0) {
-        foundNonZeroKyotaku++;
-        // the pre-settlement leader (highest hand_end score, ties broken by lowest seat)
-        // must be the one whose score increased by exactly leftoverKyotaku*1000
-        const preSettlementScores = lastHandEnd.scores;
-        const leaderScore = Math.max(...preSettlementScores);
-        const leader = preSettlementScores.findIndex((s) => s === leaderScore);
-        expect(gameEnd.finalScores[leader]).toBe(preSettlementScores[leader]! + leftoverKyotaku * 1000);
-        for (let p = 0; p < 3; p++) {
-          if (p === leader) continue;
-          expect(gameEnd.finalScores[p]).toBe(preSettlementScores[p]);
-        }
-      }
-    }
-    expect(foundNonZeroKyotaku).toBeGreaterThan(0);
+    const gs = new GameState({ rules: DEFAULT_SANMA_RULES, seed: "kyotaku-settlement-fixture" });
+    const leftoverKyotaku = 2;
+    // State immediately after East 3 has rotated: the scheduled length and target are
+    // already satisfied, while two declared-riichi deposits remain on the table.
+    const preSettlementScores = [41000, 32000, 30000];
+    gs.scores = [...preSettlementScores];
+    gs.kyotaku = leftoverKyotaku;
+    gs.roundWind = 1;
+    gs.roundHandNumber = DEFAULT_SANMA_RULES.handsPerRound + 1;
+
+    expect(preSettlementScores.reduce((a, b) => a + b, 0) + leftoverKyotaku * 1000).toBe(
+      DEFAULT_SANMA_RULES.startingScore * DEFAULT_SANMA_RULES.playerCount
+    );
+
+    gs.playGame();
+
+    const gameEnd = gs.log.at(-1);
+    expect(gameEnd?.type).toBe("game_end");
+    if (!gameEnd || gameEnd.type !== "game_end") throw new Error("expected game_end");
+    expect(gameEnd.finalScores).toEqual([43000, 32000, 30000]);
+    expect(gameEnd.finalScores.reduce((a, b) => a + b, 0)).toBe(
+      DEFAULT_SANMA_RULES.startingScore * DEFAULT_SANMA_RULES.playerCount
+    );
+    expect(gs.kyotaku).toBe(0);
   });
 
   it("kyotaku=0 at game end leaves finalScores identical to the last hand_end's scores", () => {
@@ -153,38 +143,48 @@ describe("2-B: leftover kyotaku is swept to the 1st-place player at game end", (
   });
 });
 
-describe("2-C: target score (returnScore=40000) and extension", () => {
-  it("a game reaching the scheduled length with nobody at returnScore extends past it (reason 'extension_end') until someone crosses it", () => {
-    // a moderately reduced startingScore widens the gap to returnScore(40000) just enough
-    // that reaching it within the scheduled 3 hands is uncommon (forcing extension often),
-    // while staying high enough that a quick tobi doesn't dominate every seed - a
-    // deliberate TEST-ONLY fixture, never touching DEFAULT_SANMA_RULES itself.
+describe("2-C: target score (targetScore=40000) and extension", () => {
+  it("a game reaching the scheduled length with nobody at targetScore extends until a valid target termination", () => {
     const LOW_START = { ...DEFAULT_SANMA_RULES, startingScore: 20000 };
-    let found = 0;
-    for (const seed of [2, 7]) {
-      const gs = new GameState({ rules: LOW_START, seed: `extension-${seed}` });
-      gs.playGame();
-      const gameEnd = gs.log[gs.log.length - 1]!;
-      if (gameEnd.type !== "game_end") continue;
-      if (gameEnd.reason === "tobi") continue; // a bust can pre-empt the extension - not what this test targets
-      expect(gameEnd.reason).toBe("extension_end");
-      // "extension_end" can also mean the extension's own cap was hit without anyone
-      // reaching target (covered separately below) - this test specifically wants the
-      // "kept going until someone crossed it" case, so only count that one
-      if (!gameEnd.finalScores.some((s) => s >= LOW_START.returnScore)) continue;
-      found++;
-    }
-    expect(found).toBeGreaterThan(0);
+    const gs = new GameState({ rules: LOW_START, seed: "extension-boundary" });
+    gs.dealerSeat = 2;
+    gs.roundWind = 1;
+    gs.roundHandNumber = LOW_START.handsPerRound;
+    gs.scores = [20000, 20000, 20000];
+
+    // A non-dealer result at East 3 rotates into South 1. With nobody at the target,
+    // the scheduled boundary itself must not end the game.
+    (gs as unknown as { advanceAfterHand(repeats: boolean, draw: boolean): void }).advanceAfterHand(false, false);
+    expect([gs.roundWind, gs.roundHandNumber, gs.dealerSeat]).toEqual([2, 1, 0]);
+    expect(gs.isGameOver()).toBe(false);
+
+    // Once the extension has begun, reaching the target is a valid normal termination.
+    gs.scores = [40000, 10000, 10000];
+    expect(gs.isGameOver()).toBe(true);
+
+    // A final-dealer repeat below target also continues. FF-09's automatic dealer end
+    // becomes valid only after that dealer is first and reaches the target.
+    const dealerRepeat = new GameState({ rules: LOW_START, seed: "extension-dealer-repeat-boundary" });
+    dealerRepeat.dealerSeat = 2;
+    dealerRepeat.roundWind = 1;
+    dealerRepeat.roundHandNumber = LOW_START.handsPerRound;
+    dealerRepeat.scores = [20000, 20000, 20000];
+    (dealerRepeat as unknown as { advanceAfterHand(repeats: boolean, draw: boolean): void }).advanceAfterHand(true, false);
+    expect(dealerRepeat.isGameOver()).toBe(false);
+
+    dealerRepeat.scores = [10000, 9000, 41000];
+    (dealerRepeat as unknown as { advanceAfterHand(repeats: boolean, draw: boolean): void }).advanceAfterHand(true, false);
+    expect(dealerRepeat.isGameOver()).toBe(true);
   });
 
-  it("reason 'length' only occurs when someone already reached returnScore by the scheduled last hand - never mid-schedule", () => {
+  it("reason 'length' only occurs when someone already reached targetScore by the scheduled last hand - never mid-schedule", () => {
     for (const seed of [1]) {
       const gs = new GameState({ rules: DEFAULT_SANMA_RULES, seed: `length-target-${seed}` });
       gs.playGame();
       const gameEnd = gs.log[gs.log.length - 1]!;
       if (gameEnd.type !== "game_end") continue;
       if (gameEnd.reason !== "length") continue;
-      expect(gameEnd.finalScores.some((s) => s >= DEFAULT_SANMA_RULES.returnScore)).toBe(true);
+      expect(gameEnd.finalScores.some((s) => s >= DEFAULT_SANMA_RULES.targetScore)).toBe(true);
     }
   });
 
@@ -199,7 +199,7 @@ describe("2-C: target score (returnScore=40000) and extension", () => {
   });
 
   it("extension is capped at exactly one wind beyond the schedule (east -> South only, never West/3): ends without reaching target if the cap is hit", () => {
-    // startingScore far below returnScore AND far above an easy tobi threshold, so most
+    // startingScore far below targetScore AND far above an easy tobi threshold, so most
     // seeds genuinely reach the extension cap without ever crossing 40000 or busting first.
     const LOW_START = { ...DEFAULT_SANMA_RULES, startingScore: 15000 };
     let found = 0;
@@ -218,7 +218,7 @@ describe("2-C: target score (returnScore=40000) and extension", () => {
       const gameEnd = gs.log[gs.log.length - 1]!;
       if (gameEnd.type !== "game_end") continue;
       found++;
-      if (gameEnd.reason === "extension_end" && !gameEnd.finalScores.some((s) => s >= LOW_START.returnScore)) {
+      if (gameEnd.reason === "extension_end" && !gameEnd.finalScores.some((s) => s >= LOW_START.targetScore)) {
         // the cap forced a normal end (South's own 3rd hand completed) with nobody having
         // reached the target - exactly the "남3국이 정상 종료되면 대국 종료" case
         sawCapEnforced = true;

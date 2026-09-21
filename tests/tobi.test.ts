@@ -146,7 +146,7 @@ describe("tobi (bust) ends the game immediately", () => {
       if (gameEnd.reason === "length" || gameEnd.reason === "extension_end") {
         expect(gameEnd.eliminatedPlayers).toEqual([]);
         expect(gameEnd.finalScores.every((s) => s >= 0)).toBe(true);
-        expect(gameEnd.finalScores.some((s) => s >= DEFAULT_SANMA_RULES.returnScore)).toBe(true);
+        expect(gameEnd.finalScores.some((s) => s >= DEFAULT_SANMA_RULES.targetScore)).toBe(true);
       } else {
         expect(gameEnd.reason).toBe("tobi");
         expect(gameEnd.eliminatedPlayers.length).toBeGreaterThan(0);

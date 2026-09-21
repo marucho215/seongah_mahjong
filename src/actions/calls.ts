@@ -3,13 +3,35 @@ import type { Tile, TileKind } from "../core/tiles.js";
 import type { RuleConfig } from "../rules/RuleConfig.js";
 import type { Wall } from "../core/Wall.js";
 
-/** Sanma forbids chi entirely, regardless of hand shape - this always returns false. */
-export function canChi(_rules: RuleConfig): boolean {
-  return false;
+/** Ruleset-level chi gate. Shape/seat legality is handled by discardResponses. */
+export function canChi(rules: RuleConfig): boolean {
+  return !rules.chiForbidden;
 }
 
 export function canPon(hand: Hand, discardedKind: TileKind): boolean {
   return hand.countOfKind(discardedKind) >= 2;
+}
+
+/** Applies one already-selected legal chi sequence. Legality/priority live in discardResponses. */
+export function applyChi(
+  hand: Hand,
+  discardedTile: Tile,
+  fromSeat: number,
+  consumedKinds: readonly [TileKind, TileKind]
+): Meld {
+  const consumed = consumedKinds.map((kind) => hand.tilesOfKind(kind)[0]);
+  if (consumed.some((tile) => tile === undefined)) {
+    throw new Error("applyChi: selected sequence is no longer present in the caller hand");
+  }
+  const removed = hand.removeConcealedByIds(consumed.map((tile) => tile!.id));
+  const meld: Meld = {
+    type: "chi",
+    tiles: [...removed, discardedTile],
+    calledFrom: fromSeat,
+    calledTile: discardedTile,
+  };
+  hand.melds.push(meld);
+  return meld;
 }
 
 export function applyPon(hand: Hand, discardedTile: Tile, fromSeat: number): Meld {

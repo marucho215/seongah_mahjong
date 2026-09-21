@@ -36,12 +36,12 @@ describe("full game simulation", () => {
     expect(gs1.log).toEqual(gs2.log);
   });
 
-  it("produces at least one win or exhaustive draw for every hand played", () => {
+  it("produces exactly one completed hand boundary for every hand played", () => {
     const gs = new GameState({ rules: DEFAULT_SANMA_RULES, seed: "resolution-seed" });
     gs.playGame();
     const handStarts = gs.log.filter((e) => e.type === "hand_start").length;
-    const resolutions = gs.log.filter((e) => e.type === "win" || e.type === "exhaustive_draw").length;
-    expect(resolutions).toBeGreaterThanOrEqual(handStarts);
+    const handEnds = gs.log.filter((e) => e.type === "hand_end").length;
+    expect(handEnds).toBe(handStarts);
   });
 
   it("ends an east-south game only after round wind exceeds South", () => {

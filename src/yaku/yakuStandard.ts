@@ -67,6 +67,19 @@ function isSanshokuDoukou(groups: Group[]): boolean {
   return false;
 }
 
+function isSanshokuDoujun(groups: Group[]): boolean {
+  const byStartRank = new Map<number, Set<string>>();
+  for (const group of groups) {
+    if (group.type !== "sequence") continue;
+    const { suit, rank } = parseKind(group.kind);
+    if (suit === "z") continue;
+    if (!byStartRank.has(rank)) byStartRank.set(rank, new Set());
+    byStartRank.get(rank)!.add(suit);
+  }
+  for (const suits of byStartRank.values()) if (suits.size === 3) return true;
+  return false;
+}
+
 function countConcealedTriplets(groups: Group[]): number {
   return groups.filter((g) => (g.type === "triplet" || g.type === "quad") && g.concealed).length;
 }
@@ -115,13 +128,14 @@ export function evaluateStandardYaku(
       const rank = parseKind(g.kind).rank;
       if (rank === ctx.seatWind) hits.push({ name: "Yakuhai (seat wind)", han: 1 });
       if (rank === ctx.roundWind) hits.push({ name: "Yakuhai (round wind)", han: 1 });
-      // north (rank 4) never equals a seat/round wind in sanma (only E/S/W are seated),
-      // so it's already excluded above by construction; northIsYakuhai exists for rule
-      // sets that treat a concealed North triplet as yakuhai on its own (off by default).
+      // In sanma, North cannot match a seat wind because only E/S/W are seated. In yonma,
+      // a North seat is handled normally by the seat-wind check above. northIsYakuhai is
+      // the separate policy for treating North as yakuhai regardless of seat/round wind.
       if (northIsYakuhai && rank === 4) hits.push({ name: "Yakuhai (North)", han: 1 });
     }
   }
 
+  if (isSanshokuDoujun(groups)) hits.push({ name: "Sanshoku Doujun", han: isMenzen ? 2 : 1 });
   if (isSanshokuDoukou(groups)) hits.push({ name: "Sanshoku Doukou", han: 2 });
   if (isIttsuu(groups)) hits.push({ name: "Ittsuu", han: isMenzen ? 2 : 1 });
 

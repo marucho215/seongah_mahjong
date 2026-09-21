@@ -1,5 +1,7 @@
 import type { Hand } from "../core/Hand.js";
 import type { RuleConfig } from "../rules/RuleConfig.js";
+import type { ChiCandidate } from "../core/discardResponses.js";
+import { evaluateChiDecision, type ChiDecisionEvaluation } from "./chiDecision.js";
 import type { Tile, TileKind } from "../core/tiles.js";
 import { isHonor, isTerminalOrHonor, parseKind, allKindsForRules } from "../core/tiles.js";
 import { tilesToCounts, kindsToCounts, kindToSlot } from "../core/tileIndex.js";
@@ -11,7 +13,7 @@ import { evaluateWin } from "../yaku/evaluate.js";
 import type { WinContext } from "../yaku/types.js";
 import { meldsToGroups } from "../yaku/meldConvert.js";
 import { SeededRng } from "../core/rng.js";
-import { pickNonRedRepresentative } from "./simpleAI.js";
+import { pickNonRedRepresentative, shouldDeclareKita } from "./simpleAI.js";
 import type { CharacterProfile } from "./characterProfile.js";
 
 /**
@@ -39,6 +41,12 @@ function clamp(x: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, x));
 }
 
+/** JSON serializes -0 as 0. Trace-only values are normalized at their source so the
+ * in-memory decision log and its replay representation remain structurally identical. */
+function jsonSafeTraceNumber(value: number): number {
+  return Object.is(value, -0) ? 0 : value;
+}
+
 export interface CharacterDecisionContext {
   rules: RuleConfig;
   riichiOpponentDiscardKinds: TileKind[][];
@@ -54,7 +62,11 @@ export interface CharacterDecisionContext {
   wallRemainingLive: number;
   /** This player's own score and the other two seats' scores, for Tosuke's intervention check. */
   ownScore: number;
-  opponentScores: [number, number];
+  opponentScores: number[];
+  /** Seats corresponding to opponentScores, in table turn order. */
+  opponentSeats?: number[];
+  /** Riichi seats corresponding to riichiOpponentDiscardKinds when available. */
+  riichiOpponentSeats?: number[];
   isLastHandOfGame: boolean;
   /** Whether this seat is the current hand's dealer. Plumbing only in this pass - no
    *  decision formula reads it yet; wire it into an existing formula (via this shared
@@ -332,13 +344,19 @@ export interface RiichiDecisionTrace {
   forced: boolean;
 }
 
-/** Jo Sangmin-only: the call decision, with the effort/commitment cost actually applied.
- *  Populated only when effortAversion or commitmentAversion is defined (see decideCall). */
+/** Read-only observability for the existing pon/daiminkan evaluator. */
 export interface CallDecisionTrace {
   /** Post-cost, post-jitter - the REAL score that decided `called`. */
   callScore: number;
   effortAversionCost: number;
+  beforeShanten: number;
+  afterShanten: number;
   shantenGain: number;
+  beforeUkeire: number;
+  afterUkeire: number;
+  ukeireGain: number;
+  openMeldCount: number;
+  isYakuhai: boolean;
   called: boolean;
   callKind: "pon" | "daiminkan";
   /** Deterministic, pre-jitter, pre-cost call score (the shared-evaluator baseline). This
@@ -354,6 +372,19 @@ export interface CallDecisionTrace {
   adjustedDecision: "call" | "pass";
   mechanicChangedDecision: boolean;
   actualDecision: "call" | "pass";
+  components: {
+    base: number;
+    shantenBonus: number;
+    ukeireBonus: number;
+    yakuhaiBonus: number;
+    callBias: number;
+    aggression: number;
+    defense: number;
+    effort: number;
+    commitment: number;
+    entropyJitter: number;
+    mistakeJitter: number;
+  };
 }
 
 export type StrategicKanKind = "ankan" | "shouminkan";
@@ -649,8 +680,7 @@ export class CharacterAI {
     return this._lastRiichiTrace;
   }
 
-  /** Jo Sangmin-only: the most recent decideCall (pon/daiminkan) call's trace, or null
-   *  if neither effortAversion nor commitmentAversion is defined for this profile. */
+  /** Most recent pon/daiminkan evaluation; read-only and never consulted by decisions. */
   get lastCallTrace(): CallDecisionTrace | null {
     return this._lastCallTrace;
   }
@@ -709,7 +739,7 @@ export class CharacterAI {
   // Discard choice
   // -------------------------------------------------------------------------
 
-  chooseDiscard(hand: Hand, ctx: CharacterDecisionContext): number {
+  chooseDiscard(hand: Hand, ctx: CharacterDecisionContext, forbiddenDiscardKinds: readonly TileKind[] = []): number {
     const p = this.profile;
     const existingMelds = hand.melds.length;
     const handKinds = new Set(hand.concealed.map((t) => t.kind));
@@ -921,7 +951,13 @@ export class CharacterAI {
       }
     }
 
-    let pool = this.selectPool(candidates, p);
+    // Score every kind exactly as before so per-candidate skill RNG consumption stays
+    // stable; kuikae is a legality gate on the selection pool, not an AI preference.
+    const forbidden = new Set(forbiddenDiscardKinds);
+    const legalCandidates = candidates.filter((candidate) => !forbidden.has(candidate.kind));
+    if (legalCandidates.length === 0) throw new Error("CharacterAI.chooseDiscard: no legal discard candidate");
+
+    let pool = this.selectPool(legalCandidates, p);
 
     // Nahui's overload glitch: under high decision complexity, occasionally drop the
     // danger term entirely (simulating a skipped risk check) before re-selecting.
@@ -931,8 +967,8 @@ export class CharacterAI {
     let nahuiBaselineBestKind: TileKind | null = null;
     let nahuiOverloadPoolBestKind: TileKind | null = null;
     if (p.overloadSensitivity !== undefined) {
-      nahuiBaselineBestKind = candidates.reduce((best, c) => (c.score > best.score ? c : best)).kind;
-      pool = this.applyOverloadGlitch(candidates, pool, ctx, riichiOpponentCount, p);
+      nahuiBaselineBestKind = legalCandidates.reduce((best, c) => (c.score > best.score ? c : best)).kind;
+      pool = this.applyOverloadGlitch(legalCandidates, pool, ctx, riichiOpponentCount, p);
       nahuiOverloadPoolBestKind = pool.reduce((best, c) => (c.score > best.score ? c : best)).kind;
     }
 
@@ -940,7 +976,7 @@ export class CharacterAI {
     // tier down unless intervention conditions are active.
     let finalKind = this.pickFromPool(pool, p);
     if (p.sandbagging !== undefined) {
-      finalKind = this.applySandbagging(candidates, finalKind, ctx, p);
+      finalKind = this.applySandbagging(legalCandidates, finalKind, ctx, p);
     }
 
     const chosen = candidates.find((c) => c.kind === finalKind)!;
@@ -958,8 +994,8 @@ export class CharacterAI {
     let baselineBestKind: TileKind | null = null;
     let specialAdjustedBestKind: TileKind | null = null;
     if (ariDiagnosticsActive) {
-      baselineBestKind = candidates.reduce((best, c) => (c.baselineScore > best.baselineScore ? c : best)).kind;
-      specialAdjustedBestKind = candidates.reduce((best, c) => (c.score > best.score ? c : best)).kind;
+      baselineBestKind = legalCandidates.reduce((best, c) => (c.baselineScore > best.baselineScore ? c : best)).kind;
+      specialAdjustedBestKind = legalCandidates.reduce((best, c) => (c.score > best.score ? c : best)).kind;
     }
 
     // Kyle: baseline = score with kyleExperimentDelta subtracted back out (mirrors Ari's
@@ -968,8 +1004,8 @@ export class CharacterAI {
     let kyleBaselineBestKind: TileKind | null = null;
     let kyleAdjustedBestKind: TileKind | null = null;
     if (kyleDiagnosticsActive) {
-      kyleBaselineBestKind = candidates.reduce((best, c) => (c.score - c.kyleExperimentDelta > best.score - best.kyleExperimentDelta ? c : best)).kind;
-      kyleAdjustedBestKind = candidates.reduce((best, c) => (c.score > best.score ? c : best)).kind;
+      kyleBaselineBestKind = legalCandidates.reduce((best, c) => (c.score - c.kyleExperimentDelta > best.score - best.kyleExperimentDelta ? c : best)).kind;
+      kyleAdjustedBestKind = legalCandidates.reduce((best, c) => (c.score > best.score ? c : best)).kind;
     }
 
     // Mageuna: baseline = score with both her own delta terms (plan bonus + disruption
@@ -978,10 +1014,10 @@ export class CharacterAI {
     let mageunaBaselineBestKind: TileKind | null = null;
     let mageunaAdjustedBestKind: TileKind | null = null;
     if (mageunaDiagnosticsActive) {
-      mageunaBaselineBestKind = candidates.reduce((best, c) =>
+      mageunaBaselineBestKind = legalCandidates.reduce((best, c) =>
         c.score - c.mageunaPlanBonus - c.mageunaDisruptionDelta > best.score - best.mageunaPlanBonus - best.mageunaDisruptionDelta ? c : best
       ).kind;
-      mageunaAdjustedBestKind = candidates.reduce((best, c) => (c.score > best.score ? c : best)).kind;
+      mageunaAdjustedBestKind = legalCandidates.reduce((best, c) => (c.score > best.score ? c : best)).kind;
     }
 
     // Effie: baseline = score with effieAttachmentDelta subtracted back out.
@@ -989,13 +1025,13 @@ export class CharacterAI {
     let effieBaselineBestKind: TileKind | null = null;
     let effieAdjustedBestKind: TileKind | null = null;
     if (effieDiagnosticsActive) {
-      effieBaselineBestKind = candidates.reduce((best, c) => (c.score - c.effieAttachmentDelta > best.score - best.effieAttachmentDelta ? c : best)).kind;
-      effieAdjustedBestKind = candidates.reduce((best, c) => (c.score > best.score ? c : best)).kind;
+      effieBaselineBestKind = legalCandidates.reduce((best, c) => (c.score - c.effieAttachmentDelta > best.score - best.effieAttachmentDelta ? c : best)).kind;
+      effieAdjustedBestKind = legalCandidates.reduce((best, c) => (c.score > best.score ? c : best)).kind;
     }
 
     this._lastDiscardDebug = {
       chosenKind: finalKind,
-      topCandidates: [...candidates]
+      topCandidates: [...legalCandidates]
         .sort((a, b) => b.score - a.score)
         .slice(0, 5)
         .map((c) => ({
@@ -1453,6 +1489,12 @@ export class CharacterAI {
     return this.decideKan(hand, kind, "ankan", ctx);
   }
 
+  /** Kita strategy is intentionally untuned: use the same deterministic default as
+   * SimpleAI while exposing the same action-selection boundary. */
+  shouldDeclareKita(_hand: Hand, _ctx: CharacterDecisionContext): boolean {
+    return shouldDeclareKita();
+  }
+
   decideKanFromMetricsForTest(input: StrategicKanInput): boolean {
     return this.applyKanDecision(input);
   }
@@ -1510,7 +1552,14 @@ export class CharacterAI {
     discardedKind: TileKind,
     tilesToRemove: number,
     ctx: CharacterDecisionContext
-  ): { shantenGain: number; ukeireGain: number } {
+  ): {
+    beforeShanten: number;
+    afterShanten: number;
+    shantenGain: number;
+    beforeUkeire: number;
+    afterUkeire: number;
+    ukeireGain: number;
+  } {
     const beforeCounts = tilesToCounts(hand.concealed);
     const beforeShanten = bestShanten(beforeCounts, hand.melds.length);
     const beforeUkeire = computeImprovingTiles(beforeCounts, hand.melds.length, ctx.rules, beforeShanten).length;
@@ -1525,15 +1574,29 @@ export class CharacterAI {
     const afterShanten = bestShanten(afterCounts, meldsAfter);
     const afterUkeire = computeImprovingTiles(afterCounts, meldsAfter, ctx.rules, afterShanten).length;
 
-    return { shantenGain: beforeShanten - afterShanten, ukeireGain: afterUkeire - beforeUkeire };
+    return {
+      beforeShanten,
+      afterShanten,
+      shantenGain: beforeShanten - afterShanten,
+      beforeUkeire,
+      afterUkeire,
+      ukeireGain: afterUkeire - beforeUkeire,
+    };
   }
 
   private decideCall(hand: Hand, discardedKind: TileKind, tilesToRemove: number, isYakuhai: boolean, ctx: CharacterDecisionContext): boolean {
     const p = this.profile;
-    const { shantenGain, ukeireGain } = this.evaluateCallAdvantage(hand, discardedKind, tilesToRemove, ctx);
+    const progression = this.evaluateCallAdvantage(hand, discardedKind, tilesToRemove, ctx);
+    const { shantenGain, ukeireGain } = progression;
 
-    const concreteScore = (shantenGain >= 1 ? 0.55 : 0) + clamp(ukeireGain, 0, 8) * 0.02 + (isYakuhai ? 0.15 : 0);
-    const personalityScore = (p.callBias - 0.5) * 0.5 + (p.aggression - 0.5) * 0.15 - (p.defense - 0.5) * 0.15;
+    const shantenBonus = shantenGain >= 1 ? 0.55 : 0;
+    const ukeireBonus = clamp(ukeireGain, 0, 8) * 0.02;
+    const yakuhaiBonus = isYakuhai ? 0.15 : 0;
+    const callBiasContribution = (p.callBias - 0.5) * 0.5;
+    const aggressionContribution = (p.aggression - 0.5) * 0.15;
+    const defenseContribution = -(p.defense - 0.5) * 0.15;
+    const concreteScore = shantenBonus + ukeireBonus + yakuhaiBonus;
+    const personalityScore = callBiasContribution + aggressionContribution + defenseContribution;
 
     const baselineCallScore = 0.15 + concreteScore + personalityScore;
 
@@ -1548,29 +1611,56 @@ export class CharacterAI {
     const adjustedCallScore = baselineCallScore - callCost;
 
     let callScore = adjustedCallScore;
-    callScore += (this.selectionRng.next() - 0.5) * p.entropy * 0.3;
-    if (this.selectionRng.next() < p.mistakeRate) callScore += (this.selectionRng.next() - 0.5) * 0.3;
-    const called = callScore > 0.5;
-    if (sangminActive) {
-      const baselineDecision: "call" | "pass" = baselineCallScore > 0.5 ? "call" : "pass";
-      const adjustedDecision: "call" | "pass" = adjustedCallScore > 0.5 ? "call" : "pass";
-      this._lastCallTrace = {
-        callScore,
-        effortAversionCost: callCost,
-        shantenGain,
-        called,
-        callKind: tilesToRemove === 2 ? "pon" : "daiminkan",
-        baselineCallScore,
-        adjustedCallScore,
-        effortModifier,
-        commitmentModifier,
-        baselineDecision,
-        adjustedDecision,
-        mechanicChangedDecision: baselineDecision !== adjustedDecision,
-        actualDecision: called ? "call" : "pass",
-      };
+    const entropyJitter = (this.selectionRng.next() - 0.5) * p.entropy * 0.3;
+    callScore += entropyJitter;
+    let mistakeJitter = 0;
+    if (this.selectionRng.next() < p.mistakeRate) {
+      mistakeJitter = (this.selectionRng.next() - 0.5) * 0.3;
+      callScore += mistakeJitter;
     }
+    const called = callScore > 0.5;
+    const baselineDecision: "call" | "pass" = baselineCallScore > 0.5 ? "call" : "pass";
+    const adjustedDecision: "call" | "pass" = adjustedCallScore > 0.5 ? "call" : "pass";
+    this._lastCallTrace = {
+      callScore,
+      effortAversionCost: callCost,
+      beforeShanten: progression.beforeShanten,
+      afterShanten: progression.afterShanten,
+      shantenGain,
+      beforeUkeire: progression.beforeUkeire,
+      afterUkeire: progression.afterUkeire,
+      ukeireGain,
+      openMeldCount: hand.melds.length,
+      isYakuhai,
+      called,
+      callKind: tilesToRemove === 2 ? "pon" : "daiminkan",
+      baselineCallScore,
+      adjustedCallScore,
+      effortModifier,
+      commitmentModifier,
+      baselineDecision,
+      adjustedDecision,
+      mechanicChangedDecision: baselineDecision !== adjustedDecision,
+      actualDecision: called ? "call" : "pass",
+      components: {
+        base: 0.15,
+        shantenBonus,
+        ukeireBonus,
+        yakuhaiBonus,
+        callBias: callBiasContribution,
+        aggression: aggressionContribution,
+        defense: jsonSafeTraceNumber(defenseContribution),
+        effort: jsonSafeTraceNumber(-effortModifier),
+        commitment: jsonSafeTraceNumber(-commitmentModifier),
+        entropyJitter: jsonSafeTraceNumber(entropyJitter),
+        mistakeJitter: jsonSafeTraceNumber(mistakeJitter),
+      },
+    };
     return called;
+  }
+
+  evaluateChiCandidate(hand: Hand, candidate: ChiCandidate, ctx: CharacterDecisionContext): ChiDecisionEvaluation {
+    return evaluateChiDecision(this.profile, hand, candidate, ctx);
   }
 
   computeOwnWinningTiles(hand: Hand, rules: RuleConfig): TileKind[] {

@@ -5,8 +5,8 @@ import type { RuleConfig } from "../rules/RuleConfig.js";
  * the discarder (so index 0 is the "closest" player), decides who actually wins:
  *  - "atamahane" ("head bump"): only the closest eligible player wins; the others get
  *    nothing and are NOT considered to have "declined" (no furiten consequence).
- *  - "all": every eligible player wins simultaneously (multi-ron), each scored and paid
- *    independently against the discarder.
+ *  - "all": every eligible player wins simultaneously (double or triple ron), each scored
+ *    and paid independently against the discarder.
  */
 export function resolveRonWinners<T>(eligibleInOrder: T[], mode: RuleConfig["doubleRonMode"]): T[] {
   if (eligibleInOrder.length === 0) return [];

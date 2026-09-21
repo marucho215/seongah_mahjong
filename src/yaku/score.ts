@@ -1,4 +1,6 @@
 import type { RuleConfig } from "../rules/RuleConfig.js";
+import { allSeats } from "../core/seats.js";
+import { MAJSOUL_SANMA_RULESET, MAJSOUL_YONMA_RULESET } from "../rules/RuleSet.js";
 
 function roundUp100(n: number): number {
   return Math.ceil(n / 100) * 100;
@@ -44,13 +46,18 @@ export function computeScore(opts: {
   isTsumo: boolean;
   ronFrom?: number;
   honba?: number;
-  playerCount: 3;
+  playerCount: number;
   rules: RuleConfig;
 }): ScoreResult {
+  if (opts.playerCount !== MAJSOUL_SANMA_RULESET.playerCount && opts.playerCount !== MAJSOUL_YONMA_RULESET.playerCount) {
+    throw new Error(`computeScore: unsupported player count ${opts.playerCount}`);
+  }
   const honba = opts.honba ?? 0;
   const base = basePoints(opts.han, opts.fu, opts.yakumanUnits, opts.rules.kiriageMangan);
   const isDealer = opts.winner === opts.dealer;
-  const deltas: Record<number, number> = { 0: 0, 1: 0, 2: 0 };
+  const seats = allSeats(opts.playerCount);
+  const deltas: Record<number, number> = Object.fromEntries(seats.map((seat) => [seat, 0]));
+  const others = seats.filter((p) => p !== opts.winner);
   const honbaTotal = honba * opts.rules.honbaValue;
 
   if (!opts.isTsumo) {
@@ -61,8 +68,28 @@ export function computeScore(opts: {
     return { base, totalPoints: amount, payments: { deltas } };
   }
 
+  if (opts.playerCount === MAJSOUL_YONMA_RULESET.playerCount) {
+    const honbaEach = honba * (opts.rules.honbaValue / 3);
+    if (isDealer) {
+      const each = roundUp100(base * 2) + honbaEach;
+      for (const p of others) {
+        deltas[p]! -= each;
+        deltas[opts.winner]! += each;
+      }
+      return { base, totalPoints: each * 3, payments: { deltas } };
+    }
+
+    let totalPoints = 0;
+    for (const p of others) {
+      const amount = roundUp100(base * (p === opts.dealer ? 2 : 1)) + honbaEach;
+      deltas[p]! -= amount;
+      deltas[opts.winner]! += amount;
+      totalPoints += amount;
+    }
+    return { base, totalPoints, payments: { deltas } };
+  }
+
   const honbaEach = honba * (opts.rules.honbaValue / 2);
-  const others = [0, 1, 2].filter((p) => p !== opts.winner);
   if (isDealer) {
     const each = roundUp100(base * 2) + honbaEach;
     for (const p of others) {

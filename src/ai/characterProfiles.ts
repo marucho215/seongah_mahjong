@@ -1,7 +1,7 @@
 import type { CharacterProfile } from "./characterProfile.js";
 
 /**
- * The 9 character profiles from character-ai-spec.txt, registered verbatim. Do not alter
+ * The registered character profiles from character-ai-spec.txt. Do not alter
  * these values without explicit instruction - see the spec's own note: "Do not automatically
  * retune parameter values without explicit instruction."
  */

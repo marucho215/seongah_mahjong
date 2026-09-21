@@ -1085,12 +1085,14 @@ describe("causality trace: Jo Sangmin riichi/call decisions expose baseline/adju
     expect(trace!.adjustedCallScore).toBeLessThanOrEqual(trace!.baselineCallScore); // effort/commitment cost only ever subtracts
   });
 
-  it("is null for a non-Sangmin character (no effortAversion/commitmentAversion)", () => {
+  it("records the shared evaluator with zero Sangmin modifiers for a non-Sangmin character", () => {
     const ai = new CharacterAI(getCharacterProfile("seiyamouri"), "non-sangmin-trace");
     const hand = new Hand();
     hand.dealIn(kindsToTiles(causalityHand));
     ai.shouldCallPon(hand, "z1", baseCtx(), true);
-    expect(ai.lastCallTrace).toBeNull();
+    expect(ai.lastCallTrace).not.toBeNull();
+    expect(ai.lastCallTrace!.effortModifier).toBe(0);
+    expect(ai.lastCallTrace!.commitmentModifier).toBe(0);
   });
 });
 

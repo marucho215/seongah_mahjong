@@ -6,7 +6,9 @@ import { tilesToCounts } from "./tileIndex.js";
 import { FuritenTracker } from "../actions/furiten.js";
 import { computeWinningTiles } from "../actions/winSearch.js";
 import { canAnkan, applyAnkan, canPon, applyPon, canDaiminkan, applyDaiminkan, canShouminkan, applyShouminkan } from "../actions/calls.js";
-import { canKita, applyKita } from "../actions/kita.js";
+import { applyKita, canKita, canRiichiKita, chooseKitaAction, type KitaAction } from "../actions/kita.js";
+import { canRiichiAnkan } from "../actions/riichiAnkan.js";
+import { isKokushiAnkanRon } from "../actions/kokushiAnkan.js";
 import {
   chooseDiscard,
   shouldDeclareRiichi,
@@ -14,16 +16,41 @@ import {
   shouldDeclareAnkan,
   shouldCallDaiminkan,
   shouldDeclareShouminkan,
+  shouldDeclareKita,
   isYakuhaiTile,
 } from "../ai/simpleAI.js";
 import type { CharacterProfile } from "../ai/characterProfile.js";
-import { CharacterAI, type CharacterDecisionContext } from "../ai/characterAI.js";
+import { CharacterAI, type CallDecisionTrace, type CharacterDecisionContext } from "../ai/characterAI.js";
+import type { ChiDecisionEvaluation } from "../ai/chiDecision.js";
+import {
+  buildCallDecisionEntry,
+  buildDiscardDecisionEntry,
+  buildRiichiDecisionEntry,
+} from "../ai/decisionTraceFactory.js";
 import { meldsToGroups } from "../yaku/meldConvert.js";
-import { countDora, countAkaDora, countNukidora } from "../yaku/dora.js";
-import { evaluateWin, type FullWinResult } from "../yaku/evaluate.js";
-import type { WinContext } from "../yaku/types.js";
-import type { GameEvent, AiDecisionEntry, GameEndEvent } from "./GameLog.js";
+import { buildWinContext } from "../yaku/winContext.js";
+import { evaluateInitialDealerWin, evaluateWin, type FullWinResult } from "../yaku/evaluate.js";
+import type { GameEvent, AiDecisionEntry, AuditableWinResult, GameEndEvent, HandResultSnapshot } from "./GameLog.js";
 import { resolveRonWinners } from "./ronResolution.js";
+import { allSeats, nextSeat, seatDistance, seatsInTurnOrder } from "./seats.js";
+import { computeRoundProgression } from "./roundProgression.js";
+import { MAJSOUL_SANMA_RULESET, MAJSOUL_YONMA_RULESET } from "../rules/RuleSet.js";
+import { settleExhaustiveDraw, settleOrderedWinPayments, shouldDealerContinue } from "../rules/settlement.js";
+import {
+  arbitrateDiscardResponses,
+  generateDiscardResponseCandidates,
+  type NonWinningCallCandidate,
+} from "./discardResponses.js";
+import { applySelectedDiscardResponse } from "./applyDiscardResponse.js";
+import {
+  canDeclareNineTerminals,
+  isAbortiveDrawReasonEnabled,
+  isFourRiichiAbortive,
+  postDiscardAbortiveDrawReason,
+  type AbortiveDrawReason,
+} from "./abortiveDraw.js";
+import { applyPaoSettlement, recordPaoLiabilityAfterOpenCall } from "../rules/pao.js";
+import { collectVisibleTileKinds } from "../ai/visibleTiles.js";
 
 export interface GameStateOptions {
   rules: RuleConfig;
@@ -31,11 +58,19 @@ export interface GameStateOptions {
   /** Optional per-seat character personality. A seat left null/undefined plays with the
    *  engine's default SimpleAI, completely unaffected by this feature - see CharacterAI. */
   characterProfiles?: (CharacterProfile | null | undefined)[];
+  /** Optional deterministic non-winning call selector, primarily for yonma fixtures.
+   *  Omit to retain SimpleAI's pon/daiminkan decisions and decline automatic chi. */
+  discardResponsePolicy?: (options: readonly NonWinningCallCandidate[]) => NonWinningCallCandidate | undefined;
+  /** 九種九牌 is optional for the player. Autonomous games declare by default. */
+  nineTerminalsPolicy?: (seat: number, hand: Hand) => boolean;
+  /** Optional actor choice for each legal Kita opportunity. Each extraction is offered
+   *  separately; false passes only the current action window. */
+  kitaDecisionPolicy?: (seat: number, hand: Hand, extractedThisTurn: number) => boolean;
 }
 
 /** seatWind: 1=East, 2=South, 3=West, relative to who is dealer this hand. */
-function seatWindFor(player: number, dealer: number): number {
-  return ((player - dealer + 3) % 3) + 1;
+function seatWindFor(player: number, dealer: number, playerCount: number): number {
+  return seatDistance(dealer, player, playerCount) + 1;
 }
 
 /** Runs the ron/chankan window while ippatsu is still live. Only an action that survives
@@ -49,15 +84,52 @@ export function resolveRonBeforeInterruption<T>(offerRon: () => T[], commitInter
 export interface FinalStanding {
   player: number;
   rawScore: number;
-  placement: number; // 1-3
+  placement: number; // 1 through rules.playerCount
+  uma: number; // placement bonus in game-score units (e.g. +15, not +15000)
   points: number; // (rawScore - returnScore) / 1000 + uma, in "score units" (not raw points)
 }
+
+export interface PhysicalHandBootstrap {
+  wall: Wall;
+  hands: Hand[];
+  dealerFirstDraw?: Tile;
+}
+
+type PendingHandResult =
+  | {
+      kind: "agari";
+      winners: AuditableWinResult[];
+      kyotakuRecipient: number | null;
+      kyotakuAwarded: number;
+      scoresBeforeSettlement: number[];
+      pointDeltas: Record<number, number>;
+      kyotakuBefore: number;
+    }
+  | {
+      kind: "exhaustive_draw";
+      tenpaiSeats: number[];
+      notenSeats: number[];
+      nagashiManganSeats: number[];
+      scoresBeforeSettlement: number[];
+      pointDeltas: Record<number, number>;
+      kyotakuBefore: number;
+    }
+  | {
+      kind: "abortive_draw";
+      reason: AbortiveDrawReason;
+      scoresBeforeSettlement: number[];
+      pointDeltas: Record<number, number>;
+      kyotakuBefore: number;
+    };
 
 export class GameState {
   readonly rules: RuleConfig;
   readonly baseSeed: string;
   readonly characterProfiles: (CharacterProfile | null)[];
-  scores: [number, number, number];
+  readonly discardResponsePolicy?: GameStateOptions["discardResponsePolicy"];
+  readonly nineTerminalsPolicy: NonNullable<GameStateOptions["nineTerminalsPolicy"]>;
+  readonly kitaDecisionPolicy?: GameStateOptions["kitaDecisionPolicy"];
+  scores: number[];
   dealerSeat = 0;
   roundWind = 1;
   roundHandNumber = 1;
@@ -74,57 +146,90 @@ export class GameState {
    *  count, so playGame()'s loop never starts another hand. Exactly 0 is NOT a bust. */
   private tobiTriggered = false;
   /** Set once the game has actually played a hand beyond its scheduled length (see
-   *  isPastNormalLength) because nobody had reached rules.returnScore yet at that point -
-   *  Mahjong Soul sanma's "extension" (renchan past the normal last hand until someone
-   *  crosses the target score). Only ever set true from inside playGame()'s loop, never
+   *  isPastNormalLength) because nobody had reached rules.targetScore yet at that point -
+   *  the configured "extension" (play past the normal last hand until someone crosses the
+   *  target score). Only ever set true from inside playGame()'s loop, never
    *  read as a game-over condition itself - isGameOver() derives continuation from the
    *  live scores every time, this just records *whether* that happened for game_end's
    *  reason field. */
   private extended = false;
+  private dealerContinuationPending = false;
+  private dealerEndTriggered = false;
 
   constructor(opts: GameStateOptions) {
     this.rules = opts.rules;
     this.baseSeed = opts.seed;
-    this.characterProfiles = [0, 1, 2].map((i) => opts.characterProfiles?.[i] ?? null);
-    this.scores = [opts.rules.startingScore, opts.rules.startingScore, opts.rules.startingScore];
+    this.characterProfiles = allSeats(opts.rules.playerCount).map((i) => opts.characterProfiles?.[i] ?? null);
+    this.discardResponsePolicy = opts.discardResponsePolicy;
+    this.nineTerminalsPolicy = opts.nineTerminalsPolicy ?? (() => true);
+    this.kitaDecisionPolicy = opts.kitaDecisionPolicy;
+    this.scores = allSeats(opts.rules.playerCount).map(() => opts.rules.startingScore);
+  }
+
+  /**
+   * Physical hand setup shared by sanma and yonma: create seats, deal 13 tiles each, and
+   * optionally perform the dealer's first draw. No calls, scoring, or round progression.
+   */
+  bootstrapPhysicalHand(drawDealerFirstTile = false): PhysicalHandBootstrap {
+    const wallSeed = `${this.baseSeed}::hand${this.handIndex}`;
+    const wall = new Wall(this.rules, wallSeed);
+    const seats = allSeats(this.rules.playerCount);
+    const hands = seats.map(() => new Hand());
+    const dealt = wall.dealInitial(this.rules.playerCount, 13);
+    for (const seat of seats) hands[seat]!.dealIn(dealt[seat]!);
+    if (!drawDealerFirstTile) return { wall, hands };
+    const dealerFirstDraw = wall.drawTile();
+    hands[this.dealerSeat]!.addDrawn(dealerFirstDraw);
+    return { wall, hands, dealerFirstDraw };
+  }
+
+  private assertFullGameplaySupported(): void {
+    if (
+      this.rules.playerCount !== MAJSOUL_SANMA_RULESET.playerCount &&
+      this.rules.playerCount !== MAJSOUL_YONMA_RULESET.playerCount
+    ) {
+      throw new Error(`GameState: unsupported player count ${this.rules.playerCount}`);
+    }
   }
 
   /** Whether the regularly scheduled hands (e.g. East1-3 for gameLength "east") have all
-   *  been played. `startingScore` is only the initial score each player is dealt; separately,
-   *  `returnScore` (the "oka baseline" used in computeFinalStandings' points formula) also
-   *  doubles as the target score that gates whether the game can end once past this point. */
+   *  been played. This boundary is independent of both final-score conversion and the
+   *  target-score gate used after the scheduled last hand. */
   private isPastNormalLength(): boolean {
     const maxWind = this.rules.gameLength === "east" ? 1 : 2;
-    return this.roundWind > maxWind || (this.roundWind === maxWind && this.roundHandNumber > 3);
+    return this.roundWind > maxWind || (this.roundWind === maxWind && this.roundHandNumber > this.rules.handsPerRound);
   }
 
-  /** The extension itself is capped at exactly one wind beyond the normal schedule (e.g.
+  /** The built-in rules cap extension at one wind beyond the normal schedule (e.g.
    *  "east" extends into South but never West - 남입은 허용, 서입은 금지) - once that
-   *  extra wind's own 3rd hand finishes normally, the game ends regardless of whether
+   *  extra wind's final configured hand finishes normally, the game ends regardless of whether
    *  anyone has reached the target score yet. */
   private isPastExtensionCap(): boolean {
-    const extensionCapWind = (this.rules.gameLength === "east" ? 1 : 2) + 1;
-    return this.roundWind > extensionCapWind || (this.roundWind === extensionCapWind && this.roundHandNumber > 3);
+    const extensionCapWind = (this.rules.gameLength === "east" ? 1 : 2) + this.rules.maxExtensionRounds;
+    return this.roundWind > extensionCapWind || (this.roundWind === extensionCapWind && this.roundHandNumber > this.rules.handsPerRound);
   }
 
   isGameOver(): boolean {
     if (this.tobiTriggered) return true;
+    if (this.dealerEndTriggered) return true;
+    if (this.dealerContinuationPending) return false;
     if (!this.isPastNormalLength()) return false;
     if (this.isPastExtensionCap()) return true;
-    // Mahjong Soul sanma extension: once the schedule is exhausted, keep playing
+    // Ruleset target-score extension: once the schedule is exhausted, keep playing
     // (dealer continuation/renchan rules apply exactly as during a normal hand) until
-    // someone's raw score has reached the target (rules.returnScore), up to the cap above.
-    return this.scores.some((s) => s >= this.rules.returnScore);
+    // someone's raw score has reached rules.targetScore, up to the cap above.
+    return this.scores.some((s) => s >= this.rules.targetScore);
   }
 
   /** Best-effort "this is the last named hand" signal (ignores any renchan extension that
    *  hasn't happened yet) - used only as a soft pressure signal for Tosuke's intervention check. */
   private isLastNamedHand(): boolean {
     const maxWind = this.rules.gameLength === "east" ? 1 : 2;
-    return this.roundWind === maxWind && this.roundHandNumber === 3;
+    return this.roundWind === maxWind && this.roundHandNumber === this.rules.handsPerRound;
   }
 
   playGame(): void {
+    this.assertFullGameplaySupported();
     let guard = 0;
     while (!this.isGameOver()) {
       if (this.isPastNormalLength()) this.extended = true;
@@ -143,7 +248,7 @@ export class GameState {
       this.scores[leader]! += this.kyotaku * 1000;
       this.kyotaku = 0;
     }
-    const eliminatedPlayers = [0, 1, 2].filter((p) => this.scores[p]! < 0);
+    const eliminatedPlayers = allSeats(this.rules.playerCount).filter((p) => this.scores[p]! < 0);
     this.log.push({
       type: "game_end",
       finalScores: [...this.scores],
@@ -155,28 +260,45 @@ export class GameState {
   /** Final ranked standings: raw score is untouched (kept for the conservation invariant),
    *  `points` applies the return-score baseline and uma placement bonus for display/ranking. */
   computeFinalStandings(): FinalStanding[] {
-    const order = [0, 1, 2].sort((a, b) => this.scores[b]! - this.scores[a]! || a - b);
+    this.assertFullGameplaySupported();
+    const order = allSeats(this.rules.playerCount).sort(
+      (a, b) => this.scores[b]! - this.scores[a]! || seatDistance(0, a, this.rules.playerCount) - seatDistance(0, b, this.rules.playerCount)
+    );
     return order.map((player, i) => ({
       player,
       rawScore: this.scores[player]!,
       placement: i + 1,
+      uma: this.rules.uma[i]! / 1000,
       points: (this.scores[player]! - this.rules.returnScore) / 1000 + this.rules.uma[i]! / 1000,
     }));
   }
 
+  /** Common no-payment transition for Mahjong Soul abortive draws. */
+  applyAbortiveDraw(reason: AbortiveDrawReason): void {
+    this.log.push({ type: "abortive_draw", reason });
+    this.advanceAfterHand(true, true, false, {
+      kind: "abortive_draw",
+      reason,
+      scoresBeforeSettlement: [...this.scores],
+      pointDeltas: Object.fromEntries(allSeats(this.rules.playerCount).map((seat) => [seat, 0])),
+      kyotakuBefore: this.kyotaku,
+    });
+  }
+
   playHand(): void {
+    this.assertFullGameplaySupported();
     const wallSeed = `${this.baseSeed}::hand${this.handIndex}`;
-    const wall = new Wall(this.rules, wallSeed);
-    const hands: [Hand, Hand, Hand] = [new Hand(), new Hand(), new Hand()];
-    const dealt = wall.dealInitial(3, 13);
-    for (let p = 0; p < 3; p++) hands[p]!.dealIn(dealt[p]!);
-    const furiten = [new FuritenTracker(), new FuritenTracker(), new FuritenTracker()];
+    const { wall, hands } = this.bootstrapPhysicalHand();
+    const seats = allSeats(this.rules.playerCount);
+    const dealt = hands.map((hand) => [...hand.concealed]);
+    const furiten = seats.map(() => new FuritenTracker());
 
     // ippatsu window per player, and whether the hand's very first go-around has been
     // interrupted by any call (governs double riichi / tenhou / chiihou eligibility).
-    const ippatsuEligible: [boolean, boolean, boolean] = [false, false, false];
+    const ippatsuEligible = seats.map(() => false);
+    const appliedDiscardIds = new Set<number>();
     let tableInterrupted = false;
-    const drawCountByPlayer: [number, number, number] = [0, 0, 0];
+    const drawCountByPlayer = seats.map(() => 0);
 
     this.log.push({
       type: "hand_start",
@@ -191,17 +313,17 @@ export class GameState {
     });
     this.log.push({
       type: "deal",
-      hands: [dealt[0]!.map((t) => t.kind), dealt[1]!.map((t) => t.kind), dealt[2]!.map((t) => t.kind)],
+      hands: dealt.map((playerTiles) => playerTiles.map((t) => t.kind)),
       doraIndicator: wall.doraIndicators()[0]!.kind,
     });
 
-    const cachedWinningTiles: TileKind[][] = [[], [], []];
+    const cachedWinningTiles: TileKind[][] = seats.map(() => []);
     const refreshWinningTiles = (p: number) => {
       cachedWinningTiles[p] = computeWinningTiles(tilesToCounts(hands[p]!.concealed), hands[p]!.melds.length, this.rules);
     };
-    for (let p = 0; p < 3; p++) refreshWinningTiles(p);
+    for (const p of seats) refreshWinningTiles(p);
 
-    const buildContext = (
+    const scoringContextFor = (
       player: number,
       isTsumo: boolean,
       isRinshan: boolean,
@@ -210,37 +332,26 @@ export class GameState {
       isChankan: boolean,
       isTenhou: boolean,
       isChiihou: boolean
-    ): WinContext => {
+    ) => {
       const hand = hands[player]!;
-      const meldTiles = hand.melds.flatMap((m) => m.tiles);
-      const forDora = [...hand.concealed, ...meldTiles];
-      const doraIndicatorKinds: TileKind[] = wall.doraIndicators().map((t) => t.kind);
-      const nukidora = countNukidora(hand.kitaTiles);
-      const nukidoraAsRegularDora = countDora(hand.kitaTiles, doraIndicatorKinds, this.rules);
-      const uraCount = hand.riichi
-        ? countDora(forDora, wall.uraDoraIndicators().map((t) => t.kind), this.rules) +
-          countDora(hand.kitaTiles, wall.uraDoraIndicators().map((t) => t.kind), this.rules)
-        : 0;
-      return {
-        seatWind: seatWindFor(player, this.dealerSeat),
+      return buildWinContext({
+        hand,
+        rules: this.rules,
+        player,
+        dealer: this.dealerSeat,
+        playerCount: this.rules.playerCount,
         roundWind: this.roundWind,
+        ippatsuEligible: ippatsuEligible[player]!,
+        doraIndicatorKinds: wall.doraIndicators().map((tile) => tile.kind),
+        uraDoraIndicatorKinds: hand.riichi ? wall.uraDoraIndicators().map((tile) => tile.kind) : [],
         isTsumo,
-        isRiichi: hand.riichi,
-        isDoubleRiichi: hand.doubleRiichi,
-        isIppatsu: ippatsuEligible[player]!,
         isHaitei,
         isHoutei,
         isRinshan,
         isChankan,
         isTenhou,
         isChiihou,
-        doraCount: countDora(forDora, doraIndicatorKinds, this.rules) + nukidoraAsRegularDora,
-        uraDoraCount: uraCount,
-        akaDoraCount: countAkaDora(forDora),
-        kanCount: wall.kanCount(),
-        // nukidora itself is folded into doraCount here since WinContext has no separate
-        // field for it; see the "+nukidora" addition below.
-      };
+      });
     };
 
     const tryEvaluate = (
@@ -256,21 +367,20 @@ export class GameState {
       const hand = hands[player]!;
       const isTenhou = isTsumo && player === this.dealerSeat && drawCountByPlayer[player] === 0 && !tableInterrupted;
       const isChiihou = isTsumo && player !== this.dealerSeat && drawCountByPlayer[player] === 0 && !tableInterrupted;
-      const ctx = buildContext(player, isTsumo, isRinshan, isHaitei, isHoutei, isChankan, isTenhou, isChiihou);
-      // nukidora: fold the flat "1 per extracted tile" count into doraCount here, since
-      // buildContext only computed the "also matches the live indicator" portion.
-      ctx.doraCount += countNukidora(hand.kitaTiles);
-      return evaluateWin({
+      const ctx = scoringContextFor(player, isTsumo, isRinshan, isHaitei, isHoutei, isChankan, isTenhou, isChiihou);
+      const input = {
         concealedTiles: hand.concealed,
         melds: meldsToGroups(hand.melds),
-        winTile,
         context: ctx,
         rules: this.rules,
         winner: player,
         dealer: this.dealerSeat,
         ronFrom,
         honba: this.honba,
-      });
+      };
+      return isTenhou
+        ? evaluateInitialDealerWin(input)
+        : evaluateWin({ ...input, winTile });
     };
 
     const tryRon = (player: number, tile: Tile, ronFrom: number, isHoutei: boolean, isChankan = false): FullWinResult | null => {
@@ -286,8 +396,14 @@ export class GameState {
     /** Offers `tile` (from `fromSeat`) to the other two players for ron, in turn order.
      *  Any player whose shape matches but who has no yaku becomes temporarily furiten -
      *  this is the "atozuke" case where a hand-completing tile legally can't be ronned. */
-    const offerRon = (fromSeat: number, tile: Tile, isHoutei: boolean, isChankan: boolean): { player: number; result: FullWinResult }[] => {
-      const order = [(fromSeat + 1) % 3, (fromSeat + 2) % 3];
+    const offerRon = (
+      fromSeat: number,
+      tile: Tile,
+      isHoutei: boolean,
+      isChankan: boolean,
+      restriction: "any" | "kokushi-ankan" = "any"
+    ): { player: number; result: FullWinResult }[] => {
+      const order = seatsInTurnOrder(fromSeat, this.rules.playerCount);
       const eligible: { player: number; result: FullWinResult }[] = [];
       for (const p of order) {
         const otherHand = hands[p]!;
@@ -296,9 +412,9 @@ export class GameState {
         const ownDiscardKinds = otherHand.discards.map((d) => d.tile.kind);
         if (furiten[p]!.isFuriten(winningTiles, ownDiscardKinds)) continue;
         const result = tryRon(p, tile, fromSeat, isHoutei, isChankan);
-        if (result) {
+        if (result && (restriction === "any" || isKokushiAnkanRon(result))) {
           eligible.push({ player: p, result });
-        } else {
+        } else if (!result && restriction === "any") {
           // shape-complete, no legal yaku (atozuke) - this counts as a missed ron chance
           furiten[p]!.onMissedRonChance();
         }
@@ -307,38 +423,59 @@ export class GameState {
     };
 
     const finishHandWithWin = (winners: { player: number; result: FullWinResult; ronFrom?: number }[]) => {
+      const scoresBeforeSettlement = [...this.scores];
+      const kyotakuBefore = this.kyotaku;
+      const paoAdjusted = winners.map((winner) => {
+        const adjusted = applyPaoSettlement({
+          score: winner.result.score,
+          yaku: winner.result.yaku,
+          yakumanUnits: winner.result.yakumanUnits,
+          liability: hands[winner.player]!.paoLiability,
+          winner: winner.player,
+          dealer: this.dealerSeat,
+          isTsumo: winner.ronFrom === undefined,
+          ronFrom: winner.ronFrom,
+          honba: this.honba,
+          rules: this.rules,
+        });
+        return {
+          ...winner,
+          result: { ...winner.result, score: adjusted.score },
+          honbaPayer: adjusted.honbaPayer,
+        };
+      });
       // Double/triple ron: evaluateWin computed each winner's payment independently, so
       // every one of them separately added the full honba bonus onto the discarder's
       // payment - the discarder would otherwise pay honba N times instead of once. Only the
       // winner closest to the discarder in turn order (winners[0], the same precedence
       // already used for the riichi-stick payout below) keeps it; strip it back out of every
       // other winner's own deltas and credit it back to the discarder.
-      const honbaTotal = this.honba * this.rules.honbaValue;
-      const adjustedWinners = winners.map((w, i) => {
-        if (i === 0 || winners.length === 1 || w.ronFrom === undefined) return w;
-        const correctedDeltas = { ...w.result.score.payments.deltas };
-        correctedDeltas[w.player] = (correctedDeltas[w.player] ?? 0) - honbaTotal;
-        correctedDeltas[w.ronFrom] = (correctedDeltas[w.ronFrom] ?? 0) + honbaTotal;
-        const correctedTotalPoints = w.result.score.totalPoints - honbaTotal;
-        return {
-          ...w,
-          result: { ...w.result, score: { ...w.result.score, totalPoints: correctedTotalPoints, payments: { deltas: correctedDeltas } } },
-        };
-      });
-
-      const deltas: Record<number, number> = { 0: 0, 1: 0, 2: 0 };
-      for (const w of adjustedWinners) {
-        for (const [seat, delta] of Object.entries(w.result.score.payments.deltas)) {
-          deltas[Number(seat)]! += delta;
-        }
-      }
-      // riichi sticks on the table go entirely to the winner closest in turn order to the
-      // discarder (winners[] is already ordered that way by resolveRonWinners); for tsumo
-      // there's only one winner, so this is simply "the winner".
-      const firstWinner = winners[0]!.player;
-      deltas[firstWinner]! += this.kyotaku * 1000;
+      const settlement = settleOrderedWinPayments(
+        this.rules.playerCount,
+        paoAdjusted.map((winner) => ({
+          seat: winner.player,
+          ronFrom: winner.ronFrom,
+          score: winner.result.score,
+          honbaPayer: winner.honbaPayer,
+        })),
+        this.honba,
+        this.rules.honbaValue,
+        this.kyotaku
+      );
+      const adjustedWinners = paoAdjusted.map((winner, index) => ({
+        ...winner,
+        result: {
+          ...winner.result,
+          score: {
+            ...winner.result.score,
+            totalPoints: settlement.adjusted[index]!.totalPoints,
+            payments: { deltas: settlement.adjusted[index]!.deltas },
+          },
+        },
+      }));
+      const deltas = settlement.combinedDeltas;
       this.kyotaku = 0;
-      for (let p = 0; p < 3; p++) this.scores[p]! += deltas[p]!;
+      for (const p of seats) this.scores[p]! += deltas[p]!;
 
       for (const w of adjustedWinners) {
         this.log.push({
@@ -355,53 +492,107 @@ export class GameState {
         });
       }
 
-      const dealerWon = winners.some((w) => w.player === this.dealerSeat);
-      this.advanceAfterHand(dealerWon && this.rules.renchanOnDealerWin, false);
+      const auditableWinners: AuditableWinResult[] = adjustedWinners.map((winner) => ({
+        winnerSeat: winner.player,
+        loserSeat: winner.ronFrom ?? null,
+        method: winner.ronFrom === undefined ? "tsumo" : "ron",
+        winningTile: { kind: winner.result.winningTile.kind, id: winner.result.winningTile.id },
+        isDealer: winner.player === this.dealerSeat,
+        yaku: winner.result.yaku.map((hit) => ({ ...hit })),
+        han: winner.result.han,
+        fu: winner.result.fu,
+        yakumanUnits: winner.result.yakumanUnits,
+        basePoints: winner.result.score.base,
+        totalPoints: winner.result.score.totalPoints,
+        paymentDeltas: { ...winner.result.score.payments.deltas },
+        scoringFlags: {
+          riichi: winner.result.context.isRiichi,
+          doubleRiichi: winner.result.context.isDoubleRiichi,
+          ippatsu: winner.result.context.isIppatsu,
+          rinshan: winner.result.context.isRinshan,
+          chankan: winner.result.context.isChankan,
+          haitei: winner.result.context.isHaitei,
+          houtei: winner.result.context.isHoutei,
+          tenhou: winner.result.context.isTenhou,
+          chiihou: winner.result.context.isChiihou,
+        },
+      }));
+
+      this.advanceAfterHand(
+        shouldDealerContinue({
+          dealerSeat: this.dealerSeat,
+          isExhaustiveDraw: false,
+          winnerSeats: winners.map((winner) => winner.player),
+          renchanOnDealerWin: this.rules.renchanOnDealerWin,
+          renchanOnDealerTenpaiDraw: this.rules.renchanOnDealerTenpaiDraw,
+        }),
+        false,
+        true,
+        {
+          kind: "agari",
+          winners: auditableWinners,
+          kyotakuRecipient: kyotakuBefore > 0 ? settlement.closestWinner : null,
+          kyotakuAwarded: kyotakuBefore * 1000,
+          scoresBeforeSettlement,
+          pointDeltas: { ...deltas },
+          kyotakuBefore,
+        }
+      );
     };
 
     const finishExhaustiveDraw = () => {
-      const tenpaiPlayers: number[] = [];
-      for (let p = 0; p < 3; p++) {
-        if (cachedWinningTiles[p]!.length > 0) tenpaiPlayers.push(p);
-      }
-      const deltas: Record<number, number> = { 0: 0, 1: 0, 2: 0 };
-      if (tenpaiPlayers.length > 0 && tenpaiPlayers.length < 3) {
-        const pot = this.rules.notenPenaltyTotal;
-        const perReceiver = pot / tenpaiPlayers.length;
-        const notenPlayers = [0, 1, 2].filter((p) => !tenpaiPlayers.includes(p));
-        const perPayer = pot / notenPlayers.length;
-        for (const p of tenpaiPlayers) deltas[p]! += perReceiver;
-        for (const p of notenPlayers) deltas[p]! -= perPayer;
-      }
-      for (let p = 0; p < 3; p++) this.scores[p]! += deltas[p]!;
+      const scoresBeforeSettlement = [...this.scores];
+      const kyotakuBefore = this.kyotaku;
+      const { tenpaiPlayers, nagashiManganPlayers, deltas } = settleExhaustiveDraw({
+        rules: this.rules,
+        dealerSeat: this.dealerSeat,
+        hands,
+        winningTilesBySeat: cachedWinningTiles,
+      });
+      for (const p of seats) this.scores[p]! += deltas[p]!;
       this.log.push({ type: "exhaustive_draw", tenpaiPlayers, deltas });
 
-      const dealerTenpai = tenpaiPlayers.includes(this.dealerSeat);
-      this.advanceAfterHand(dealerTenpai && this.rules.renchanOnDealerTenpaiDraw, true);
+      this.advanceAfterHand(
+        shouldDealerContinue({
+          dealerSeat: this.dealerSeat,
+          isExhaustiveDraw: true,
+          tenpaiPlayers,
+          renchanOnDealerWin: this.rules.renchanOnDealerWin,
+          renchanOnDealerTenpaiDraw: this.rules.renchanOnDealerTenpaiDraw,
+        }),
+        true,
+        true,
+        {
+          kind: "exhaustive_draw",
+          tenpaiSeats: [...tenpaiPlayers],
+          notenSeats: seats.filter((seat) => !tenpaiPlayers.includes(seat)),
+          nagashiManganSeats: [...nagashiManganPlayers],
+          scoresBeforeSettlement,
+          pointDeltas: { ...deltas },
+          kyotakuBefore,
+        }
+      );
+    };
+
+    const finishAbortiveDraw = (reason: AbortiveDrawReason) => {
+      this.applyAbortiveDraw(reason);
     };
 
     const riichiOpponentDiscards = (player: number): TileKind[][] =>
-      [0, 1, 2].filter((p) => p !== player && hands[p]!.riichi).map((p) => hands[p]!.discards.map((d) => d.tile.kind));
+      seats.filter((p) => p !== player && hands[p]!.riichi).map((p) => hands[p]!.discards.map((d) => d.tile.kind));
 
-    /** Every tile kind currently visible outside a given hand: all 3 seats' discards/melds/
-     *  kita tiles plus revealed dora indicators - identical for all 3 seats (nobody's own
-     *  concealed hand is included here; callers subtract that separately from their own
-     *  known counts), recomputed fresh each call since discards/melds/kita grow through the
-     *  hand exactly like doraIndicatorKinds already does. */
-    const allVisibleTileKinds = (): TileKind[] => {
-      const kinds: TileKind[] = [];
-      for (const h of hands) {
-        for (const d of h.discards) kinds.push(d.tile.kind);
-        for (const m of h.melds) for (const t of m.tiles) kinds.push(t.kind);
-        for (const t of h.kitaTiles) kinds.push(t.kind);
-      }
-      kinds.push(...wall.doraIndicators().map((t) => t.kind));
-      return kinds;
-    };
+    const opponentSeats = (player: number): number[] => seats.filter((p) => p !== player);
+    const riichiOpponentSeats = (player: number): number[] =>
+      seats.filter((p) => p !== player && hands[p]!.riichi);
+
+    /** Recomputed as rivers/melds/Kita/dora grow; called-away river entries are represented
+     *  by their caller's meld and are deliberately not counted a second time. */
+    const allVisibleTileKinds = (): TileKind[] =>
+      collectVisibleTileKinds(hands, wall.doraIndicators().map((tile) => tile.kind));
 
     // Optional per-seat CharacterAI. A seat with no assigned profile keeps using the plain
     // SimpleAI functions below exactly as before - this feature is purely additive.
-    const ais: (CharacterAI | null)[] = [0, 1, 2].map((p) => {
+    const ais: (CharacterAI | null)[] = seats.map((p) => {
       const profile = this.characterProfiles[p];
       return profile ? new CharacterAI(profile, `${wallSeed}::ai${p}`) : null;
     });
@@ -412,82 +603,36 @@ export class GameState {
       riichiOpponentDiscardKinds: riichiOpponentDiscards(player),
       doraIndicatorKinds: wall.doraIndicators().map((t) => t.kind),
       visibleTileKinds: allVisibleTileKinds(),
-      seatWind: seatWindFor(player, this.dealerSeat),
+      seatWind: seatWindFor(player, this.dealerSeat, this.rules.playerCount),
       roundWind: this.roundWind,
       wallRemainingLive: wall.remainingLiveCount(),
       ownScore: this.scores[player]!,
-      opponentScores: [0, 1, 2].filter((p) => p !== player).map((p) => this.scores[p]!) as [number, number],
+      opponentScores: opponentSeats(player).map((p) => this.scores[p]!),
+      opponentSeats: opponentSeats(player),
+      riichiOpponentSeats: riichiOpponentSeats(player),
       isLastHandOfGame: this.isLastNamedHand(),
       isDealer: player === this.dealerSeat,
     });
 
-    const chooseDiscardFor = (player: number, hand: Hand): number => {
+    const chooseDiscardFor = (player: number, hand: Hand, forbiddenDiscardKinds: readonly TileKind[] = []): number => {
       const ai = ais[player];
       if (ai) {
-        const id = ai.chooseDiscard(hand, seatCtx(player));
+        const id = ai.chooseDiscard(hand, seatCtx(player), forbiddenDiscardKinds);
         const debug = ai.lastDiscardDebug;
         if (debug) {
-          this.aiDecisionLog.push({
-            type: "discard_decision",
+          this.aiDecisionLog.push(buildDiscardDecisionEntry({
             handIndex: this.handIndex,
             player,
             characterId: this.characterProfiles[player]!.characterId,
-            chosenKind: debug.chosenKind,
-            topCandidates: debug.topCandidates,
-            sandbagged: debug.sandbagged,
-            overloadTriggered: debug.overloadTriggered,
-            experimentRouteActive: debug.experimentRouteActive,
-            baselineBestKind: debug.baselineBestKind,
-            specialAdjustedBestKind: debug.specialAdjustedBestKind,
-            ariChoiceChanged: debug.ariChoiceChanged,
-            chosenBaselineScore: debug.chosenBaselineScore,
-            chosenSpecialScore: debug.chosenSpecialScore,
-            chosenShapeCleanlinessDelta: debug.chosenShapeCleanlinessDelta,
-            chosenContaminationDelta: debug.chosenContaminationDelta,
-            mageunaRoute: debug.mageunaRoute,
-            mageunaRouteConsistent: debug.mageunaRouteConsistent,
-            mageunaDisruptionActive: debug.mageunaDisruptionActive,
-            mageunaDisruptionTurnsLeft: debug.mageunaDisruptionTurnsLeft,
-            mageunaPlanBonusApplied: debug.mageunaPlanBonusApplied,
-            effieChosenTurnsHeld: debug.effieChosenTurnsHeld,
-            effieChosenAttachmentDelta: debug.effieChosenAttachmentDelta,
-            optimaEffectiveEntropy: debug.optimaEffectiveEntropy,
-            optimaState: debug.optimaState,
-            ariBaselineBestKind: debug.ariBaselineBestKind,
-            ariAdjustedBestKind: debug.ariAdjustedBestKind,
-            ariMechanicChangedBest: debug.ariMechanicChangedBest,
-            mageunaBaselineBestKind: debug.mageunaBaselineBestKind,
-            mageunaAdjustedBestKind: debug.mageunaAdjustedBestKind,
-            mageunaMechanicChangedBest: debug.mageunaMechanicChangedBest,
-            effieBaselineBestKind: debug.effieBaselineBestKind,
-            effieAdjustedBestKind: debug.effieAdjustedBestKind,
-            effieMechanicChangedBest: debug.effieMechanicChangedBest,
-            optimaScoreGap: debug.optimaScoreGap,
-            optimaPoolSize: debug.optimaPoolSize,
-            optimaBaselinePoolSize: debug.optimaBaselinePoolSize,
-            optimaChosenRank: debug.optimaChosenRank,
-            optimaBaseEntropy: debug.optimaBaseEntropy,
-            optimaEntropyModifier: debug.optimaEntropyModifier,
-            kyleBaselineBestKind: debug.kyleBaselineBestKind,
-            kyleAdjustedBestKind: debug.kyleAdjustedBestKind,
-            kyleMechanicChangedBest: debug.kyleMechanicChangedBest,
-            kyleRouteState: debug.kyleRouteState,
-            nahuiBaselineBestKind: debug.nahuiBaselineBestKind,
-            nahuiOverloadPoolBestKind: debug.nahuiOverloadPoolBestKind,
-            nahuiActualChosenKind: debug.nahuiActualChosenKind,
-            nahuiOverloadChangedChoice: debug.nahuiOverloadChangedChoice,
-            tosukeSandbaggingActive: debug.tosukeSandbaggingActive,
-            tosukeInterventionTriggered: debug.tosukeInterventionTriggered,
-            tosukeBaselineBestKind: debug.tosukeBaselineBestKind,
-            tosukeAdjustedBestKind: debug.tosukeAdjustedBestKind,
-            tosukeMechanicChangedBest: debug.tosukeMechanicChangedBest,
-            tosukeSandbaggingDelta: debug.tosukeSandbaggingDelta,
-            tosukeReason: debug.tosukeReason,
-          });
+          }, debug));
         }
         return id;
       }
-      return chooseDiscard({ hand, riichiOpponentDiscardKinds: riichiOpponentDiscards(player) });
+      return chooseDiscard({
+        hand,
+        riichiOpponentDiscardKinds: riichiOpponentDiscards(player),
+        forbiddenDiscardKinds,
+      });
     };
 
     const shouldDeclareRiichiFor = (player: number, hand: Hand, discardId: number): boolean => {
@@ -496,53 +641,36 @@ export class GameState {
         const declared = ai.shouldDeclareRiichi(hand, this.scores[player]!, wall.remainingLiveCount(), discardId, seatCtx(player));
         const trace = ai.lastRiichiTrace;
         if (trace) {
-          this.aiDecisionLog.push({
-            type: "riichi_decision",
+          this.aiDecisionLog.push(buildRiichiDecisionEntry({
             handIndex: this.handIndex,
             player,
             characterId: this.characterProfiles[player]!.characterId,
-            riichiScore: trace.riichiScore,
-            damaScore: trace.damaScore,
-            commitmentCost: trace.commitmentCost,
-            declared: trace.declared,
-            baselineRiichiScore: trace.baselineRiichiScore,
-            baselineDamaScore: trace.baselineDamaScore,
-            adjustedRiichiScore: trace.adjustedRiichiScore,
-            adjustedDamaScore: trace.adjustedDamaScore,
-            baselineDecision: trace.baselineDecision,
-            adjustedDecision: trace.adjustedDecision,
-            mechanicChangedDecision: trace.mechanicChangedDecision,
-            actualDecision: trace.actualDecision,
-            forced: trace.forced,
-          });
+          }, trace));
         }
         return declared;
       }
       return shouldDeclareRiichi(hand, this.scores[player]!, wall.remainingLiveCount(), discardId);
     };
 
-    const logCallTrace = (player: number, ai: CharacterAI, callKind: "pon" | "daiminkan"): void => {
-      const trace = ai.lastCallTrace;
+    const logCallTrace = (
+      player: number,
+      fromPlayer: number,
+      tile: TileKind,
+      trace: CallDecisionTrace | null,
+      actualCalled: boolean
+    ): void => {
       if (!trace) return;
-      this.aiDecisionLog.push({
-        type: "call_decision",
-        handIndex: this.handIndex,
-        player,
-        characterId: this.characterProfiles[player]!.characterId,
-        callKind,
-        callScore: trace.callScore,
-        effortAversionCost: trace.effortAversionCost,
-        shantenGain: trace.shantenGain,
-        called: trace.called,
-        baselineCallScore: trace.baselineCallScore,
-        adjustedCallScore: trace.adjustedCallScore,
-        effortModifier: trace.effortModifier,
-        commitmentModifier: trace.commitmentModifier,
-        baselineDecision: trace.baselineDecision,
-        adjustedDecision: trace.adjustedDecision,
-        mechanicChangedDecision: trace.mechanicChangedDecision,
-        actualDecision: trace.actualDecision,
-      });
+      this.aiDecisionLog.push(buildCallDecisionEntry({
+        meta: {
+          handIndex: this.handIndex,
+          player,
+          characterId: this.characterProfiles[player]!.characterId,
+        },
+        fromPlayer,
+        tile,
+        actualCalled,
+        decision: { source: "character", trace },
+      }));
     };
 
     /** A seat with no CharacterAI profile keeps SimpleAI's own conservative, yakuhai-only
@@ -552,24 +680,22 @@ export class GameState {
      *  is NOT applied as a pre-filter for it, since that previously blocked CharacterAI
      *  from ever even seeing a non-yakuhai pon/kan candidate. Structural legality (canPon/
      *  canDaiminkan at the call sites below) still gates both paths identically. */
-    const shouldCallPonFor = (player: number, hand: Hand, discardedKind: TileKind): boolean => {
-      const seatWind = seatWindFor(player, this.dealerSeat);
+    const evaluatePonFor = (player: number, hand: Hand, discardedKind: TileKind): { called: boolean; trace: CallDecisionTrace | null } => {
+      const seatWind = seatWindFor(player, this.dealerSeat, this.rules.playerCount);
       const ai = ais[player];
-      if (!ai) return shouldCallPon(discardedKind, seatWind, this.roundWind);
+      if (!ai) return { called: shouldCallPon(discardedKind, seatWind, this.roundWind), trace: null };
       const isYakuhai = isYakuhaiTile(discardedKind, seatWind, this.roundWind);
       const called = ai.shouldCallPon(hand, discardedKind, seatCtx(player), isYakuhai);
-      logCallTrace(player, ai, "pon");
-      return called;
+      return { called, trace: ai.lastCallTrace };
     };
 
-    const shouldCallDaiminkanFor = (player: number, hand: Hand, discardedKind: TileKind): boolean => {
-      const seatWind = seatWindFor(player, this.dealerSeat);
+    const evaluateDaiminkanFor = (player: number, hand: Hand, discardedKind: TileKind): { called: boolean; trace: CallDecisionTrace | null } => {
+      const seatWind = seatWindFor(player, this.dealerSeat, this.rules.playerCount);
       const ai = ais[player];
-      if (!ai) return shouldCallDaiminkan(discardedKind, seatWind, this.roundWind);
+      if (!ai) return { called: shouldCallDaiminkan(discardedKind, seatWind, this.roundWind), trace: null };
       const isYakuhai = isYakuhaiTile(discardedKind, seatWind, this.roundWind);
       const called = ai.shouldCallDaiminkan(hand, discardedKind, seatCtx(player), isYakuhai);
-      logCallTrace(player, ai, "daiminkan");
-      return called;
+      return { called, trace: ai.lastCallTrace };
     };
 
     const shouldDeclareShouminkanFor = (player: number, hand: Hand, kind: TileKind): boolean => {
@@ -582,6 +708,15 @@ export class GameState {
       return ai ? ai.shouldDeclareAnkan(hand, kind, seatCtx(player)) : shouldDeclareAnkan();
     };
 
+    const shouldDeclareKitaFor = (player: number, hand: Hand, extractedThisTurn: number): boolean => {
+      if (this.kitaDecisionPolicy) return this.kitaDecisionPolicy(player, hand, extractedThisTurn);
+      const ai = ais[player];
+      return ai ? ai.shouldDeclareKita(hand, seatCtx(player)) : shouldDeclareKita();
+    };
+
+    type DiscardResponseFlow = { ended: boolean; from: number; resumePostDrawSeat?: number };
+    let pendingCalledKanDraw: { player: number; tile: Tile } | undefined;
+
     /**
      * Checks daiminkan/pon calls on `discardedTile` (ron on it must already have been
      * ruled out by the caller - see handleDiscardResponses and the riichi-declaration
@@ -590,39 +725,147 @@ export class GameState {
      * Returns "ended" once a win concludes the hand, or the seat whose discard resolved
      * with no call, so the caller knows who to advance play from.
      */
-    const offerCallsForDiscard = (discarderSeat: number, discardedTile: Tile): { ended: boolean; from: number } => {
-      const order = [(discarderSeat + 1) % 3, (discarderSeat + 2) % 3];
+    const offerCallsForDiscard = (discarderSeat: number, discardedTile: Tile): DiscardResponseFlow => {
+      if (this.rules.playerCount === MAJSOUL_YONMA_RULESET.playerCount) {
+        const generated = generateDiscardResponseCandidates({
+          rules: this.rules,
+          discarderSeat,
+          discardedKind: discardedTile.kind,
+          concealedKindsBySeat: hands.map((candidateHand) => candidateHand.concealed.map((tile) => tile.kind)),
+          riichiSeats: seats.filter((seat) => hands[seat]!.riichi),
+        });
+        const willing: NonWinningCallCandidate[] = [];
+        const evaluatedCalls: Array<{
+          candidate: Extract<NonWinningCallCandidate, { type: "pon" | "daiminkan" }>;
+          trace: CallDecisionTrace | null;
+        }> = [];
+        for (const candidate of generated) {
+          if (candidate.type === "ron") continue;
+          if (candidate.type === "chi") {
+            willing.push(candidate);
+            continue;
+          }
+          if (candidate.type === "daiminkan" && !wall.canDrawRinshan(this.rules.maxKans)) continue;
+          const evaluation = candidate.type === "pon"
+            ? evaluatePonFor(candidate.seat, hands[candidate.seat]!, discardedTile.kind)
+            : evaluateDaiminkanFor(candidate.seat, hands[candidate.seat]!, discardedTile.kind);
+          evaluatedCalls.push({ candidate, trace: evaluation.trace });
+          if (evaluation.called) willing.push(candidate);
+        }
+        const resolution = arbitrateDiscardResponses(discarderSeat, this.rules.playerCount, willing);
+        if (resolution.type !== "call") {
+          for (const entry of evaluatedCalls) {
+            logCallTrace(entry.candidate.seat, discarderSeat, discardedTile.kind, entry.trace, false);
+          }
+          return { ended: false, from: discarderSeat };
+        }
+        const selectedByPolicy = this.discardResponsePolicy?.(resolution.candidates);
+        const defaultNonChi = resolution.candidates.find((candidate) => candidate.type !== "chi");
+        const chiEvaluations = resolution.candidates
+          .filter((candidate): candidate is Extract<NonWinningCallCandidate, { type: "chi" }> => candidate.type === "chi")
+          .map((candidate) => ({ candidate, evaluation: ais[candidate.seat]?.evaluateChiCandidate(hands[candidate.seat]!, candidate, seatCtx(candidate.seat)) }))
+          .filter((entry): entry is { candidate: Extract<NonWinningCallCandidate, { type: "chi" }>; evaluation: ChiDecisionEvaluation } => entry.evaluation !== undefined)
+          .sort((a, b) => b.evaluation.score - a.evaluation.score);
+        const selectedChi = chiEvaluations.find((entry) => entry.evaluation.shouldCall);
+        const selected = selectedByPolicy ?? defaultNonChi ?? selectedChi?.candidate;
+        for (const entry of evaluatedCalls) {
+          const actualCalled = selected?.type === entry.candidate.type && selected.seat === entry.candidate.seat;
+          logCallTrace(entry.candidate.seat, discarderSeat, discardedTile.kind, entry.trace, actualCalled);
+        }
+        for (const entry of chiEvaluations) {
+          const actualCalled = selected?.type === "chi" && selected.sequence.join(",") === entry.candidate.sequence.join(",");
+          this.aiDecisionLog.push(buildCallDecisionEntry({
+            meta: {
+              handIndex: this.handIndex,
+              player: entry.candidate.seat,
+              characterId: this.characterProfiles[entry.candidate.seat]!.characterId,
+            },
+            fromPlayer: discarderSeat,
+            tile: discardedTile.kind,
+            actualCalled,
+            decision: {
+              source: "chi",
+              candidate: entry.candidate,
+              evaluation: entry.evaluation,
+              openMeldCount: hands[entry.candidate.seat]!.melds.length,
+            },
+          }));
+        }
+        if (!selected) return { ended: false, from: discarderSeat };
+        if (!resolution.candidates.includes(selected)) {
+          throw new Error("discardResponsePolicy selected a candidate outside the arbitrated options");
+        }
+
+        const applied = applySelectedDiscardResponse(
+          {
+            rules: this.rules,
+            hands,
+            wall,
+            currentPlayer: discarderSeat,
+            ippatsuEligible,
+            appliedDiscardIds,
+          },
+          selected,
+          discarderSeat,
+          discardedTile
+        );
+        tableInterrupted = true;
+        this.log.push({
+          type: "call",
+          call: selected.type === "daiminkan" ? "kan_open" : selected.type,
+          player: selected.seat,
+          kind: discardedTile.kind,
+          fromPlayer: discarderSeat,
+        });
+
+        if (applied.replacementTile) {
+          pendingCalledKanDraw = { player: selected.seat, tile: applied.replacementTile };
+          return { ended: false, from: selected.seat, resumePostDrawSeat: selected.seat };
+        }
+
+        const discardId = chooseDiscardFor(selected.seat, hands[selected.seat]!, applied.forbiddenDiscardKinds);
+        const newTile = hands[selected.seat]!.discardById(discardId, { tsumogiri: false, isRiichiDeclaration: false });
+        this.log.push({ type: "discard", player: selected.seat, tile: newTile.kind, tsumogiri: false, riichiDeclaration: false });
+        wall.revealPendingKanDora();
+        refreshWinningTiles(selected.seat);
+        return handleDiscardResponses(selected.seat, newTile, wall.isExhausted());
+      }
+
+      const order = seatsInTurnOrder(discarderSeat, this.rules.playerCount);
 
       for (const p of order) {
-        if (canDaiminkan(hands[p]!, discardedTile.kind) && shouldCallDaiminkanFor(p, hands[p]!, discardedTile.kind) && wall.canDrawRinshan(this.rules.maxKans)) {
+        if (hands[p]!.riichi) continue;
+        if (!canDaiminkan(hands[p]!, discardedTile.kind)) continue;
+        const evaluation = evaluateDaiminkanFor(p, hands[p]!, discardedTile.kind);
+        const actualCalled = evaluation.called && wall.canDrawRinshan(this.rules.maxKans);
+        logCallTrace(p, discarderSeat, discardedTile.kind, evaluation.trace, actualCalled);
+        if (actualCalled) {
           hands[discarderSeat]!.markDiscardCalledAway(discardedTile.id);
           applyDaiminkan(hands[p]!, discardedTile, discarderSeat);
+          recordPaoLiabilityAfterOpenCall(hands[p]!, "kan_open", discardedTile.kind, discarderSeat);
           this.log.push({ type: "call", call: "kan_open", player: p, kind: discardedTile.kind, fromPlayer: discarderSeat });
           tableInterrupted = true;
-          ippatsuEligible[0] = ippatsuEligible[1] = ippatsuEligible[2] = false;
-          const replacement = wall.drawRinshan();
+          ippatsuEligible.fill(false);
+          wall.commitKan("after-discard");
+          const replacement = wall.drawCommittedRinshan();
           hands[p]!.addDrawn(replacement);
-          this.log.push({ type: "draw", player: p, tile: replacement.kind, source: "rinshan" });
-          const rinshanTsumo = tryEvaluate(p, replacement, true, undefined, true, false, false);
-          if (rinshanTsumo) {
-            finishHandWithWin([{ player: p, result: rinshanTsumo }]);
-            return { ended: true, from: p };
-          }
-          const discardId = chooseDiscardFor(p, hands[p]!);
-          const newTile = hands[p]!.discardById(discardId, { tsumogiri: false, isRiichiDeclaration: false });
-          this.log.push({ type: "discard", player: p, tile: newTile.kind, tsumogiri: false, riichiDeclaration: false });
-          refreshWinningTiles(p);
-          return handleDiscardResponses(p, newTile, wall.isExhausted());
+          pendingCalledKanDraw = { player: p, tile: replacement };
+          return { ended: false, from: p, resumePostDrawSeat: p };
         }
       }
 
       for (const p of order) {
-        if (canPon(hands[p]!, discardedTile.kind) && shouldCallPonFor(p, hands[p]!, discardedTile.kind)) {
+        if (hands[p]!.riichi) continue;
+        if (!canPon(hands[p]!, discardedTile.kind)) continue;
+        const evaluation = evaluatePonFor(p, hands[p]!, discardedTile.kind);
+        logCallTrace(p, discarderSeat, discardedTile.kind, evaluation.trace, evaluation.called);
+        if (evaluation.called) {
           hands[discarderSeat]!.markDiscardCalledAway(discardedTile.id);
           applyPon(hands[p]!, discardedTile, discarderSeat);
+          recordPaoLiabilityAfterOpenCall(hands[p]!, "pon", discardedTile.kind, discarderSeat);
           this.log.push({ type: "call", call: "pon", player: p, kind: discardedTile.kind, fromPlayer: discarderSeat });
           tableInterrupted = true;
-          ippatsuEligible[0] = ippatsuEligible[1] = ippatsuEligible[2] = false;
+          ippatsuEligible.fill(false);
           // kita may not be declared immediately after a pon - go straight to discard
           const discardId = chooseDiscardFor(p, hands[p]!);
           const newTile = hands[p]!.discardById(discardId, { tsumogiri: false, isRiichiDeclaration: false });
@@ -640,10 +883,20 @@ export class GameState {
      * `discarderSeat`): ron first (always legal, even on the final discard), then - unless
      * this was the final discard, where only ron may occur - offerCallsForDiscard.
      */
-    const handleDiscardResponses = (discarderSeat: number, discardedTile: Tile, isHoutei: boolean): { ended: boolean; from: number } => {
+    const handleDiscardResponses = (discarderSeat: number, discardedTile: Tile, isHoutei: boolean): DiscardResponseFlow => {
       const winners = offerRon(discarderSeat, discardedTile, isHoutei, false);
+      const abortiveReason = postDiscardAbortiveDrawReason(
+        hands,
+        tableInterrupted,
+        winners.length > 0,
+        this.rules.playerCount
+      );
       if (winners.length > 0) {
         finishHandWithWin(winners.map((w) => ({ player: w.player, result: w.result, ronFrom: discarderSeat })));
+        return { ended: true, from: discarderSeat };
+      }
+      if (abortiveReason) {
+        finishAbortiveDraw(abortiveReason);
         return { ended: true, from: discarderSeat };
       }
       if (isHoutei) return { ended: false, from: discarderSeat }; // no calls on the final discard
@@ -658,8 +911,17 @@ export class GameState {
       const hand = hands[current]!;
       let drawnTile: Tile;
       let isRinshan = false;
-      if (pendingRinshan) {
-        drawnTile = wall.drawRinshan();
+      let tileAlreadyInHand = false;
+      if (pendingCalledKanDraw) {
+        if (pendingCalledKanDraw.player !== current) {
+          throw new Error("GameState: resumed daiminkan draw belongs to a different player");
+        }
+        drawnTile = pendingCalledKanDraw.tile;
+        pendingCalledKanDraw = undefined;
+        isRinshan = true;
+        tileAlreadyInHand = true;
+      } else if (pendingRinshan) {
+        drawnTile = wall.drawCommittedRinshan();
         isRinshan = true;
         pendingRinshan = false;
       } else {
@@ -669,7 +931,7 @@ export class GameState {
         }
         drawnTile = wall.drawTile();
       }
-      hand.addDrawn(drawnTile);
+      if (!tileAlreadyInHand) hand.addDrawn(drawnTile);
       furiten[current]!.onOwnDraw();
       this.log.push({ type: "draw", player: current, tile: drawnTile.kind, source: isRinshan ? "rinshan" : "wall" });
 
@@ -677,47 +939,95 @@ export class GameState {
       // tenhou/chiihou eligibility (drawCountByPlayer[current]===0 means "this is their
       // first draw") is read by tryEvaluate itself - the increment below MUST happen
       // after that check, or every draw would look like a "later" draw to it.
+      let extractedThisTurn = 0;
+      let queuedRiichiKitaAction: KitaAction | undefined;
+      if (
+        hand.riichi &&
+        wall.canDrawKitaReplacement() &&
+        canRiichiKita(hand, drawnTile, this.rules.kitaEnabled)
+      ) {
+        queuedRiichiKitaAction = chooseKitaAction(
+          hand,
+          this.rules.kitaEnabled,
+          () => shouldDeclareKitaFor(current, hand, extractedThisTurn)
+        );
+      }
       const tsumoResult = tryEvaluate(current, drawnTile, true, undefined, isRinshan, isHaitei, false);
       if (!isRinshan) drawCountByPlayer[current] = drawCountByPlayer[current]! + 1;
-      if (tsumoResult) {
+      if (tsumoResult && queuedRiichiKitaAction !== "kita") {
         finishHandWithWin([{ player: current, result: tsumoResult }]);
+        return;
+      }
+
+      if (
+        isAbortiveDrawReasonEnabled("nine_terminals", this.rules.playerCount) &&
+        canDeclareNineTerminals(hand, drawCountByPlayer[current] === 1, tableInterrupted) &&
+        this.nineTerminalsPolicy(current, hand)
+      ) {
+        finishAbortiveDraw("nine_terminals");
         return;
       }
 
       let latestDrawnTile = drawnTile;
 
-      // Kita and ankan both change what's physically in the concealed hand, which would
-      // violate a riichi'd hand's frozen shape - simplification: neither is offered once
-      // the player is in riichi (real rulesets allow a narrow ankan exception; skipped here).
-      if (!hand.riichi) {
-        // north tiles may chain (a kita replacement draw can itself be another north tile)
-        while (canKita(hand, this.rules.kitaEnabled) && wall.canDrawKitaReplacement()) {
-          const northTile = hand.tilesOfKind("z4")[0]!;
-          applyKita(hand, northTile.id);
-          this.log.push({ type: "kita", player: current, tile: "z4" });
+      // North tiles may chain (a Kita replacement draw can itself be another north tile).
+      // Once in riichi, only the physical tile drawn in the current replacement step is legal.
+      while (wall.canDrawKitaReplacement()) {
+        const kitaLegal = hand.riichi
+          ? canRiichiKita(hand, latestDrawnTile, this.rules.kitaEnabled)
+          : canKita(hand, this.rules.kitaEnabled);
+        if (!kitaLegal) break;
 
-          // the extracted north tile can be ronned (not chankan) by a player waiting on it
-          const northWinners = resolveRonBeforeInterruption(
-            () => offerRon(current, northTile, false, false),
-            () => {
-              tableInterrupted = true;
-              ippatsuEligible[0] = ippatsuEligible[1] = ippatsuEligible[2] = false;
-            }
+        const kitaAction = queuedRiichiKitaAction ?? chooseKitaAction(
+          hand,
+          this.rules.kitaEnabled,
+          () => shouldDeclareKitaFor(current, hand, extractedThisTurn)
+        );
+        queuedRiichiKitaAction = undefined;
+        if (kitaAction !== "kita") break;
+
+        const northTile = hand.riichi ? latestDrawnTile : hand.tilesOfKind("z4")[0]!;
+        applyKita(hand, northTile.id);
+        extractedThisTurn++;
+        this.log.push({ type: "kita", player: current, tile: "z4" });
+
+        // the extracted north tile can be ronned (not chankan) by a player waiting on it
+        const northWinners = resolveRonBeforeInterruption(
+          () => offerRon(current, northTile, false, false),
+          () => {
+            tableInterrupted = true;
+            ippatsuEligible.fill(false);
+            // Mahjong Soul treats a Kita declared from an open/added-kan rinshan draw as
+            // the next post-kan action, so the earlier deferred kan indicator is visible
+            // before the Kita replacement tile can be scored.
+            wall.revealPendingKanDora();
+          }
+        );
+        if (northWinners.length > 0) {
+          finishHandWithWin(northWinners.map((w) => ({ player: w.player, result: w.result, ronFrom: current })));
+          return;
+        }
+
+        const replacement = wall.drawKitaReplacement();
+        hand.addDrawn(replacement);
+        latestDrawnTile = replacement;
+        this.log.push({ type: "draw", player: current, tile: replacement.kind, source: "rinshan" });
+
+        if (
+          hand.riichi &&
+          wall.canDrawKitaReplacement() &&
+          canRiichiKita(hand, replacement, this.rules.kitaEnabled)
+        ) {
+          queuedRiichiKitaAction = chooseKitaAction(
+            hand,
+            this.rules.kitaEnabled,
+            () => shouldDeclareKitaFor(current, hand, extractedThisTurn)
           );
-          if (northWinners.length > 0) {
-            finishHandWithWin(northWinners.map((w) => ({ player: w.player, result: w.result, ronFrom: current })));
-            return;
-          }
-
-          const replacement = wall.drawKitaReplacement();
-          hand.addDrawn(replacement);
-          latestDrawnTile = replacement;
-          this.log.push({ type: "draw", player: current, tile: replacement.kind, source: "rinshan" });
-          const kitaTsumo = tryEvaluate(current, replacement, true, undefined, true, false, false);
-          if (kitaTsumo) {
-            finishHandWithWin([{ player: current, result: kitaTsumo }]);
-            return;
-          }
+        }
+        const kitaTsumo = tryEvaluate(current, replacement, true, undefined, true, false, false);
+        if (kitaTsumo && queuedRiichiKitaAction !== "kita") {
+          finishHandWithWin([{ player: current, result: kitaTsumo }]);
+          return;
         }
       }
 
@@ -734,7 +1044,7 @@ export class GameState {
             () => offerRon(current, addedTile, false, true),
             () => {
               tableInterrupted = true;
-              ippatsuEligible[0] = ippatsuEligible[1] = ippatsuEligible[2] = false;
+              ippatsuEligible.fill(false);
             }
           );
           if (chankanWinners.length > 0) {
@@ -742,7 +1052,8 @@ export class GameState {
             return;
           }
 
-          const replacement = wall.drawRinshan();
+          wall.commitKan("after-discard");
+          const replacement = wall.drawCommittedRinshan();
           hand.addDrawn(replacement);
           latestDrawnTile = replacement;
           this.log.push({ type: "draw", player: current, tile: replacement.kind, source: "rinshan" });
@@ -754,12 +1065,30 @@ export class GameState {
         }
       }
 
-      const ankanKind = hand.riichi ? undefined : allKindsForRules(this.rules).find((k) => canAnkan(hand, k));
+      const ankanKind = allKindsForRules(this.rules).find(
+        (kind) => canAnkan(hand, kind) && (!hand.riichi || canRiichiAnkan(hand, kind, latestDrawnTile, this.rules))
+      );
       if (ankanKind && shouldDeclareAnkanFor(current, hand, ankanKind) && wall.canDrawRinshan(this.rules.maxKans)) {
+        const robbedTile = hand.tilesOfKind(ankanKind)[0]!;
+        const kokushiWinners = resolveRonBeforeInterruption(
+          () => offerRon(current, robbedTile, false, true, "kokushi-ankan"),
+          () => {
+            tableInterrupted = true;
+            ippatsuEligible.fill(false);
+          }
+        );
+        if (kokushiWinners.length > 0) {
+          finishHandWithWin(kokushiWinners.map((winner) => ({
+            player: winner.player,
+            result: winner.result,
+            ronFrom: current,
+          })));
+          return;
+        }
+
         applyAnkan(hand, ankanKind);
+        wall.commitKan("immediate");
         this.log.push({ type: "call", call: "kan_closed", player: current, kind: ankanKind });
-        tableInterrupted = true;
-        ippatsuEligible[0] = ippatsuEligible[1] = ippatsuEligible[2] = false;
         pendingRinshan = true;
         continue;
       }
@@ -786,6 +1115,7 @@ export class GameState {
         tsumogiri,
         riichiDeclaration: declaringRiichi,
       });
+      wall.revealPendingKanDora();
       refreshWinningTiles(current);
 
       if (declaringRiichi) {
@@ -801,8 +1131,22 @@ export class GameState {
         // draw) without ever having been committed.
         const wasFirstGoAround = hand.discards.length === 1 && !tableInterrupted;
         const ronWinners = offerRon(current, discardedTile, isHoutei, false);
+        const abortiveReason = postDiscardAbortiveDrawReason(
+          hands,
+          tableInterrupted,
+          ronWinners.length > 0,
+          this.rules.playerCount
+        );
         if (ronWinners.length > 0) {
           finishHandWithWin(ronWinners.map((w) => ({ player: w.player, result: w.result, ronFrom: current })));
+          return;
+        }
+
+        // The declaration discard has survived ron, but riichi is not established yet.
+        // If that discard itself completes four winds or follows the fourth multi-player
+        // kan, the abortive draw takes precedence and no fourth riichi stick is deposited.
+        if (abortiveReason) {
+          finishAbortiveDraw(abortiveReason);
           return;
         }
 
@@ -814,6 +1158,14 @@ export class GameState {
         this.kyotaku += 1;
         this.log.push({ type: "riichi", player: current });
 
+        if (
+          isAbortiveDrawReasonEnabled("four_riichi", this.rules.playerCount) &&
+          isFourRiichiAbortive(hands)
+        ) {
+          finishAbortiveDraw("four_riichi");
+          return;
+        }
+
         if (isHoutei) {
           finishExhaustiveDraw();
           return;
@@ -823,45 +1175,89 @@ export class GameState {
         // pon/daiminkan branches in offerCallsForDiscard already clear ippatsuEligible).
         const result = offerCallsForDiscard(current, discardedTile);
         if (result.ended) return;
-        current = (result.from + 1) % 3;
+        if (result.resumePostDrawSeat !== undefined) {
+          current = result.resumePostDrawSeat;
+          continue;
+        }
+        current = nextSeat(result.from, this.rules.playerCount);
         continue;
       }
 
       const result = handleDiscardResponses(current, discardedTile, isHoutei);
       if (result.ended) return;
+      if (result.resumePostDrawSeat !== undefined) {
+        current = result.resumePostDrawSeat;
+        continue;
+      }
       if (isHoutei) {
         finishExhaustiveDraw();
         return;
       }
 
       ippatsuEligible[current] = false; // this player's own return-turn window (if any) has now closed
-      current = (result.from + 1) % 3;
+      current = nextSeat(result.from, this.rules.playerCount);
     }
   }
 
-  private advanceAfterHand(dealerRepeats: boolean, isExhaustiveDraw: boolean): void {
-    const newHonba = isExhaustiveDraw ? this.honba + 1 : dealerRepeats ? this.honba + 1 : 0;
+  private advanceAfterHand(
+    dealerRepeats: boolean,
+    isExhaustiveDraw: boolean,
+    allowDealerEnd = true,
+    pendingResult?: PendingHandResult
+  ): void {
+    const progression = computeRoundProgression({
+      rules: this.rules,
+      scores: this.scores,
+      dealerSeat: this.dealerSeat,
+      roundWind: this.roundWind,
+      roundHandNumber: this.roundHandNumber,
+      honba: this.honba,
+      dealerRepeats,
+      isExhaustiveDraw,
+      allowDealerEnd,
+    });
+    const transition = pendingResult ? {
+      roundWind: this.roundWind,
+      roundHandNumber: this.roundHandNumber,
+      dealerSeat: this.dealerSeat,
+      dealerContinues: progression.dealerContinuationPending,
+      nextDealer: progression.nextDealer,
+      nextRoundWind: progression.nextRoundWind,
+      nextRoundHandNumber: progression.nextRoundHandNumber,
+      honbaBefore: this.honba,
+      honbaAfter: progression.nextHonba,
+      kyotakuBefore: pendingResult.kyotakuBefore,
+      kyotakuAfter: this.kyotaku,
+      scoresBeforeSettlement: [...pendingResult.scoresBeforeSettlement],
+      scoresAfterSettlement: [...this.scores],
+      pointDeltas: { ...pendingResult.pointDeltas },
+    } : undefined;
+    const result: HandResultSnapshot | undefined = pendingResult && transition
+      ? { ...pendingResult, ...transition } as HandResultSnapshot
+      : undefined;
     this.log.push({
       type: "hand_end",
       scores: [...this.scores],
-      nextDealer: dealerRepeats ? this.dealerSeat : (this.dealerSeat + 1) % 3,
-      honba: newHonba,
+      nextDealer: progression.nextDealer,
+      honba: progression.nextHonba,
       kyotaku: this.kyotaku,
+      ...(result ? { result } : {}),
     });
     // Tobi check: this.scores is already fully final at this point for every path that
     // reaches advanceAfterHand (finishHandWithWin and finishExhaustiveDraw both apply
     // every delta - win/ron/tsumo/double-ron payments, or noten-penalty payments - to
     // this.scores before calling here), so this can never fire on a mid-hand/transient
     // score. Exactly 0 is not a bust (score < 0 only).
-    if (this.scores.some((s) => s < 0)) this.tobiTriggered = true;
-    this.honba = newHonba;
+    if (progression.tobiTriggered) this.tobiTriggered = true;
+    this.dealerContinuationPending = progression.dealerContinuationPending;
+    if (progression.dealerEndTriggered) {
+      this.dealerEndTriggered = true;
+    }
+    this.honba = progression.nextHonba;
     if (!dealerRepeats) {
-      this.dealerSeat = (this.dealerSeat + 1) % 3;
-      this.roundHandNumber++;
-      if (this.roundHandNumber > 3) {
-        this.roundHandNumber = 1;
-        this.roundWind++;
-      }
+      this.dealerSeat = progression.nextDealer;
+      this.roundHandNumber = progression.nextRoundHandNumber;
+      this.roundWind = progression.nextRoundWind;
     }
     this.handIndex++;
   }

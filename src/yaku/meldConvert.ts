@@ -2,6 +2,10 @@ import type { Meld } from "../core/Hand.js";
 import type { Group } from "./types.js";
 
 export function meldToGroup(m: Meld): Group {
+  if (m.type === "chi") {
+    const tiles = [...m.tiles].sort((a, b) => a.rank - b.rank);
+    return { type: "sequence", kind: tiles[0]!.kind, concealed: false, calledFrom: m.calledFrom };
+  }
   if (m.type === "pon") {
     return { type: "triplet", kind: m.tiles[0]!.kind, concealed: false, calledFrom: m.calledFrom };
   }

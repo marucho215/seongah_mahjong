@@ -19,6 +19,8 @@ export interface DiscardChoiceContext {
   hand: Hand;
   /** Discard rivers of opponents currently in riichi (their kind sequence), used for defense. */
   riichiOpponentDiscardKinds: TileKind[][];
+  /** Tile kinds excluded by a one-discard rules restriction such as post-chi kuikae. */
+  forbiddenDiscardKinds?: readonly TileKind[];
 }
 
 /**
@@ -29,7 +31,9 @@ export interface DiscardChoiceContext {
 export function chooseDiscard(ctx: DiscardChoiceContext): number {
   const { hand } = ctx;
   const existingMelds = hand.melds.length;
-  const uniqueKinds = [...new Set(hand.concealed.map((t) => t.kind))];
+  const forbidden = new Set(ctx.forbiddenDiscardKinds ?? []);
+  const uniqueKinds = [...new Set(hand.concealed.map((t) => t.kind))].filter((kind) => !forbidden.has(kind));
+  if (uniqueKinds.length === 0) throw new Error("chooseDiscard: no legal discard candidate");
 
   let bestS = Infinity;
   const scoredByKind = new Map<TileKind, number>();
@@ -115,6 +119,12 @@ export function shouldCallDaiminkan(discardedKind: TileKind, seatWind: number, r
 /** AI always upgrades an existing pon to a kan (shouminkan) when it draws the 4th tile -
  *  same reasoning as ankan: strictly more dora/fu potential, no meaningful downside. */
 export function shouldDeclareShouminkan(): boolean {
+  return true;
+}
+
+/** Default deterministic policy preserves the simulator's historical preference to
+ * extract North, while GameState keeps pass as a distinct legal action. */
+export function shouldDeclareKita(): boolean {
   return true;
 }
 

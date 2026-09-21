@@ -38,28 +38,37 @@ describe("riichi establishes immediately after its own ron check, before any pon
 describe("a pon on the declaration discard still lets the declarer ron the caller's follow-up with Riichi", () => {
   it("finds and verifies at least one such sequence", () => {
     let found = 0;
-    for (const seed of [82]) {
-      const gs = new GameState({ rules: DEFAULT_SANMA_RULES, seed: `riichi-pon-ron-${seed}` });
-      gs.playGame();
-      const log = gs.log;
-      for (let i = 0; i < log.length - 4; i++) {
-        const discardEvt = log[i]!;
-        if (discardEvt.type !== "discard" || !discardEvt.riichiDeclaration) continue;
-        const riichiEvt = log[i + 1]!;
-        if (riichiEvt.type !== "riichi" || riichiEvt.player !== discardEvt.player) continue;
-        const callEvt = log[i + 2]!;
-        if (callEvt.type !== "call" || callEvt.call !== "pon") continue;
-        // the caller's own follow-up discard, then (hopefully) a ron by the declarer
-        const callerDiscard = log[i + 3]!;
-        if (callerDiscard.type !== "discard") continue;
-        const winEvt = log[i + 4]!;
-        if (winEvt.type !== "win" || winEvt.isTsumo) continue;
-        if (winEvt.player !== discardEvt.player) continue; // must be the original declarer
-        if (winEvt.ronFrom !== callEvt.player) continue; // ronning the ponning caller
+    // Seed 82 is the original fixed reproduction. FF-07 intentionally makes a new
+    // post-riichi Kita action reachable under the autonomous default policy, which can
+    // divert the later self-play trajectory before this timing sequence occurs. Declining
+    // only those newly legal post-riichi Kita opportunities preserves the reproduction's
+    // pre-FF-07 action path without disabling ordinary non-riichi Kita.
+    const gs = new GameState({
+      rules: DEFAULT_SANMA_RULES,
+      seed: "riichi-pon-ron-82",
+      kitaDecisionPolicy: (_seat, hand) => !hand.riichi,
+    });
+    gs.playGame();
+    const log = gs.log;
+    for (let i = 0; i < log.length - 4; i++) {
+      const discardEvt = log[i]!;
+      if (discardEvt.type !== "discard" || !discardEvt.riichiDeclaration) continue;
+      const riichiEvt = log[i + 1]!;
+      if (riichiEvt.type !== "riichi" || riichiEvt.player !== discardEvt.player) continue;
+      const callEvt = log[i + 2]!;
+      if (callEvt.type !== "call" || callEvt.call !== "pon") continue;
+      // The caller's mandatory follow-up discard is evaluated only after riichi has
+      // established, so a legal ron by the original declarer must retain the yaku.
+      const callerDiscard = log[i + 3]!;
+      if (callerDiscard.type !== "discard" || callerDiscard.player !== callEvt.player) continue;
+      const winEvt = log[i + 4]!;
+      if (winEvt.type !== "win" || winEvt.isTsumo) continue;
+      if (winEvt.player !== discardEvt.player) continue; // must be the original declarer
+      if (winEvt.ronFrom !== callEvt.player) continue; // ronning the ponning caller
 
-        found++;
-        expect(winEvt.yaku.some((y) => y.name === "Riichi" || y.name === "Double Riichi")).toBe(true);
-      }
+      found++;
+      expect(callEvt.fromPlayer).toBe(discardEvt.player);
+      expect(winEvt.yaku.some((y) => y.name === "Riichi" || y.name === "Double Riichi")).toBe(true);
     }
     expect(found).toBeGreaterThan(0);
   });

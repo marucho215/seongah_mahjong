@@ -1,6 +1,13 @@
-# sanma-riichi-engine
+# Riichi Mahjong Simulation Engine
 
-3-player (sanma) riichi mahjong simulation engine, targeting Mahjong Soul ranked sanma rules.
+Deterministic riichi mahjong simulation engine with Mahjong Soul-inspired sanma and yonma
+rulesets. Both formats support full games, including scoring, calls, riichi, kan, exhaustive
+draws, round progression, CharacterAI play, and JSON replay output. The yonma ruleset also
+includes the currently covered Mahjong Soul-style abortive draws.
+
+Player-count, tile/wall layout, scoring totals, calls such as chi/kita, and round length are
+selected through `RuleConfig`. The implementation targets the repository's covered Mahjong
+Soul behavior; it does not claim complete parity with every live-service rule or option.
 
 ## Running
 
@@ -12,8 +19,8 @@ npm test
 npm run sim
 ```
 
-`npm run sim` runs the CharacterAI comparative simulation. By default it runs each of
-the 9 characters solo (seat 0) against 2 neutral SimpleAI opponents. Options:
+`npm run sim` runs the sanma CharacterAI comparative simulation. By default it runs each
+registered character solo (seat 0) against 2 neutral SimpleAI opponents. Options:
 
 ```bash
 npm run sim -- --games 100          # override the games-per-character count (default: 50)
@@ -36,4 +43,23 @@ own independently seeded CharacterAI instance) - duplicates are allowed rather t
 rejected, since seat-level personality doesn't depend on the other seats' identities.
 
 Registered characterIds: `jegalmina`, `jegalnahui`, `seiyamouri`, `seiyakouri`,
-`kyletyler`, `seiyatosuke`, `toumesuashi`, `toumesuayo`, `byeonari`.
+`kyletyler`, `seiyatosuke`, `toumesuashi`, `toumesuayo`, `byeonari`, `kangunsim`,
+`kimwooju`, `ryumint`, `inan`, `effieminos`, `hwayoung`, `mageuna`, `magnum`,
+`optima215`, `yuwen`, `josangmin`, `seiyahikudo`, `ryuhart`.
+
+### Direct 4-player CharacterAI battle
+
+Use the yonma ruleset by seating exactly 4 CharacterAI players. Seat order follows input
+order (seat 0/1/2/3), and `--seed` makes the game and decision log reproducible.
+
+```bash
+npm run sim:yonma -- --players jegalmina,toumesuayo,byeonari,seiyakouri --seed yonma-qa-001
+npm run sim:yonma -- --players jegalmina,toumesuayo,byeonari,seiyakouri --seed yonma-qa-001 --save-replays
+```
+
+Saved sanma and yonma replays include the rule configuration, game events, final result,
+and CharacterAI decision diagnostics. Deterministic replay QA checks rule invariants without
+requiring whole-action-array snapshots. Each completed `hand_end` also carries an additive
+result snapshot containing the scoring interpretation actually used (including the selected
+winning tile), applied point deltas, draw/tenpai details, and dealer/honba/kyotaku progression.
+This makes seeded results auditable without rerunning the hand.

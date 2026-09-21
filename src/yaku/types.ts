@@ -21,7 +21,7 @@ export interface StandardDecomposition {
 }
 
 export interface WinContext {
-  seatWind: number; // 1 East, 2 South, 3 West (North seat never occurs in sanma)
+  seatWind: number; // 1 East, 2 South, 3 West, 4 North
   roundWind: number;
   isTsumo: boolean;
   isRiichi: boolean;

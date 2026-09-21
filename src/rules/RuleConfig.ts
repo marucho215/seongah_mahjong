@@ -1,5 +1,7 @@
+import { MAJSOUL_SANMA_RULESET, MAJSOUL_YONMA_RULESET } from "./RuleSet.js";
+
 /**
- * Sanma (3-player) riichi mahjong rule configuration.
+ * Riichi mahjong rule configuration shared by the supported sanma and yonma formats.
  * All game-affecting rule toggles live here, separate from engine logic.
  *
  * DEFAULT_SANMA_RULES targets Mahjong Soul's ranked 3-player ruleset as closely as this
@@ -10,6 +12,13 @@
 export type GameLength = "east" | "east-south";
 
 export interface RuleConfig {
+  /** Structural values are copied from the selected RuleSet for the current engine API. */
+  playerCount: number;
+  handsPerRound: number;
+  maxExtensionRounds: number;
+  /** Automatically end on the final dealer's qualifying win/tenpai continuation. */
+  automaticDealerEnd: boolean;
+
   /** Remove manzu 2-8 from the wall, leaving only man1/man9 (standard sanma). */
   removeManzu2to8: boolean;
 
@@ -28,24 +37,25 @@ export interface RuleConfig {
    *  completion, so this flag is documentation of that default rather than an active gate. */
   atozuke: boolean;
 
-  /** Kuikae (forbidding certain discards immediately after a call, e.g. swap-calling).
-   *  Sanma has no chi, and this engine's kuikae-relevant call is only pon/kan, which real
-   *  kuikae restrictions don't apply to - kept as a field for completeness; it has no
-   *  effect while chiForbidden is true. */
+  /** Kuikae (forbidding the called kind and any opposite-end swap immediately after chi).
+   *  It has no effect in sanma while chiForbidden is true. */
   kuikae: boolean;
 
-  /** Tsumo loss rule: on tsumo, is payment split evenly among the two non-winners (true,
+  /** Sanma tsumo-loss rule: on tsumo, is payment split evenly among the two non-winners (true,
    *  "no loss" - matches the discarder-pays-full-share total a ron would produce), or does
    *  the dealer pay double what the other non-dealer pays (false, "tsumo loss" - sanma's
-   *  standard behavior, since only 2 payers collect less total than a 3-payer 4p tsumo)? */
+   *  standard behavior, since only 2 payers collect less total than a 3-payer 4p tsumo)?
+   *  Yonma uses its standard three-payer payment calculation independently of this toggle. */
   tsumoSplitEven: boolean;
 
   startingScore: number;
   /** "Return score" (oka baseline): final placement points are (finalScore - returnScore) / 1000 + uma. */
   returnScore: number;
-  /** Placement bonus/penalty in raw points, applied at game end in finishing-place order
-   *  (1st, 2nd, 3rd). Does not mutate mid-game scores - see GameState.computeFinalStandings(). */
-  uma: [number, number, number];
+  /** Score threshold used only for all-last, extension, and automatic dealer-end decisions. */
+  targetScore: number;
+  /** Placement bonus/penalty in raw points, applied at game end in finishing-place order.
+   *  Does not mutate mid-game scores - see GameState.computeFinalStandings(). */
+  uma: number[];
 
   gameLength: GameLength;
 
@@ -60,10 +70,18 @@ export interface RuleConfig {
   doubleRonMode: "atamahane" | "all";
 
   /** No chi is allowed in sanma regardless of this flag; kept explicit for clarity/tests. */
-  chiForbidden: true;
+  chiForbidden: boolean;
 
   /** Kan constraints (real kans only; kita replacement draws don't count against this). */
   maxKans: number;
+
+  /** Wall-layout values supplied by the ruleset rather than embedded in Wall. */
+  wallLayout: "sanma-r1-r8" | "yonma-standard";
+  deadWallSize: number;
+  initialReplacementSlots: number;
+  doraIndicatorSlots: number;
+  tileCopiesPerKind: number;
+  northTileCopies: number;
 
   /** Whether North tiles participate as a yakuhai possibility. False in Mahjong Soul sanma:
    *  North is an ordinary guest wind in the concealed hand - a North pair/triplet/quad scores
@@ -74,8 +92,8 @@ export interface RuleConfig {
    *  (Mahjong Soul sanma: 2000, e.g. 1 tenpai player receives all 2000). */
   notenPenaltyTotal: number;
 
-  /** Total points one honba is worth, split as +honbaValue from the discarder on ron, or
-   *  honbaValue/2 from each of the two opponents on tsumo (Mahjong Soul sanma: 200). */
+  /** Total points one honba is worth. Ron charges the discarder; tsumo distributes the
+   *  charge among the ruleset's non-winners (Mahjong Soul-style sanma: 200, yonma: 300). */
   honbaValue: number;
 
   /** Hands that reach 13+ han purely through yaku+dora stacking (no actual yakuman shape)
@@ -98,25 +116,74 @@ export interface RuleConfig {
 }
 
 export const DEFAULT_SANMA_RULES: RuleConfig = {
-  removeManzu2to8: true,
-  kitaEnabled: true,
+  playerCount: MAJSOUL_SANMA_RULESET.playerCount,
+  handsPerRound: MAJSOUL_SANMA_RULESET.rounds.handsPerRound,
+  maxExtensionRounds: MAJSOUL_SANMA_RULESET.rounds.maxExtensionRounds,
+  automaticDealerEnd: MAJSOUL_SANMA_RULESET.rounds.automaticDealerEnd,
+  removeManzu2to8: MAJSOUL_SANMA_RULESET.tiles.removeManzu2to8,
+  kitaEnabled: MAJSOUL_SANMA_RULESET.calls.allowKita,
   akaDoraCount: { man: 0, pin: 1, sou: 1 },
   kuitan: true,
   atozuke: true,
   kuikae: false,
   tsumoSplitEven: false,
-  startingScore: 35000,
-  returnScore: 40000,
+  startingScore: MAJSOUL_SANMA_RULESET.scores.starting,
+  returnScore: MAJSOUL_SANMA_RULESET.scores.return,
+  targetScore: MAJSOUL_SANMA_RULESET.scores.target,
   uma: [15000, 0, -15000],
-  gameLength: "east",
+  gameLength: MAJSOUL_SANMA_RULESET.rounds.normalGameLength,
   renchanOnDealerWin: true,
   renchanOnDealerTenpaiDraw: true,
   doubleRonMode: "all",
-  chiForbidden: true,
-  maxKans: 4,
+  chiForbidden: !MAJSOUL_SANMA_RULESET.calls.allowChi,
+  maxKans: MAJSOUL_SANMA_RULESET.calls.maxKans,
+  wallLayout: MAJSOUL_SANMA_RULESET.wall.layout,
+  deadWallSize: MAJSOUL_SANMA_RULESET.wall.deadWallSize,
+  initialReplacementSlots: MAJSOUL_SANMA_RULESET.wall.initialReplacementSlots,
+  doraIndicatorSlots: MAJSOUL_SANMA_RULESET.wall.doraIndicatorSlots,
+  tileCopiesPerKind: MAJSOUL_SANMA_RULESET.tiles.copiesPerKind,
+  northTileCopies: MAJSOUL_SANMA_RULESET.tiles.northTileCopies,
   northIsYakuhai: false,
   notenPenaltyTotal: 2000,
   honbaValue: 200,
+  kazoeYakumanEnabled: true,
+  doubleYakumanEnabled: true,
+  kiriageMangan: false,
+  doubleWindFuStacks: true,
+};
+
+/** Mahjong Soul-style four-player configuration used by full GameState gameplay. */
+export const MAJSOUL_YONMA_RULES: RuleConfig = {
+  playerCount: MAJSOUL_YONMA_RULESET.playerCount,
+  handsPerRound: MAJSOUL_YONMA_RULESET.rounds.handsPerRound,
+  maxExtensionRounds: MAJSOUL_YONMA_RULESET.rounds.maxExtensionRounds,
+  automaticDealerEnd: MAJSOUL_YONMA_RULESET.rounds.automaticDealerEnd,
+  removeManzu2to8: MAJSOUL_YONMA_RULESET.tiles.removeManzu2to8,
+  kitaEnabled: MAJSOUL_YONMA_RULESET.calls.allowKita,
+  akaDoraCount: { man: 1, pin: 1, sou: 1 },
+  kuitan: true,
+  atozuke: true,
+  kuikae: true,
+  tsumoSplitEven: false,
+  startingScore: MAJSOUL_YONMA_RULESET.scores.starting,
+  returnScore: MAJSOUL_YONMA_RULESET.scores.return,
+  targetScore: MAJSOUL_YONMA_RULESET.scores.target,
+  uma: [15000, 5000, -5000, -15000],
+  gameLength: MAJSOUL_YONMA_RULESET.rounds.normalGameLength,
+  renchanOnDealerWin: true,
+  renchanOnDealerTenpaiDraw: true,
+  doubleRonMode: "all",
+  chiForbidden: !MAJSOUL_YONMA_RULESET.calls.allowChi,
+  maxKans: MAJSOUL_YONMA_RULESET.calls.maxKans,
+  wallLayout: MAJSOUL_YONMA_RULESET.wall.layout,
+  deadWallSize: MAJSOUL_YONMA_RULESET.wall.deadWallSize,
+  initialReplacementSlots: MAJSOUL_YONMA_RULESET.wall.initialReplacementSlots,
+  doraIndicatorSlots: MAJSOUL_YONMA_RULESET.wall.doraIndicatorSlots,
+  tileCopiesPerKind: MAJSOUL_YONMA_RULESET.tiles.copiesPerKind,
+  northTileCopies: MAJSOUL_YONMA_RULESET.tiles.northTileCopies,
+  northIsYakuhai: false,
+  notenPenaltyTotal: 3000,
+  honbaValue: 300,
   kazoeYakumanEnabled: true,
   doubleYakumanEnabled: true,
   kiriageMangan: false,
@@ -127,6 +194,6 @@ export function cloneRuleConfig(rules: RuleConfig): RuleConfig {
   return {
     ...rules,
     akaDoraCount: { ...rules.akaDoraCount },
-    uma: [...rules.uma] as [number, number, number],
+    uma: [...rules.uma],
   };
 }
