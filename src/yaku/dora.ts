@@ -33,6 +33,14 @@ export function countDora(tiles: readonly Tile[], indicatorKinds: TileKind[], ru
   return count;
 }
 
+/** Same matching as `countDora` against a single indicator, but returns the matched
+ *  physical tile ids instead of just a count - the source-of-truth detail `countDora`
+ *  intentionally discards. Does not change or replace `countDora`. */
+export function matchDoraTileIds(tiles: readonly Tile[], indicator: TileKind, rules: RuleConfig): number[] {
+  const wanted = nextDoraKind(indicator, rules);
+  return tiles.filter((t) => t.kind === wanted).map((t) => t.id);
+}
+
 export function countAkaDora(tiles: readonly Tile[]): number {
   return tiles.filter((t) => t.isRed).length;
 }

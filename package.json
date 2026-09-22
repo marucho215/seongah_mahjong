@@ -10,7 +10,8 @@
     "sim": "tsx src/sim/comparativeCharacterSim.ts",
     "sim:yonma": "tsx src/sim/yonmaCharacterSim.ts",
     "sim:ari-ab": "tsx src/sim/ariSpecialLogicAB.ts",
-    "analyze:ari": "tsx src/sim/ariDiagnosticStats.ts"
+    "analyze:ari": "tsx src/sim/ariDiagnosticStats.ts",
+    "validate": "tsx src/sim/validationHarness.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

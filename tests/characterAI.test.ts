@@ -54,7 +54,7 @@ const STUDENT_IDS = [
   "yuwen",
   "josangmin",
   "seiyahikudo",
-  "ryuhart",
+  "ryuheart",
 ];
 
 const ALL_REGISTERED_IDS = [...ALL_IDS, ...STUDENT_IDS];

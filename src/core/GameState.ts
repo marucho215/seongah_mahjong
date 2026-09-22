@@ -6,8 +6,11 @@ import { tilesToCounts } from "./tileIndex.js";
 import { FuritenTracker } from "../actions/furiten.js";
 import { computeWinningTiles } from "../actions/winSearch.js";
 import { canAnkan, applyAnkan, canPon, applyPon, canDaiminkan, applyDaiminkan, canShouminkan, applyShouminkan } from "../actions/calls.js";
-import { applyKita, canKita, canRiichiKita, chooseKitaAction, type KitaAction } from "../actions/kita.js";
+import { applyKita, canKita, canRiichiKita, type KitaAction } from "../actions/kita.js";
 import { canRiichiAnkan } from "../actions/riichiAnkan.js";
+import { canDeclareRiichi, riichiDiscardCandidates } from "../actions/riichi.js";
+import type { CallDecisionRequest, CallDecisionResponse, DecisionRequest, DecisionResponse, DiscardDecisionRequest, DiscardDecisionResponse } from "./decisions.js";
+import { buildPlayerView, type PlayerView } from "./playerView.js";
 import { isKokushiAnkanRon } from "../actions/kokushiAnkan.js";
 import {
   chooseDiscard,
@@ -30,6 +33,8 @@ import {
 import { meldsToGroups } from "../yaku/meldConvert.js";
 import { buildWinContext } from "../yaku/winContext.js";
 import { evaluateInitialDealerWin, evaluateWin, type FullWinResult } from "../yaku/evaluate.js";
+import { buildDoraBreakdown, tileToRef } from "../yaku/doraBreakdown.js";
+import { buildWinSnapshot } from "../yaku/winSnapshot.js";
 import type { GameEvent, AiDecisionEntry, AuditableWinResult, GameEndEvent, HandResultSnapshot } from "./GameLog.js";
 import { resolveRonWinners } from "./ronResolution.js";
 import { allSeats, nextSeat, seatDistance, seatsInTurnOrder } from "./seats.js";
@@ -52,12 +57,28 @@ import {
 import { applyPaoSettlement, recordPaoLiabilityAfterOpenCall } from "../rules/pao.js";
 import { collectVisibleTileKinds } from "../ai/visibleTiles.js";
 
+/**
+ * Who decides this seat's actions - independent of `characterProfiles` (which is identity:
+ * "who/what this seat is", not "who controls it"). "customAI" is reserved for a future
+ * pluggable AI and is rejected at construction time today - it is not implemented yet.
+ */
+export type ControllerKind = "simpleAI" | "characterAI" | "human" | "customAI";
+
 export interface GameStateOptions {
   rules: RuleConfig;
   seed: string;
-  /** Optional per-seat character personality. A seat left null/undefined plays with the
-   *  engine's default SimpleAI, completely unaffected by this feature - see CharacterAI. */
+  /** Optional per-seat character identity (personality/flavor), independent of who actually
+   *  controls the seat - see `controllers`. A "characterAI"-controlled seat needs a profile
+   *  here; a "human" seat may still carry one purely for identity/display purposes, and
+   *  having one never forces AI control (see `controllers`' doc comment). */
   characterProfiles?: (CharacterProfile | null | undefined)[];
+  /** Explicit per-seat controller assignment - the source of truth for who decides this
+   *  seat's actions. A seat left undefined here defaults to "human" if listed in
+   *  `humanSeats`, else "characterAI" if it has a characterProfile, else "simpleAI" - so
+   *  existing `characterProfiles`-only callers are unaffected. An explicit entry here always
+   *  wins over both defaults, so e.g. `characterProfiles: [minaProfile]` + `controllers:
+   *  ["human"]` gives seat 0 Mina's identity under human control instead of CharacterAI. */
+  controllers?: (ControllerKind | undefined)[];
   /** Optional deterministic non-winning call selector, primarily for yonma fixtures.
    *  Omit to retain SimpleAI's pon/daiminkan decisions and decline automatic chi. */
   discardResponsePolicy?: (options: readonly NonWinningCallCandidate[]) => NonWinningCallCandidate | undefined;
@@ -66,6 +87,12 @@ export interface GameStateOptions {
   /** Optional actor choice for each legal Kita opportunity. Each extraction is offered
    *  separately; false passes only the current action window. */
   kitaDecisionPolicy?: (seat: number, hand: Hand, extractedThisTurn: number) => boolean;
+  /** Compatibility shorthand for `controllers: [...seat => "human"...]` - see `controllers`'
+   *  doc comment for the exact precedence. Kept for the Milestone 1 API surface; new callers
+   *  should prefer `controllers` directly. Milestone 1 scope regardless of how a human seat
+   *  is designated: ron stays auto-declared for every seat - only discard+riichi, pon,
+   *  daiminkan, ankan, kakan, and kita are ever asked of a human seat. */
+  humanSeats?: number[];
 }
 
 /** seatWind: 1=East, 2=South, 3=West, relative to who is dealer this hand. */
@@ -129,6 +156,10 @@ export class GameState {
   readonly discardResponsePolicy?: GameStateOptions["discardResponsePolicy"];
   readonly nineTerminalsPolicy: NonNullable<GameStateOptions["nineTerminalsPolicy"]>;
   readonly kitaDecisionPolicy?: GameStateOptions["kitaDecisionPolicy"];
+  /** Per-seat controller assignment - see ControllerKind and GameStateOptions.controllers
+   *  for the exact derivation/precedence. This, not characterProfiles, is the source of
+   *  truth for who decides a seat's actions. */
+  readonly controllers: ControllerKind[];
   scores: number[];
   dealerSeat = 0;
   roundWind = 1;
@@ -163,6 +194,16 @@ export class GameState {
     this.discardResponsePolicy = opts.discardResponsePolicy;
     this.nineTerminalsPolicy = opts.nineTerminalsPolicy ?? (() => true);
     this.kitaDecisionPolicy = opts.kitaDecisionPolicy;
+    const humanSeatSet = new Set(opts.humanSeats ?? []);
+    this.controllers = allSeats(opts.rules.playerCount).map((i) => {
+      const explicit = opts.controllers?.[i];
+      if (explicit) return explicit;
+      if (humanSeatSet.has(i)) return "human";
+      return this.characterProfiles[i] ? "characterAI" : "simpleAI";
+    });
+    if (this.controllers.some((c) => c === "customAI")) {
+      throw new Error('GameState: controller kind "customAI" is not implemented yet');
+    }
     this.scores = allSeats(opts.rules.playerCount).map(() => opts.rules.startingScore);
   }
 
@@ -285,7 +326,14 @@ export class GameState {
     });
   }
 
-  playHand(): void {
+  /**
+   * The actual hand state machine. Yields a DecisionRequest exactly at the decision points
+   * listed in GameStateOptions.controllers' doc comment, for any seat whose controller is
+   * "human" - every other seat (characterAI or simpleAI) is decided synchronously exactly
+   * as before, so a game with no human-controlled seat never yields at all: `playHand()`
+   * below still drives it to completion in one `.next()` call, unchanged.
+   */
+  private *playHandSession(): Generator<DecisionRequest, void, DecisionResponse> {
     this.assertFullGameplaySupported();
     const wallSeed = `${this.baseSeed}::hand${this.handIndex}`;
     const { wall, hands } = this.bootstrapPhysicalHand();
@@ -316,6 +364,27 @@ export class GameState {
       hands: dealt.map((playerTiles) => playerTiles.map((t) => t.kind)),
       doraIndicator: wall.doraIndicators()[0]!.kind,
     });
+    this.log.push({
+      type: "dora_indicator_revealed",
+      source: "initial",
+      indicator: tileToRef(wall.doraIndicators()[0]!),
+    });
+    // Fires a "dora_indicator_revealed" event for every indicator that has newly become
+    // visible since the last call - covers both immediate (ankan) and deferred
+    // (open/added kan, revealed only after the caller's discard) reveal timing without
+    // ever re-emitting an already-revealed indicator. Index 0 (initial) is emitted above.
+    let revealedDoraIndicatorCount = 1;
+    const emitNewlyRevealedDoraIndicators = () => {
+      const indicators = wall.doraIndicators();
+      while (revealedDoraIndicatorCount < indicators.length) {
+        this.log.push({
+          type: "dora_indicator_revealed",
+          source: "kan",
+          indicator: tileToRef(indicators[revealedDoraIndicatorCount]!),
+        });
+        revealedDoraIndicatorCount++;
+      }
+    };
 
     const cachedWinningTiles: TileKind[][] = seats.map(() => []);
     const refreshWinningTiles = (p: number) => {
@@ -492,31 +561,63 @@ export class GameState {
         });
       }
 
-      const auditableWinners: AuditableWinResult[] = adjustedWinners.map((winner) => ({
-        winnerSeat: winner.player,
-        loserSeat: winner.ronFrom ?? null,
-        method: winner.ronFrom === undefined ? "tsumo" : "ron",
-        winningTile: { kind: winner.result.winningTile.kind, id: winner.result.winningTile.id },
-        isDealer: winner.player === this.dealerSeat,
-        yaku: winner.result.yaku.map((hit) => ({ ...hit })),
-        han: winner.result.han,
-        fu: winner.result.fu,
-        yakumanUnits: winner.result.yakumanUnits,
-        basePoints: winner.result.score.base,
-        totalPoints: winner.result.score.totalPoints,
-        paymentDeltas: { ...winner.result.score.payments.deltas },
-        scoringFlags: {
-          riichi: winner.result.context.isRiichi,
-          doubleRiichi: winner.result.context.isDoubleRiichi,
-          ippatsu: winner.result.context.isIppatsu,
-          rinshan: winner.result.context.isRinshan,
-          chankan: winner.result.context.isChankan,
-          haitei: winner.result.context.isHaitei,
-          houtei: winner.result.context.isHoutei,
-          tenhou: winner.result.context.isTenhou,
-          chiihou: winner.result.context.isChiihou,
-        },
-      }));
+      // Same wall state every winner (of a possible multi-ron) was scored against - no kan
+      // can occur between offering ron and finishing the hand, so re-reading here is safe.
+      const doraIndicatorsAtWin = wall.doraIndicators();
+      const uraDoraIndicatorsAtWin = wall.uraDoraIndicators();
+
+      const auditableWinners: AuditableWinResult[] = adjustedWinners.map((winner) => {
+        const hand = hands[winner.player]!;
+        const isTsumo = winner.ronFrom === undefined;
+        // For tsumo the winning tile is already in hand.concealed (added by the normal
+        // draw step). For ron it deliberately is NOT (tryRon pops it back out after
+        // evaluation - see WinSnapshot's definition), yet it still legitimately counts
+        // toward dora matching exactly as it did during real scoring (tryRon had it pushed
+        // in at evaluation time) - so it's added to the dora-matching pool only here, never
+        // into the snapshot's concealedTiles.
+        const scoringTiles = isTsumo
+          ? [...hand.concealed, ...hand.melds.flatMap((meld) => meld.tiles)]
+          : [...hand.concealed, ...hand.melds.flatMap((meld) => meld.tiles), winner.result.winningTile];
+        const doraBreakdown = buildDoraBreakdown({
+          scoringTiles,
+          kitaTiles: hand.kitaTiles,
+          doraIndicators: doraIndicatorsAtWin,
+          uraDoraIndicators: winner.result.context.isRiichi ? uraDoraIndicatorsAtWin : [],
+          rules: this.rules,
+        });
+        const snapshot = buildWinSnapshot({
+          hand,
+          winningTile: winner.result.winningTile,
+          isTsumo,
+        });
+        return {
+          winnerSeat: winner.player,
+          loserSeat: winner.ronFrom ?? null,
+          method: winner.ronFrom === undefined ? "tsumo" : "ron",
+          winningTile: { kind: winner.result.winningTile.kind, id: winner.result.winningTile.id },
+          isDealer: winner.player === this.dealerSeat,
+          yaku: winner.result.yaku.map((hit) => ({ ...hit })),
+          han: winner.result.han,
+          fu: winner.result.fu,
+          yakumanUnits: winner.result.yakumanUnits,
+          basePoints: winner.result.score.base,
+          totalPoints: winner.result.score.totalPoints,
+          paymentDeltas: { ...winner.result.score.payments.deltas },
+          scoringFlags: {
+            riichi: winner.result.context.isRiichi,
+            doubleRiichi: winner.result.context.isDoubleRiichi,
+            ippatsu: winner.result.context.isIppatsu,
+            rinshan: winner.result.context.isRinshan,
+            chankan: winner.result.context.isChankan,
+            haitei: winner.result.context.isHaitei,
+            houtei: winner.result.context.isHoutei,
+            tenhou: winner.result.context.isTenhou,
+            chiihou: winner.result.context.isChiihou,
+          },
+          doraBreakdown,
+          snapshot,
+        };
+      });
 
       this.advanceAfterHand(
         shouldDealerContinue({
@@ -590,11 +691,19 @@ export class GameState {
     const allVisibleTileKinds = (): TileKind[] =>
       collectVisibleTileKinds(hands, wall.doraIndicators().map((tile) => tile.kind));
 
-    // Optional per-seat CharacterAI. A seat with no assigned profile keeps using the plain
-    // SimpleAI functions below exactly as before - this feature is purely additive.
+    // A CharacterAI instance exists only for a seat whose controller is actually
+    // "characterAI" - a "human" seat that also happens to carry a characterProfile (for
+    // identity/display only) correctly gets no AI instance here, and every decide* wrapper
+    // below routes it through the human decision path instead. Any other controller
+    // ("simpleAI", or "human" with no profile) keeps using the plain SimpleAI functions
+    // exactly as before.
     const ais: (CharacterAI | null)[] = seats.map((p) => {
+      if (this.controllers[p] !== "characterAI") return null;
       const profile = this.characterProfiles[p];
-      return profile ? new CharacterAI(profile, `${wallSeed}::ai${p}`) : null;
+      if (!profile) {
+        throw new Error(`GameState: seat ${p} has controller "characterAI" but no characterProfile was provided`);
+      }
+      return new CharacterAI(profile, `${wallSeed}::ai${p}`);
     });
     for (const ai of ais) ai?.onHandStart();
 
@@ -714,6 +823,145 @@ export class GameState {
       return ai ? ai.shouldDeclareKita(hand, seatCtx(player)) : shouldDeclareKita();
     };
 
+    /** Source of truth: GameState.controllers, not characterProfiles - a "human" seat with
+     *  a characterProfile still routes through the human decision path. Milestone 1 scope:
+     *  this never applies to ron. */
+    const isHumanSeat = (player: number): boolean => this.controllers[player] === "human";
+
+    /** Seat-filtered snapshot handed to a human decision request - see PlayerView. Never
+     *  reads any other seat's concealed tiles. */
+    const buildViewFor = (seat: number): PlayerView =>
+      buildPlayerView({
+        seat,
+        hands,
+        doraIndicators: wall.doraIndicators(),
+        scores: this.scores,
+        dealerSeat: this.dealerSeat,
+        roundWind: this.roundWind,
+        roundHandNumber: this.roundHandNumber,
+        honba: this.honba,
+        kyotaku: this.kyotaku,
+        wallRemainingLive: wall.remainingLiveCount(),
+      });
+
+    // --- Human decision points (Milestone 1: discard+riichi, pon, daiminkan, ankan, kakan,
+    // kita). Each wrapper below defers to the existing AI/SimpleAI function unchanged - byte
+    // for byte the same call, same RNG consumption - whenever the seat isn't human-driven,
+    // and only yields a DecisionRequest for an actual human seat. None of these ever run for
+    // an all-AI game, so playHand() (the synchronous AI-only entry point) never sees a yield.
+
+    function* decidePon(
+      player: number,
+      hand: Hand,
+      discardedKind: TileKind,
+      fromPlayer: number,
+      human: boolean
+    ): Generator<DecisionRequest, { called: boolean; trace: CallDecisionTrace | null }, DecisionResponse> {
+      if (!human) return evaluatePonFor(player, hand, discardedKind);
+      const response = (yield {
+        type: "call_pon",
+        seat: player,
+        tileKind: discardedKind,
+        fromPlayer,
+        view: buildViewFor(player),
+      } satisfies CallDecisionRequest) as CallDecisionResponse;
+      return { called: response.declare, trace: null };
+    }
+
+    function* decideDaiminkan(
+      player: number,
+      hand: Hand,
+      discardedKind: TileKind,
+      fromPlayer: number,
+      human: boolean
+    ): Generator<DecisionRequest, { called: boolean; trace: CallDecisionTrace | null }, DecisionResponse> {
+      if (!human) return evaluateDaiminkanFor(player, hand, discardedKind);
+      const response = (yield {
+        type: "call_daiminkan",
+        seat: player,
+        tileKind: discardedKind,
+        fromPlayer,
+        view: buildViewFor(player),
+      } satisfies CallDecisionRequest) as CallDecisionResponse;
+      return { called: response.declare, trace: null };
+    }
+
+    function* decideShouminkan(
+      player: number,
+      hand: Hand,
+      kind: TileKind,
+      human: boolean
+    ): Generator<DecisionRequest, boolean, DecisionResponse> {
+      if (!human) return shouldDeclareShouminkanFor(player, hand, kind);
+      const response = (yield { type: "kakan", seat: player, tileKind: kind, view: buildViewFor(player) } satisfies CallDecisionRequest) as CallDecisionResponse;
+      return response.declare;
+    }
+
+    function* decideAnkan(
+      player: number,
+      hand: Hand,
+      kind: TileKind,
+      human: boolean
+    ): Generator<DecisionRequest, boolean, DecisionResponse> {
+      if (!human) return shouldDeclareAnkanFor(player, hand, kind);
+      const response = (yield { type: "ankan", seat: player, tileKind: kind, view: buildViewFor(player) } satisfies CallDecisionRequest) as CallDecisionResponse;
+      return response.declare;
+    }
+
+    function* decideKita(
+      player: number,
+      hand: Hand,
+      kitaEnabled: boolean,
+      extractedThisTurn: number,
+      human: boolean
+    ): Generator<DecisionRequest, KitaAction, DecisionResponse> {
+      if (!canKita(hand, kitaEnabled)) return "unavailable";
+      if (!human) return shouldDeclareKitaFor(player, hand, extractedThisTurn) ? "kita" : "pass";
+      const response = (yield { type: "kita", seat: player, tileKind: "z4", view: buildViewFor(player) } satisfies CallDecisionRequest) as CallDecisionResponse;
+      return response.declare ? "kita" : "pass";
+    }
+
+    /** Discard and riichi are answered together: riichi is a property of a specific
+     *  discard, not an independent decision - see DiscardDecisionRequest. AI/SimpleAI seats
+     *  keep the exact existing two-call sequence (chooseDiscardFor then
+     *  shouldDeclareRiichiFor) unchanged; only a human seat gets the combined contract. */
+    function* decideDiscardAndRiichi(
+      player: number,
+      hand: Hand,
+      human: boolean,
+      score: number,
+      wallRemainingLive: number,
+      forbiddenDiscardKinds: readonly TileKind[] = []
+    ): Generator<DecisionRequest, { discardId: number; declaringRiichi: boolean }, DecisionResponse> {
+      if (!human) {
+        const discardId = chooseDiscardFor(player, hand, forbiddenDiscardKinds);
+        const declaringRiichi = shouldDeclareRiichiFor(player, hand, discardId);
+        return { discardId, declaringRiichi };
+      }
+      const legalTileIds = hand.concealed.filter((t) => !forbiddenDiscardKinds.includes(t.kind)).map((t) => t.id);
+      const riichiLegalTileIds = canDeclareRiichi(hand, score, wallRemainingLive)
+        ? riichiDiscardCandidates(hand).filter((id) => legalTileIds.includes(id))
+        : [];
+      const response = (yield {
+        type: "discard",
+        seat: player,
+        legalTileIds,
+        riichiLegalTileIds,
+        view: buildViewFor(player),
+      } satisfies DiscardDecisionRequest) as DiscardDecisionResponse;
+      if (!legalTileIds.includes(response.tileId)) {
+        throw new Error(
+          `GameState: human decision response chose tileId ${response.tileId}, which is not a legal discard for seat ${player}`
+        );
+      }
+      if (response.declareRiichi && !riichiLegalTileIds.includes(response.tileId)) {
+        throw new Error(
+          `GameState: human decision response declared riichi discarding tileId ${response.tileId}, which is not a legal riichi discard for seat ${player}`
+        );
+      }
+      return { discardId: response.tileId, declaringRiichi: response.declareRiichi };
+    }
+
     type DiscardResponseFlow = { ended: boolean; from: number; resumePostDrawSeat?: number };
     let pendingCalledKanDraw: { player: number; tile: Tile } | undefined;
 
@@ -725,7 +973,14 @@ export class GameState {
      * Returns "ended" once a win concludes the hand, or the seat whose discard resolved
      * with no call, so the caller knows who to advance play from.
      */
-    const offerCallsForDiscard = (discarderSeat: number, discardedTile: Tile): DiscardResponseFlow => {
+    const offerCallsForDiscard: (
+      discarderSeat: number,
+      discardedTile: Tile
+    ) => Generator<DecisionRequest, DiscardResponseFlow, DecisionResponse> = (function* (
+      this: GameState,
+      discarderSeat: number,
+      discardedTile: Tile
+    ): Generator<DecisionRequest, DiscardResponseFlow, DecisionResponse> {
       if (this.rules.playerCount === MAJSOUL_YONMA_RULESET.playerCount) {
         const generated = generateDiscardResponseCandidates({
           rules: this.rules,
@@ -827,8 +1082,9 @@ export class GameState {
         const newTile = hands[selected.seat]!.discardById(discardId, { tsumogiri: false, isRiichiDeclaration: false });
         this.log.push({ type: "discard", player: selected.seat, tile: newTile.kind, tsumogiri: false, riichiDeclaration: false });
         wall.revealPendingKanDora();
+        emitNewlyRevealedDoraIndicators();
         refreshWinningTiles(selected.seat);
-        return handleDiscardResponses(selected.seat, newTile, wall.isExhausted());
+        return yield* handleDiscardResponses(selected.seat, newTile, wall.isExhausted());
       }
 
       const order = seatsInTurnOrder(discarderSeat, this.rules.playerCount);
@@ -836,7 +1092,7 @@ export class GameState {
       for (const p of order) {
         if (hands[p]!.riichi) continue;
         if (!canDaiminkan(hands[p]!, discardedTile.kind)) continue;
-        const evaluation = evaluateDaiminkanFor(p, hands[p]!, discardedTile.kind);
+        const evaluation = yield* decideDaiminkan(p, hands[p]!, discardedTile.kind, discarderSeat, isHumanSeat(p));
         const actualCalled = evaluation.called && wall.canDrawRinshan(this.rules.maxKans);
         logCallTrace(p, discarderSeat, discardedTile.kind, evaluation.trace, actualCalled);
         if (actualCalled) {
@@ -857,7 +1113,7 @@ export class GameState {
       for (const p of order) {
         if (hands[p]!.riichi) continue;
         if (!canPon(hands[p]!, discardedTile.kind)) continue;
-        const evaluation = evaluatePonFor(p, hands[p]!, discardedTile.kind);
+        const evaluation = yield* decidePon(p, hands[p]!, discardedTile.kind, discarderSeat, isHumanSeat(p));
         logCallTrace(p, discarderSeat, discardedTile.kind, evaluation.trace, evaluation.called);
         if (evaluation.called) {
           hands[discarderSeat]!.markDiscardCalledAway(discardedTile.id);
@@ -866,24 +1122,36 @@ export class GameState {
           this.log.push({ type: "call", call: "pon", player: p, kind: discardedTile.kind, fromPlayer: discarderSeat });
           tableInterrupted = true;
           ippatsuEligible.fill(false);
-          // kita may not be declared immediately after a pon - go straight to discard
-          const discardId = chooseDiscardFor(p, hands[p]!);
+          // kita may not be declared immediately after a pon - go straight to discard (riichi
+          // is structurally impossible here too: the hand is open now, canDeclareRiichi's
+          // concealment check will always fail, so decideDiscardAndRiichi degrades to a
+          // plain discard for a human seat exactly as it does for AI/SimpleAI).
+          const { discardId } = yield* decideDiscardAndRiichi(p, hands[p]!, isHumanSeat(p), this.scores[p]!, wall.remainingLiveCount());
           const newTile = hands[p]!.discardById(discardId, { tsumogiri: false, isRiichiDeclaration: false });
           this.log.push({ type: "discard", player: p, tile: newTile.kind, tsumogiri: false, riichiDeclaration: false });
           refreshWinningTiles(p);
-          return handleDiscardResponses(p, newTile, wall.isExhausted());
+          return yield* handleDiscardResponses(p, newTile, wall.isExhausted());
         }
       }
 
       return { ended: false, from: discarderSeat };
-    };
+    }).bind(this);
 
     /**
      * Handles everything that can happen in response to `discardedTile` (just discarded by
      * `discarderSeat`): ron first (always legal, even on the final discard), then - unless
      * this was the final discard, where only ron may occur - offerCallsForDiscard.
      */
-    const handleDiscardResponses = (discarderSeat: number, discardedTile: Tile, isHoutei: boolean): DiscardResponseFlow => {
+    const handleDiscardResponses: (
+      discarderSeat: number,
+      discardedTile: Tile,
+      isHoutei: boolean
+    ) => Generator<DecisionRequest, DiscardResponseFlow, DecisionResponse> = (function* (
+      this: GameState,
+      discarderSeat: number,
+      discardedTile: Tile,
+      isHoutei: boolean
+    ): Generator<DecisionRequest, DiscardResponseFlow, DecisionResponse> {
       const winners = offerRon(discarderSeat, discardedTile, isHoutei, false);
       const abortiveReason = postDiscardAbortiveDrawReason(
         hands,
@@ -900,8 +1168,8 @@ export class GameState {
         return { ended: true, from: discarderSeat };
       }
       if (isHoutei) return { ended: false, from: discarderSeat }; // no calls on the final discard
-      return offerCallsForDiscard(discarderSeat, discardedTile);
-    };
+      return yield* offerCallsForDiscard(discarderSeat, discardedTile);
+    }).bind(this);
 
     let current = this.dealerSeat;
     let pendingRinshan = false;
@@ -934,6 +1202,12 @@ export class GameState {
       if (!tileAlreadyInHand) hand.addDrawn(drawnTile);
       furiten[current]!.onOwnDraw();
       this.log.push({ type: "draw", player: current, tile: drawnTile.kind, source: isRinshan ? "rinshan" : "wall" });
+      // Covers "immediate" reveal timing (ankan): commitKan("immediate") bumps
+      // revealedKanDoraCount before this kan's own replacement draw has happened, so
+      // wall.doraIndicators() isn't safely callable until right here, after the draw that
+      // just absorbed the tile K3/K4 may need. "after-discard" timing is unaffected - those
+      // reveals are emitted separately at their own discard, not here (see below).
+      emitNewlyRevealedDoraIndicators();
 
       const isHaitei = !isRinshan && wall.isExhausted();
       // tenhou/chiihou eligibility (drawCountByPlayer[current]===0 means "this is their
@@ -946,11 +1220,7 @@ export class GameState {
         wall.canDrawKitaReplacement() &&
         canRiichiKita(hand, drawnTile, this.rules.kitaEnabled)
       ) {
-        queuedRiichiKitaAction = chooseKitaAction(
-          hand,
-          this.rules.kitaEnabled,
-          () => shouldDeclareKitaFor(current, hand, extractedThisTurn)
-        );
+        queuedRiichiKitaAction = yield* decideKita(current, hand, this.rules.kitaEnabled, extractedThisTurn, isHumanSeat(current));
       }
       const tsumoResult = tryEvaluate(current, drawnTile, true, undefined, isRinshan, isHaitei, false);
       if (!isRinshan) drawCountByPlayer[current] = drawCountByPlayer[current]! + 1;
@@ -978,11 +1248,7 @@ export class GameState {
           : canKita(hand, this.rules.kitaEnabled);
         if (!kitaLegal) break;
 
-        const kitaAction = queuedRiichiKitaAction ?? chooseKitaAction(
-          hand,
-          this.rules.kitaEnabled,
-          () => shouldDeclareKitaFor(current, hand, extractedThisTurn)
-        );
+        const kitaAction = queuedRiichiKitaAction ?? (yield* decideKita(current, hand, this.rules.kitaEnabled, extractedThisTurn, isHumanSeat(current)));
         queuedRiichiKitaAction = undefined;
         if (kitaAction !== "kita") break;
 
@@ -1012,17 +1278,18 @@ export class GameState {
         hand.addDrawn(replacement);
         latestDrawnTile = replacement;
         this.log.push({ type: "draw", player: current, tile: replacement.kind, source: "rinshan" });
+        // Emitted here, after the rinshan draw event rather than right after
+        // revealPendingKanDora() above, so "kita" stays immediately followed by its
+        // rinshan draw - an existing invariant (checkRiichiIppatsuKita) depends on that
+        // exact adjacency and this event must stay purely additive to it.
+        emitNewlyRevealedDoraIndicators();
 
         if (
           hand.riichi &&
           wall.canDrawKitaReplacement() &&
           canRiichiKita(hand, replacement, this.rules.kitaEnabled)
         ) {
-          queuedRiichiKitaAction = chooseKitaAction(
-            hand,
-            this.rules.kitaEnabled,
-            () => shouldDeclareKitaFor(current, hand, extractedThisTurn)
-          );
+          queuedRiichiKitaAction = yield* decideKita(current, hand, this.rules.kitaEnabled, extractedThisTurn, isHumanSeat(current));
         }
         const kitaTsumo = tryEvaluate(current, replacement, true, undefined, true, false, false);
         if (kitaTsumo && queuedRiichiKitaAction !== "kita") {
@@ -1034,7 +1301,11 @@ export class GameState {
       // shouminkan: upgrading an existing pon with a matching tile now in the concealed hand
       if (!hand.riichi) {
         const shouminkanKind = allKindsForRules(this.rules).find((k) => canShouminkan(hand, k));
-        if (shouminkanKind && shouldDeclareShouminkanFor(current, hand, shouminkanKind) && wall.canDrawRinshan(this.rules.maxKans)) {
+        // Order matters (matches the original `&&` chain): the decision must still run
+        // before the rinshan-capacity check even though a human seat's yield now sits in
+        // the middle, so RNG/call-order for AI seats is byte-for-byte unaffected.
+        const shouminkanDeclared = shouminkanKind ? yield* decideShouminkan(current, hand, shouminkanKind, isHumanSeat(current)) : false;
+        if (shouminkanKind && shouminkanDeclared && wall.canDrawRinshan(this.rules.maxKans)) {
           const addedTile = hand.tilesOfKind(shouminkanKind)[0]!;
           applyShouminkan(hand, addedTile.id);
           this.log.push({ type: "call", call: "kan_added", player: current, kind: shouminkanKind });
@@ -1068,7 +1339,9 @@ export class GameState {
       const ankanKind = allKindsForRules(this.rules).find(
         (kind) => canAnkan(hand, kind) && (!hand.riichi || canRiichiAnkan(hand, kind, latestDrawnTile, this.rules))
       );
-      if (ankanKind && shouldDeclareAnkanFor(current, hand, ankanKind) && wall.canDrawRinshan(this.rules.maxKans)) {
+      // Order matters (matches the original `&&` chain) - see the shouminkan comment above.
+      const ankanDeclared = ankanKind ? yield* decideAnkan(current, hand, ankanKind, isHumanSeat(current)) : false;
+      if (ankanKind && ankanDeclared && wall.canDrawRinshan(this.rules.maxKans)) {
         const robbedTile = hand.tilesOfKind(ankanKind)[0]!;
         const kokushiWinners = resolveRonBeforeInterruption(
           () => offerRon(current, robbedTile, false, true, "kokushi-ankan"),
@@ -1087,6 +1360,10 @@ export class GameState {
         }
 
         applyAnkan(hand, ankanKind);
+        // Not emitted here: an ankan reveals "immediately" (see Wall.commitKan), but its
+        // own replacement tile hasn't been drawn yet at this point, and a K3/K4 indicator
+        // can depend on that exact draw having absorbed a tile first. Emitted instead right
+        // after the pendingRinshan draw below completes, at the top of the next loop turn.
         wall.commitKan("immediate");
         this.log.push({ type: "call", call: "kan_closed", player: current, kind: ankanKind });
         pendingRinshan = true;
@@ -1097,10 +1374,15 @@ export class GameState {
       let discardId: number;
       let declaringRiichi = false;
       if (!hand.riichi) {
-        discardId = chooseDiscardFor(current, hand);
-        if (shouldDeclareRiichiFor(current, hand, discardId)) {
-          declaringRiichi = true;
-        }
+        const decision = yield* decideDiscardAndRiichi(
+          current,
+          hand,
+          isHumanSeat(current),
+          this.scores[current]!,
+          wall.remainingLiveCount()
+        );
+        discardId = decision.discardId;
+        declaringRiichi = decision.declaringRiichi;
       } else {
         discardId = latestDrawnTile.id; // must discard the drawn tile (tsumogiri) once in riichi
       }
@@ -1116,6 +1398,7 @@ export class GameState {
         riichiDeclaration: declaringRiichi,
       });
       wall.revealPendingKanDora();
+      emitNewlyRevealedDoraIndicators();
       refreshWinningTiles(current);
 
       if (declaringRiichi) {
@@ -1173,7 +1456,7 @@ export class GameState {
         // pon/daiminkan on the declaration tile is checked only now, after riichi is
         // already established - if one happens, it correctly cancels ippatsu (the
         // pon/daiminkan branches in offerCallsForDiscard already clear ippatsuEligible).
-        const result = offerCallsForDiscard(current, discardedTile);
+        const result = yield* offerCallsForDiscard(current, discardedTile);
         if (result.ended) return;
         if (result.resumePostDrawSeat !== undefined) {
           current = result.resumePostDrawSeat;
@@ -1183,7 +1466,7 @@ export class GameState {
         continue;
       }
 
-      const result = handleDiscardResponses(current, discardedTile, isHoutei);
+      const result = yield* handleDiscardResponses(current, discardedTile, isHoutei);
       if (result.ended) return;
       if (result.resumePostDrawSeat !== undefined) {
         current = result.resumePostDrawSeat;
@@ -1197,6 +1480,47 @@ export class GameState {
       ippatsuEligible[current] = false; // this player's own return-turn window (if any) has now closed
       current = nextSeat(result.from, this.rules.playerCount);
     }
+  }
+
+  /**
+   * AI-only synchronous compatibility entry point - unchanged behavior and signature from
+   * before playHandSession() was extracted. Every existing caller (playGame(), self-play,
+   * validation, replay tooling, tests) keeps calling this exactly as before, and never sees
+   * a yield as long as no seat's controller (see GameStateOptions.controllers) is "human".
+   *
+   * Throws rather than silently feeding `undefined` back into a yielded DecisionRequest
+   * (which would corrupt that seat's turn) if a human-controlled seat's hand is ever driven
+   * through this synchronous entry point by mistake - use playHandInteractive() instead.
+   */
+  playHand(): void {
+    const session = this.playHandSession();
+    const result = session.next();
+    if (!result.done) {
+      throw new Error(
+        "GameState.playHand: the hand session yielded a decision request, meaning a human-controlled " +
+          "seat is configured for this game. Use playHandInteractive() instead of playHand() " +
+          "when any seat is human-controlled."
+      );
+    }
+  }
+
+  /**
+   * Interactive entry point for a hand with one or more human-controlled seats (see
+   * GameStateOptions.controllers). Returns the raw generator so a driver (CLI, test, future
+   * UI) can pump it directly:
+   *
+   *   const session = gs.playHandInteractive();
+   *   let step = session.next();
+   *   while (!step.done) {
+   *     const response = await getResponseFor(step.value); // step.value: DecisionRequest
+   *     step = session.next(response);
+   *   }
+   *
+   * Works identically for an all-AI hand too (the loop above just never executes its body),
+   * but playHand() remains the simpler call for that case.
+   */
+  playHandInteractive(): Generator<DecisionRequest, void, DecisionResponse> {
+    return this.playHandSession();
   }
 
   private advanceAfterHand(

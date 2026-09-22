@@ -446,8 +446,8 @@ export const CHARACTER_PROFILES: Record<string, CharacterProfile> = {
     mistakeRate: 0.017,
     candidateScoreTolerance: 0.05,
   },
-  ryuhart: {
-    characterId: "ryuhart",
+  ryuheart: {
+    characterId: "ryuheart",
     displayName: "류하트",
     archetype: "rough_shape_fast_completer",
     skill: 0.45,
@@ -468,8 +468,22 @@ export const CHARACTER_PROFILES: Record<string, CharacterProfile> = {
   },
 };
 
+/** Old characterIds that were renamed, mapped to their current canonical id. Accepted as
+ *  INPUT only (CLI --players, getCharacterProfile) - resolved to the canonical id before
+ *  anything else touches it, so replays and any other newly-produced serialization only
+ *  ever record the canonical id, never the legacy one. */
+export const LEGACY_CHARACTER_ID_ALIASES: Record<string, string> = {
+  ryuhart: "ryuheart", // "하트" was always meant as English "heart"
+};
+
+/** Resolves a legacy alias (if any) to its canonical characterId; returns the input
+ *  unchanged if it isn't a known alias (including if it's already canonical). */
+export function resolveCharacterId(characterId: string): string {
+  return LEGACY_CHARACTER_ID_ALIASES[characterId] ?? characterId;
+}
+
 export function getCharacterProfile(characterId: string): CharacterProfile {
-  const profile = CHARACTER_PROFILES[characterId];
+  const profile = CHARACTER_PROFILES[resolveCharacterId(characterId)];
   if (!profile) throw new Error(`Unknown character id: ${characterId}`);
   return profile;
 }

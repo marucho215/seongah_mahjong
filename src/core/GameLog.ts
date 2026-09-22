@@ -20,6 +20,23 @@ export interface DealEvent {
   doraIndicator: TileKind;
 }
 
+/** A specific physical tile, for replay-facing (Schema v2) records that need tile identity
+ *  rather than just its kind - e.g. which exact red five was a winning tile. */
+export interface TileRef {
+  kind: TileKind;
+  id: number;
+  red?: boolean;
+}
+
+/** Fires once for every dora indicator becoming visible: once for the initial indicator
+ *  (right after "deal"), and once per indicator revealed later by a real kan. Additive to
+ *  the event stream - "deal.doraIndicator" is kept unchanged for v1 consumers. */
+export interface DoraIndicatorRevealedEvent {
+  type: "dora_indicator_revealed";
+  source: "initial" | "kan";
+  indicator: TileRef;
+}
+
 export interface DrawEvent {
   type: "draw";
   player: number;
@@ -95,6 +112,49 @@ export interface HandEndTransition {
   pointDeltas: Record<number, number>;
 }
 
+/** One dora indicator's contribution: which physical tiles in the winning hand it matched.
+ *  Multiple sources may share a tile id (e.g. a red five that is also the indicated dora
+ *  kind counts in both an "aka" source and an "omote"/"kan" source) - that overlap is
+ *  intentional and matches how han is actually counted, so `matchedTileIds` must NOT be
+ *  deduplicated across sources. A source with an empty `matchedTileIds` records an
+ *  indicator that was genuinely revealed but matched nothing in this particular hand. */
+export type DoraSource =
+  | { type: "omote"; indicator: TileRef; doraKind: TileKind; matchedTileIds: number[] }
+  | { type: "kan"; indicator: TileRef; doraKind: TileKind; matchedTileIds: number[] }
+  | { type: "ura"; indicator: TileRef; doraKind: TileKind; matchedTileIds: number[] }
+  | { type: "aka"; matchedTileIds: number[] }
+  | { type: "kita"; matchedTileIds: number[] };
+
+/** `sum(sources[].matchedTileIds.length) === totalHan === the "Dora" yaku's han` (0 when
+ *  there is no "Dora" yaku hit at all). This is additive, audit-only detail behind the
+ *  existing `{ name: "Dora", han: N }` yaku entry - it never changes what that number is. */
+export interface DoraBreakdown {
+  totalHan: number;
+  sources: DoraSource[];
+}
+
+export type ReplayMeldType = "pon" | "chi" | "daiminkan" | "ankan" | "kakan";
+
+export interface MeldSnapshot {
+  type: ReplayMeldType;
+  tiles: TileRef[];
+  fromPlayer?: number;
+}
+
+/** The winner's hand exactly as it stood at the moment of winning - no fabricated tile
+ *  ownership. `concealedTiles` is whatever `Hand.concealed` actually held at that instant:
+ *  for tsumo the winning tile is already in there (drawn before evaluation), for ron it is
+ *  deliberately NOT in there (it belongs to the discarder until claimed) - `winningTile` is
+ *  always the authoritative separate reference regardless of which case applies. */
+export interface WinSnapshot {
+  concealedTiles: TileRef[];
+  melds: MeldSnapshot[];
+  kitaTiles: TileRef[];
+  winningTile: TileRef;
+  winningTileSource: "tsumo" | "ron";
+  riichiState: "none" | "riichi" | "double_riichi";
+}
+
 export interface AuditableWinResult {
   winnerSeat: number;
   loserSeat: number | null;
@@ -119,6 +179,10 @@ export interface AuditableWinResult {
     tenhou: boolean;
     chiihou: boolean;
   };
+  /** Additive Schema v2 detail. Historical (Schema v1) records omit this field. */
+  doraBreakdown?: DoraBreakdown;
+  /** Additive Schema v2 detail. Historical (Schema v1) records omit this field. */
+  snapshot?: WinSnapshot;
 }
 
 export type HandResultSnapshot =
@@ -167,6 +231,7 @@ export interface GameEndEvent {
 export type GameEvent =
   | HandStartEvent
   | DealEvent
+  | DoraIndicatorRevealedEvent
   | DrawEvent
   | DiscardEvent
   | CallEvent

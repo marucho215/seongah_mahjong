@@ -45,7 +45,7 @@ rejected, since seat-level personality doesn't depend on the other seats' identi
 Registered characterIds: `jegalmina`, `jegalnahui`, `seiyamouri`, `seiyakouri`,
 `kyletyler`, `seiyatosuke`, `toumesuashi`, `toumesuayo`, `byeonari`, `kangunsim`,
 `kimwooju`, `ryumint`, `inan`, `effieminos`, `hwayoung`, `mageuna`, `magnum`,
-`optima215`, `yuwen`, `josangmin`, `seiyahikudo`, `ryuhart`.
+`optima215`, `yuwen`, `josangmin`, `seiyahikudo`, `ryuheart` (legacy alias: `ryuhart`).
 
 ### Direct 4-player CharacterAI battle
 

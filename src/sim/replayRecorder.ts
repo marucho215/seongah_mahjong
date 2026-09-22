@@ -34,6 +34,10 @@ export interface GameReplayRecord {
    *  and reproduce this exact game (GameState's own determinism is already covered by
    *  tests/characterAI.test.ts's "determinism with character profiles" test). */
   meta: {
+    /** Absent on records written before Schema v2 - treat as 1 (`?? 1`) when reading.
+     *  v2 adds `AuditableWinResult.doraBreakdown`/`.snapshot` and the
+     *  "dora_indicator_revealed" event; nothing existing was removed or renamed. */
+    replaySchemaVersion: 2;
     simulationLabel: string;
     gameIndex: number;
     gameSeed: string;
@@ -55,7 +59,7 @@ export function buildGameReplayRecord(
   seats: ReplaySeatInfo[]
 ): GameReplayRecord {
   return {
-    meta: { simulationLabel, gameIndex, gameSeed: gs.baseSeed, rules: gs.rules, seats },
+    meta: { replaySchemaVersion: 2, simulationLabel, gameIndex, gameSeed: gs.baseSeed, rules: gs.rules, seats },
     events: gs.log,
     aiDecisions: gs.aiDecisionLog,
     finalStandings: gs.computeFinalStandings(),

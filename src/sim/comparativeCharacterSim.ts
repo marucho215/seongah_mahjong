@@ -4,7 +4,7 @@
  * frequency, win speed, average value, entropy consistency, and special-mechanic checks. */
 import { GameState } from "../core/GameState.js";
 import { DEFAULT_SANMA_RULES } from "../rules/RuleConfig.js";
-import { CHARACTER_PROFILES, getCharacterProfile } from "../ai/characterProfiles.js";
+import { CHARACTER_PROFILES, getCharacterProfile, resolveCharacterId } from "../ai/characterProfiles.js";
 import { CharacterAI, type CharacterDecisionContext } from "../ai/characterAI.js";
 import { Hand } from "../core/Hand.js";
 import type { Tile } from "../core/tiles.js";
@@ -279,7 +279,10 @@ function parsePlayersArg(argv: string[]): [string, string, string] | null {
     console.error("--players requires a value, e.g. --players seiyatosuke,kyletyler,seiyamouri");
     process.exit(1);
   }
-  const ids = raw.split(",").map((s) => s.trim());
+  // resolve legacy aliases (e.g. "ryuhart" -> "ryuheart") immediately, before validation
+  // or anything downstream (replay serialization) ever sees the id, so only the canonical
+  // id is ever recorded going forward.
+  const ids = raw.split(",").map((s) => resolveCharacterId(s.trim()));
   if (ids.length !== 3) {
     console.error(`--players requires exactly 3 characterIds (got ${ids.length}): ${raw}`);
     process.exit(1);
