@@ -186,6 +186,10 @@ export class GameState {
   private extended = false;
   private dealerContinuationPending = false;
   private dealerEndTriggered = false;
+  /** Set once finalizeGame() has actually run - makes it safe to call more than once
+   *  (double-submit, reconnect, etc.) without re-sweeping kyotaku or double-logging
+   *  game_end. See finalizeGame()'s own comment for the exact contract. */
+  private finalizedGameEnd: GameEndEvent | undefined;
 
   constructor(opts: GameStateOptions) {
     this.rules = opts.rules;
@@ -269,14 +273,41 @@ export class GameState {
     return this.roundWind === maxWind && this.roundHandNumber === this.rules.handsPerRound;
   }
 
+  /** Evaluated once at each hand boundary, exactly where playGame()'s loop always checked it
+   *  (before deciding whether to play another hand) - marks `extended` permanently true the
+   *  first time the schedule has already been exceeded. Extracted verbatim (same timing, same
+   *  condition) so GuiSession's own interactive multi-hand loop can call it identically after
+   *  each hand's playHandInteractive() generator finishes, instead of duplicating this check. */
+  updateGameContinuationStateAfterHand(): void {
+    if (this.isPastNormalLength()) this.extended = true;
+  }
+
   playGame(): void {
     this.assertFullGameplaySupported();
     let guard = 0;
     while (!this.isGameOver()) {
-      if (this.isPastNormalLength()) this.extended = true;
+      this.updateGameContinuationStateAfterHand();
       this.playHand();
       guard++;
       if (guard > 200) throw new Error("GameState.playGame: runaway loop guard triggered");
+    }
+    this.finalizeGame();
+  }
+
+  /**
+   * The game-end wrap-up (final kyotaku settlement, reason computation, `game_end` log
+   * event) - extracted from playGame()'s former inline tail so an interactive multi-hand
+   * driver (GuiSession) can call the exact same logic once its own loop observes
+   * isGameOver(), without reimplementing it. Throws if the game genuinely hasn't ended yet
+   * (isGameOver() false) rather than silently no-op'ing. Safe to call more than once - a
+   * second call returns the same event unchanged, so a double-submit/reconnect/retry can
+   * never re-sweep kyotaku or double-log game_end.
+   */
+  finalizeGame(): GameEndEvent {
+    this.assertFullGameplaySupported();
+    if (this.finalizedGameEnd) return this.finalizedGameEnd;
+    if (!this.isGameOver()) {
+      throw new Error("GameState.finalizeGame: cannot finalize a game that has not ended (isGameOver() is false)");
     }
     const reason: GameEndEvent["reason"] = this.tobiTriggered ? "tobi" : this.extended ? "extension_end" : "length";
     // Final kyotaku settlement: any riichi sticks still on the table when the game ends go
@@ -290,12 +321,15 @@ export class GameState {
       this.kyotaku = 0;
     }
     const eliminatedPlayers = allSeats(this.rules.playerCount).filter((p) => this.scores[p]! < 0);
-    this.log.push({
+    const event: GameEndEvent = {
       type: "game_end",
       finalScores: [...this.scores],
       reason,
       eliminatedPlayers,
-    });
+    };
+    this.log.push(event);
+    this.finalizedGameEnd = event;
+    return event;
   }
 
   /** Final ranked standings: raw score is untouched (kept for the conservation invariant),

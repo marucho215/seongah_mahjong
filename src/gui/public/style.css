@@ -279,6 +279,26 @@ body {
   overflow-y: auto;
 }
 
+.overlay-panel .continue-button {
+  display: block;
+  margin: 4px 0 14px;
+  font-size: 15px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  background: #ffd54a;
+}
+
+.overlay-panel .continue-button:hover {
+  background: #ffe08a;
+}
+
+.overlay-panel .continue-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .overlay-panel h2 {
   margin: 0 0 6px;
   font-size: 20px;

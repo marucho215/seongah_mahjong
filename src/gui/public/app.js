@@ -417,7 +417,9 @@ function nextHandLine(result) {
   return line;
 }
 
-function renderHandEndPanel(handEndEvent, mySeat) {
+/** `isFinalHand`: true when this hand ended the game - suppresses the "다음: 동X국" line,
+ *  since renderGameEnd() appends the actual final-standings section instead. */
+function renderHandEndPanel(handEndEvent, mySeat, isFinalHand) {
   const panel = document.getElementById("hand-end-panel");
   panel.innerHTML = "";
   const result = handEndEvent.result;
@@ -465,7 +467,7 @@ function renderHandEndPanel(handEndEvent, mySeat) {
     }
 
     panel.appendChild(renderScoreChanges(result.scoresBeforeSettlement, result.scoresAfterSettlement, mySeat));
-    const next = nextHandLine(result);
+    const next = isFinalHand ? null : nextHandLine(result);
     if (next) panel.appendChild(next);
   } else if (result.kind === "exhaustive_draw") {
     const h2 = el("h2");
@@ -489,7 +491,7 @@ function renderHandEndPanel(handEndEvent, mySeat) {
     }
 
     panel.appendChild(renderScoreChanges(result.scoresBeforeSettlement, result.scoresAfterSettlement, mySeat));
-    const next = nextHandLine(result);
+    const next = isFinalHand ? null : nextHandLine(result);
     if (next) panel.appendChild(next);
   } else if (result.kind === "abortive_draw") {
     const h2 = el("h2");
@@ -500,7 +502,7 @@ function renderHandEndPanel(handEndEvent, mySeat) {
     panel.appendChild(reason);
 
     panel.appendChild(renderScoreChanges(result.scoresBeforeSettlement, result.scoresAfterSettlement, mySeat));
-    const next = nextHandLine(result);
+    const next = isFinalHand ? null : nextHandLine(result);
     if (next) panel.appendChild(next);
   }
 
@@ -513,19 +515,82 @@ function renderHandEndPanel(handEndEvent, mySeat) {
   panel.appendChild(json);
 }
 
+async function postContinue() {
+  await fetch("/continue", { method: "POST" });
+}
+
 function renderHandEnd(handEndEvent, mySeat) {
   console.log("[debug] hand_end event:", handEndEvent);
-  renderHandEndPanel(handEndEvent, mySeat);
+  renderHandEndPanel(handEndEvent, mySeat, false);
+  const panel = document.getElementById("hand-end-panel");
+  const continueBtn = el("button", "continue-button");
+  continueBtn.textContent = "다음 국 시작";
+  continueBtn.addEventListener("click", () => {
+    continueBtn.disabled = true; // guards a double-click; server-side continueToNextHand() also rejects a second call
+    postContinue();
+  });
+  panel.insertBefore(continueBtn, panel.firstChild.nextSibling); // right under the "화료!"/"유국" headline
+  document.getElementById("hand-end-overlay").classList.remove("hidden");
+  clearActionBar();
+}
+
+const GAME_END_REASON_KO = {
+  length: "정규 국수 종료",
+  extension_end: "연장 종료",
+  tobi: "파산 (트비) 종료",
+};
+
+function renderGameEndExtra(gameEndEvent, mySeat) {
+  const panel = document.getElementById("hand-end-panel");
+
+  const hr = document.createElement("hr");
+  panel.appendChild(hr);
+
+  const h2 = el("h2");
+  h2.textContent = "게임 종료";
+  panel.appendChild(h2);
+
+  const reason = el("div", "result-headline");
+  reason.textContent = GAME_END_REASON_KO[gameEndEvent.reason] ?? gameEndEvent.reason;
+  panel.appendChild(reason);
+
+  const standings = [...gameEndEvent.finalScores.keys()].sort(
+    (a, b) => gameEndEvent.finalScores[b] - gameEndEvent.finalScores[a]
+  );
+  const list = el("div", "score-changes");
+  standings.forEach((seat, i) => {
+    const row = el("div", "row");
+    const name = el("span");
+    name.textContent = `${i + 1}위 ${displayNameForSeat(seat, mySeat)}`;
+    const value = el("span");
+    value.textContent = formatPoints(gameEndEvent.finalScores[seat]);
+    row.appendChild(name);
+    row.appendChild(value);
+    list.appendChild(row);
+  });
+  panel.appendChild(list);
+}
+
+function renderGameEnd(gameEndEvent, handEndEvent, mySeat) {
+  console.log("[debug] game_end event:", gameEndEvent);
+  if (handEndEvent) renderHandEndPanel(handEndEvent, mySeat, true);
+  else document.getElementById("hand-end-panel").innerHTML = "";
+  renderGameEndExtra(gameEndEvent, mySeat);
   document.getElementById("hand-end-overlay").classList.remove("hidden");
   clearActionBar();
 }
 
 // The human seat number, remembered from the last decision request - no more decision
-// requests arrive once the hand has ended, so hand_end can't read view.seat directly.
+// requests arrive once a hand or the game has ended, so hand_end/game_end can't read
+// view.seat directly.
 let lastKnownMySeat = 0;
 
 function handleMessage(msg) {
   currentCharacterNames = msg.characterNames ?? [];
+  if (msg.type === "game_end") {
+    renderGameEnd(msg.event, msg.handEvent, lastKnownMySeat);
+    return;
+  }
   if (msg.type === "hand_end") {
     renderHandEnd(msg.event, lastKnownMySeat);
     return;

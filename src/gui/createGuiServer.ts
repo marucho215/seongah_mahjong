@@ -25,7 +25,8 @@ export interface GuiServerHandle {
 }
 
 /** Builds (but does not start listening) an http.Server driving `game` via one GuiSession -
- *  one hand, one human seat, matching the CLI's scope exactly. */
+ *  one human seat, continuing across every hand of the game on the same GameState until
+ *  GuiSession reaches "game_end" (see GuiSession's own doc comment for the phase model). */
 export function createGuiServer(game: GameState): GuiServerHandle {
   const session = new GuiSession(game);
   const sseClients = new Set<import("node:http").ServerResponse>();
@@ -37,7 +38,11 @@ export function createGuiServer(game: GameState): GuiServerHandle {
   const characterNames: (string | null)[] = game.characterProfiles.map((p) => p?.displayName ?? null);
 
   function currentStateMessage(): string {
-    if (session.isFinished()) {
+    const phase = session.getPhase();
+    if (phase === "game_end") {
+      return JSON.stringify({ type: "game_end", event: session.getGameEndEvent(), handEvent: session.getHandEndEvent(), characterNames });
+    }
+    if (phase === "hand_end") {
       return JSON.stringify({ type: "hand_end", event: session.getHandEndEvent(), characterNames });
     }
     return JSON.stringify({ type: "decision", request: session.getCurrentRequest(), characterNames });
@@ -76,6 +81,17 @@ export function createGuiServer(game: GameState): GuiServerHandle {
           res.writeHead(400, { "Content-Type": "text/plain" }).end(String(err instanceof Error ? err.message : err));
         }
       });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/continue") {
+      try {
+        session.continueToNextHand();
+        broadcastState();
+        res.writeHead(204).end();
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "text/plain" }).end(String(err instanceof Error ? err.message : err));
+      }
       return;
     }
 

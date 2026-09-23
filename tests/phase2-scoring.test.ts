@@ -253,3 +253,58 @@ describe("2-D: game-end reason unification (tobi / length / extension_end)", () 
     expect(gs2.log).toEqual(gs1.log);
   });
 });
+
+/**
+ * finalizeGame()/updateGameContinuationStateAfterHand() were extracted out of playGame()'s
+ * former inline loop/tail (see GameState.ts) so an interactive multi-hand driver (GuiSession)
+ * can reuse the exact same extension/tobi/game-length semantics without reimplementing them.
+ * These tests prove the extraction changed nothing observable and that finalizeGame()'s new
+ * idempotency/misuse contract holds.
+ */
+describe("finalizeGame()/updateGameContinuationStateAfterHand() extraction", () => {
+  it("an external loop calling playHand() + updateGameContinuationStateAfterHand() + finalizeGame() matches playGame()'s own log exactly", () => {
+    for (const seed of ["extract-parity-1", "extract-parity-2", "extract-parity-3"]) {
+      const viaPlayGame = new GameState({ rules: DEFAULT_SANMA_RULES, seed });
+      viaPlayGame.playGame();
+
+      const viaExtractedSteps = new GameState({ rules: DEFAULT_SANMA_RULES, seed });
+      let guard = 0;
+      while (!viaExtractedSteps.isGameOver()) {
+        viaExtractedSteps.updateGameContinuationStateAfterHand();
+        viaExtractedSteps.playHand();
+        guard++;
+        if (guard > 200) throw new Error("runaway loop guard triggered");
+      }
+      const event = viaExtractedSteps.finalizeGame();
+
+      expect(viaExtractedSteps.log).toEqual(viaPlayGame.log);
+      expect(event).toEqual(viaPlayGame.log.at(-1));
+    }
+  });
+
+  it("finalizeGame() throws instead of silently no-op'ing when the game has not actually ended", () => {
+    const gs = new GameState({ rules: DEFAULT_SANMA_RULES, seed: "finalize-too-early" });
+    expect(() => gs.finalizeGame()).toThrow(/has not ended/);
+  });
+
+  it("finalizeGame() is idempotent: a second call returns the same event without re-sweeping kyotaku or double-logging game_end", () => {
+    const gs = new GameState({ rules: DEFAULT_SANMA_RULES, seed: "finalize-idempotent" });
+    let guard = 0;
+    while (!gs.isGameOver()) {
+      gs.updateGameContinuationStateAfterHand();
+      gs.playHand();
+      guard++;
+      if (guard > 200) throw new Error("runaway loop guard triggered");
+    }
+    const first = gs.finalizeGame();
+    const scoresAfterFirst = [...gs.scores];
+    const logLengthAfterFirst = gs.log.length;
+
+    const second = gs.finalizeGame();
+
+    expect(second).toBe(first); // same object, not just equal - proves no recomputation happened
+    expect(gs.scores).toEqual(scoresAfterFirst);
+    expect(gs.log.length).toBe(logLengthAfterFirst);
+    expect(gs.log.filter((e) => e.type === "game_end").length).toBe(1);
+  });
+});

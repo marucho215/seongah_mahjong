@@ -86,7 +86,7 @@ describe("GUI HTTP/SSE server (createGuiServer)", () => {
     let steps = 0;
     while (true) {
       const msg = await readOneSseMessage(reader, buffer) as { type: string; request?: any; event?: unknown };
-      if (msg.type === "hand_end") break;
+      if (msg.type === "hand_end" || msg.type === "game_end") break;
       expect(msg.type).toBe("decision");
       const request = msg.request;
       // The wire payload is exactly PlayerView/DecisionRequest - confirm no opponent
@@ -108,11 +108,67 @@ describe("GUI HTTP/SSE server (createGuiServer)", () => {
     }
 
     await reader.cancel(); // otherwise the still-open SSE connection keeps server.close() (in afterEach) pending forever
-    expect(getSession().isFinished()).toBe(true);
+    expect(getSession().getPhase()).not.toBe("decision");
     expect(game.log.some((e) => e.type === "hand_end")).toBe(true);
     const violations = collectAllInvariantViolations({ rules: DEFAULT_SANMA_RULES, events: game.log });
     expect(violations).toEqual([]);
   }, 120000);
+
+  it("continues to a second hand over HTTP via POST /continue, on the same GameState", async () => {
+    const game = newHumanGame("gui-http-continue");
+    const { baseUrl, close, getSession } = await startServer(game);
+    cleanup = close;
+
+    const sseRes = await fetch(`${baseUrl}/events`);
+    const reader = sseRes.body!.getReader();
+    const buffer = { text: "" };
+
+    async function driveOneHandOverHttp(): Promise<string> {
+      let steps = 0;
+      for (;;) {
+        const msg = (await readOneSseMessage(reader, buffer)) as { type: string; request?: any };
+        if (msg.type === "hand_end" || msg.type === "game_end") return msg.type;
+        const request = msg.request;
+        const response = request.type === "discard"
+          ? { type: "discard", tileId: request.legalTileIds[0], declareRiichi: false }
+          : { type: request.type, declare: false };
+        const postRes = await fetch(`${baseUrl}/respond`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(response),
+        });
+        expect(postRes.status).toBe(204);
+        steps++;
+        if (steps > 2000) throw new Error("runaway loop guard triggered");
+      }
+    }
+
+    const firstOutcome = await driveOneHandOverHttp();
+    expect(firstOutcome).toBe("hand_end"); // this seed doesn't end the game on hand 1
+    const handIndexAfterFirst = game.handIndex;
+
+    const continueRes = await fetch(`${baseUrl}/continue`, { method: "POST" });
+    expect(continueRes.status).toBe(204);
+    expect(getSession().getPhase()).toBe("decision");
+
+    await driveOneHandOverHttp();
+
+    // Same GameState the whole time - handIndex advanced, no fresh game was ever constructed.
+    expect(game.handIndex).toBe(handIndexAfterFirst + 1);
+    expect(game.log.filter((e) => e.type === "hand_start").length).toBeGreaterThanOrEqual(2);
+
+    await reader.cancel();
+    const violations = collectAllInvariantViolations({ rules: DEFAULT_SANMA_RULES, events: game.log });
+    expect(violations).toEqual([]);
+  }, 120000);
+
+  it("rejects a premature POST /continue (a decision is still pending) with a 400", async () => {
+    const { baseUrl, close } = await startServer(newHumanGame("gui-http-continue-too-early"));
+    cleanup = close;
+
+    const res = await fetch(`${baseUrl}/continue`, { method: "POST" });
+    expect(res.status).toBe(400);
+  });
 
   it("rejects an illegal discard response over HTTP with a 400, instead of silently corrupting the hand", async () => {
     const { baseUrl, close } = await startServer(newHumanGame("gui-http-illegal"));
