@@ -1,2 +1,6 @@
 node_modules/
 dist/
+
+# T-STUDIO Mahjong Sound Pack: 약관상 2차 배포 금지라 원본을 커밋하지 않는다 (assets/audio/tstudio/README.md 참고)
+src/gui/public/assets/audio/tstudio/*.mp3
+src/gui/public/assets/audio/tstudio/*.ogg

@@ -538,11 +538,15 @@ function clearActionBar() {
   document.getElementById("action-bar").innerHTML = "";
 }
 
-function addActionButton(label, onClick) {
+/** kind: "confirm"(기본) 또는 "cancel" - 눌렀을 때 나는 UI 소리를 정한다. */
+function addActionButton(label, onClick, kind = "confirm") {
   const bar = document.getElementById("action-bar");
   const btn = el("button");
   btn.textContent = label;
-  btn.addEventListener("click", onClick);
+  btn.addEventListener("click", () => {
+    AudioManager.play(kind === "cancel" ? "ui.cancel" : "ui.confirm");
+    onClick();
+  });
   bar.appendChild(btn);
   return btn;
 }
@@ -603,7 +607,7 @@ function renderCallRequest(request) {
   label.textContent = promptText;
   document.getElementById("action-bar").appendChild(label);
   addActionButton("예", () => sendResponse({ type: request.type, declare: true }));
-  addActionButton("아니오", () => sendResponse({ type: request.type, declare: false }));
+  addActionButton("아니오", () => sendResponse({ type: request.type, declare: false }), "cancel");
 }
 
 function renderNineTerminalsRequest(request) {
@@ -616,7 +620,7 @@ function renderNineTerminalsRequest(request) {
   label.textContent = `구종구패: 요구패가 ${request.distinctTerminalKinds}종 있습니다. 유국을 선언하시겠습니까?`;
   document.getElementById("action-bar").appendChild(label);
   addActionButton("유국 선언", () => sendResponse({ type: "nine_terminals", declare: true }));
-  addActionButton("계속 진행", () => sendResponse({ type: "nine_terminals", declare: false }));
+  addActionButton("계속 진행", () => sendResponse({ type: "nine_terminals", declare: false }), "cancel");
 }
 
 const RON_CONTEXT_KO = {
@@ -650,7 +654,7 @@ function renderRonRequest(request) {
   bar.appendChild(info);
   const ronBtn = addActionButton("론", () => sendResponse({ type: "ron", declare: true }));
   ronBtn.classList.add("ron-button");
-  const passBtn = addActionButton("패스", () => sendResponse({ type: "ron", declare: false }));
+  const passBtn = addActionButton("패스", () => sendResponse({ type: "ron", declare: false }), "cancel");
   passBtn.title = "패스하면 후리텐이 됩니다";
 }
 
@@ -819,6 +823,7 @@ function renderHandEnd(handEndEvent, mySeat) {
   const continueBtn = el("button", "continue-button");
   continueBtn.textContent = "다음 국 시작";
   continueBtn.addEventListener("click", () => {
+    AudioManager.play("ui.confirm");
     continueBtn.disabled = true; // guards a double-click; server-side continueToNextHand() also rejects a second call
     postContinue();
   });
@@ -878,7 +883,25 @@ function renderGameEnd(gameEndEvent, handEndEvent, mySeat) {
 // view.seat directly.
 let lastKnownMySeat = 0;
 
+/** 행동창을 내 손패 위 이름표 줄 바로 위에 붙인다 - 시선 이동이 짧도록 실제 위치를 측정해 맞춘다. */
+function placeActionBar() {
+  const info = document.querySelector("#zone-bottom .zone-info");
+  const bar = document.getElementById("action-bar");
+  if (!info || !bar) return;
+  bar.style.bottom = Math.max(0, window.innerHeight - info.getBoundingClientRect().top + 6) + "px";
+}
+
+window.addEventListener("resize", placeActionBar);
+AudioManager.mountControls();
+
 function handleMessage(msg) {
+  handleMessageBody(msg);
+  // 접속 직후 메시지의 cueBase 이하는 과거 신호라 재생하지 않는다.
+  AudioManager.setBase(msg.cueBase);
+  AudioManager.enqueueCues(msg.cues);
+}
+
+function handleMessageBody(msg) {
   currentCharacterNames = msg.characterNames ?? [];
   if (msg.type === "game_end") {
     renderGameEnd(msg.event, msg.handEvent, lastKnownMySeat);
@@ -895,6 +918,7 @@ function handleMessage(msg) {
   else if (request.type === "ron") renderRonRequest(request);
   else if (request.type === "nine_terminals") renderNineTerminalsRequest(request);
   else renderCallRequest(request);
+  placeActionBar();
 }
 
 const events = new EventSource("/events");

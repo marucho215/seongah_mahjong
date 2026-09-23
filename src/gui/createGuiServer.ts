@@ -7,6 +7,7 @@ import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GameState } from "../core/GameState.js";
 import { GuiSession } from "./guiSession.js";
+import { AudioCueTracker, type AudioCue } from "./audioCues.js";
 import type { DecisionResponse } from "../core/decisions.js";
 
 export const PUBLIC_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "public");
@@ -17,11 +18,14 @@ const MIME_TYPES: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
   ".md": "text/plain; charset=utf-8",
+  ".mp3": "audio/mpeg",
+  ".ogg": "audio/ogg",
+  ".wav": "audio/wav",
 };
 
 /** The frontend files that change constantly during development are never cached, so a normal
  *  reload always shows the current UI. Tile SVGs and other static assets are left cacheable. */
-const NO_STORE_FILES = new Set(["/index.html", "/app.js", "/style.css"]);
+const NO_STORE_FILES = new Set(["/index.html", "/app.js", "/audioManager.js", "/style.css"]);
 
 export interface GuiServerHandle {
   server: Server;
@@ -41,19 +45,35 @@ export function createGuiServer(game: GameState): GuiServerHandle {
   // hardcodes a name and never confuses "who this seat is" with "who controls it".
   const characterNames: (string | null)[] = game.characterProfiles.map((p) => p?.displayName ?? null);
 
-  function currentStateMessage(): string {
+  // 효과음 신호: game.log를 서버에서 공개 정보만 담은 AudioCue로 바꿔 보낸다 (audioCues.ts).
+  // 접속 전에 이미 쌓인 신호는 "과거"이므로 다시 재생하지 않는다.
+  const cueTracker = new AudioCueTracker(game.log);
+  cueTracker.sync();
+  let lastBroadcastSeq = cueTracker.latestSeq();
+
+  function currentStateMessage(extra: { cues: AudioCue[]; cueBase?: number }): string {
     const phase = session.getPhase();
     if (phase === "game_end") {
-      return JSON.stringify({ type: "game_end", event: session.getGameEndEvent(), handEvent: session.getHandEndEvent(), characterNames });
+      return JSON.stringify({ type: "game_end", event: session.getGameEndEvent(), handEvent: session.getHandEndEvent(), characterNames, ...extra });
     }
     if (phase === "hand_end") {
-      return JSON.stringify({ type: "hand_end", event: session.getHandEndEvent(), characterNames });
+      return JSON.stringify({ type: "hand_end", event: session.getHandEndEvent(), characterNames, ...extra });
     }
-    return JSON.stringify({ type: "decision", request: session.getCurrentRequest(), characterNames });
+    return JSON.stringify({ type: "decision", request: session.getCurrentRequest(), characterNames, ...extra });
+  }
+
+  /** 새로 접속한 클라이언트: 과거 신호는 보내지 않고, 현재 seq만 기준점(cueBase)으로 알려준다. */
+  function connectMessage(): string {
+    cueTracker.sync();
+    return currentStateMessage({ cues: [], cueBase: cueTracker.latestSeq() });
   }
 
   function broadcastState(): void {
-    const payload = `data: ${currentStateMessage()}\n\n`;
+    cueTracker.sync();
+    const cues = cueTracker.cuesAfter(lastBroadcastSeq);
+    lastBroadcastSeq = cueTracker.latestSeq();
+    cueTracker.discardThrough(lastBroadcastSeq);
+    const payload = `data: ${currentStateMessage({ cues })}\n\n`;
     for (const res of sseClients) res.write(payload);
   }
 
@@ -66,7 +86,7 @@ export function createGuiServer(game: GameState): GuiServerHandle {
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
       });
-      res.write(`data: ${currentStateMessage()}\n\n`);
+      res.write(`data: ${connectMessage()}\n\n`);
       sseClients.add(res);
       req.on("close", () => sseClients.delete(res));
       return;

@@ -12,10 +12,17 @@
 
   <div id="action-bar"></div>
 
+  <!-- 효과음 설정: 음소거 + 마스터 볼륨 (audioManager.js가 연결) -->
+  <div id="audio-controls">
+    <button type="button" class="audio-mute">소리 켬</button>
+    <input type="range" class="audio-volume" min="0" max="1" step="0.05" value="0.8" aria-label="볼륨" />
+  </div>
+
   <div id="hand-end-overlay" class="overlay hidden">
     <div id="hand-end-panel" class="overlay-panel"></div>
   </div>
 
+  <script src="/audioManager.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

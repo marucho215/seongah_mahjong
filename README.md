@@ -55,6 +55,18 @@ The GUI plays the whole game in one browser session ("다음 국 시작" between
 standings at the end); the CLI plays one hand per run. Both share the same decision engine,
 so anything legal in one is legal in the other.
 
+### 효과음
+
+GUI 효과음은 타패, 북빼기, 퐁, 깡, 리치봉, 셔플 같은 물리음과 버튼/결과창 UI 소리만 쓴다. 사람이 말하는 선언 음성은 재생에 연결하지 않는다.
+
+| 출처 | 라이선스 | 저장소 포함 |
+|---|---|---|
+| [T-STUDIO Mahjong Sound Pack](https://t-studio-tst.itch.io/free-sound-mahjong-sound-pack) | 상업 이용 가능, 2차 배포 금지 | **포함하지 않음** (`.gitignore`) |
+| [OwlishMedia Sound Effects Pack (OpenGameArt)](https://opengameart.org/content/sound-effects-pack) | CC0 | 사용한 3개 파일만 포함 |
+
+- T-STUDIO 파일은 직접 내려받아 `src/gui/public/assets/audio/tstudio/`에 배치해야 소리가 난다. 필요한 파일과 방법은 그 폴더의 `README.md`를 본다. 파일이 없어도 게임은 정상 동작한다.
+- 출처 기록: `src/gui/public/assets/audio/README.md`, `.../ui/ATTRIBUTION.md`
+
 ### Direct 3-player CharacterAI battle
 
 Seat any 3 characterIds at the same table against each other instead:

@@ -107,23 +107,7 @@ body {
 
 .nameplate.is-turn {
   border-color: #ffd54a;
-  background: rgba(255, 213, 74, 0.12);
-}
-
-.nameplate.is-turn::before {
-  content: "\25B6";
-  position: absolute;
-  left: -14px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 10px;
-  color: #ffd54a;
-}
-
-.zone[data-pos="left"] .nameplate.is-turn::before, .zone[data-pos="right"] .nameplate.is-turn::before {
-  left: 50%;
-  top: -12px;
-  transform: translateX(-50%) rotate(90deg);
+  background: rgba(255, 213, 74, 0.14);
 }
 
 .np-winds { display: inline-flex; align-items: center; gap: 3px; }
@@ -185,6 +169,8 @@ body {
   height: calc(var(--tile-h-small) * 0.75);
   border-radius: 3px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  /* 상대 패는 "있다" 정도만 읽히면 충분하므로 이름보다 튀지 않게 누른다 */
+  filter: saturate(0.4) brightness(0.72);
 }
 
 .back-box {
@@ -205,9 +191,9 @@ body {
 .board {
   grid-area: board;
   padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 14px;
-  background: rgba(0, 0, 0, 0.035);
+  background: rgba(0, 0, 0, 0.06);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   grid-template-rows: auto auto auto;
@@ -259,17 +245,20 @@ body {
   min-width: 96px;
 }
 
-.round-line { font-weight: 800; font-size: 22px; letter-spacing: 1px; line-height: 1.1; }
+.round-line { font-weight: 800; font-size: 28px; letter-spacing: 1px; line-height: 1.1; }
 .chip-row { display: flex; gap: 6px; }
-.chip { font-size: 12px; padding: 1px 7px; border-radius: 9px; background: rgba(255, 255, 255, 0.12); }
-.dora-row { display: flex; align-items: center; gap: 5px; margin-top: 2px; }
+.chip { font-size: 14px; font-weight: 600; padding: 2px 9px; border-radius: 10px; background: rgba(255, 255, 255, 0.16); }
+.dora-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 13px; }
+.dora-row .tile-img.small {
+  width: calc(var(--tile-w-small) * 1.25);
+  height: calc(var(--tile-h-small) * 1.25);
+}
 
-.score-slot { font-variant-numeric: tabular-nums; font-size: 14px; padding: 0 4px; border-radius: 3px; }
+.score-slot { font-variant-numeric: tabular-nums; font-size: 12px; opacity: 0.6; padding: 0 4px; border-radius: 3px; }
 .score-slot[data-pos="top"] { grid-area: s-top; }
 .score-slot[data-pos="left"] { grid-area: s-left; }
 .score-slot[data-pos="right"] { grid-area: s-right; }
 .score-slot[data-pos="bottom"] { grid-area: s-bottom; }
-.score-slot.is-turn { outline: 1px solid #ffd54a; }
 
 /* Riichi stick (1000): a small bar with a red dot, laid along the seat's edge. */
 .stick {
@@ -486,6 +475,44 @@ body {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+/* --- 효과음 설정: 구석의 작은 컨트롤 --- */
+
+#audio-controls {
+  position: fixed;
+  top: 8px;
+  right: 10px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+#audio-controls:hover {
+  opacity: 1;
+}
+
+#audio-controls button {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  background: #e8ece6;
+}
+
+#audio-controls button.is-off {
+  background: #ff8a80;
+}
+
+#audio-controls input[type="range"] {
+  width: 70px;
 }
 
 .section-label {

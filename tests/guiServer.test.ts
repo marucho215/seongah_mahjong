@@ -70,7 +70,7 @@ describe("GUI HTTP/SSE server (createGuiServer)", () => {
   it("marks the frequently edited frontend files no-store, but not the tile assets", async () => {
     const { baseUrl, close } = await startServer(newHumanGame("gui-http-cache"));
     cleanup = close;
-    for (const path of ["/", "/index.html", "/app.js", "/style.css"]) {
+    for (const path of ["/", "/index.html", "/app.js", "/audioManager.js", "/style.css"]) {
       const res = await fetch(`${baseUrl}${path}`);
       expect(res.status).toBe(200);
       expect(res.headers.get("cache-control"), path).toBe("no-store");
@@ -183,6 +183,45 @@ describe("GUI HTTP/SSE server (createGuiServer)", () => {
     const res = await fetch(`${baseUrl}/continue`, { method: "POST" });
     expect(res.status).toBe(400);
   });
+
+  it("효과음 신호: 접속 메시지에는 과거 신호가 없고, 이후 메시지에는 순서대로 새 신호만 온다", async () => {
+    const game = newHumanGame("gui-http-cues");
+    const { baseUrl, close } = await startServer(game);
+    cleanup = close;
+
+    const sse = await fetch(`${baseUrl}/events`);
+    const reader = sse.body!.getReader();
+    const buffer = { text: "" };
+    const first = (await readOneSseMessage(reader, buffer)) as { type: string; request: any; cues: any[]; cueBase: number };
+    expect(first.cues).toEqual([]);
+    expect(typeof first.cueBase).toBe("number");
+
+    // 첫 결정에 응답 (kita 제안이 먼저 올 수 있으므로 discard가 나올 때까지 거절)
+    let msg = first;
+    for (let i = 0; i < 20 && msg.request.type !== "discard"; i++) {
+      await fetch(`${baseUrl}/respond`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: msg.request.type, declare: false }) });
+      msg = (await readOneSseMessage(reader, buffer)) as typeof first;
+    }
+    await fetch(`${baseUrl}/respond`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "discard", tileId: msg.request.legalTileIds[0], declareRiichi: false }) });
+    const next = (await readOneSseMessage(reader, buffer)) as { cues: { seq: number; type: string; seat?: number }[] };
+
+    expect(next.cues.length).toBeGreaterThan(0);
+    expect(next.cues[0]).toMatchObject({ type: "discard", seat: 0 }); // 내가 방금 버린 패가 맨 처음
+    const seqs = next.cues.map((c) => c.seq);
+    expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+    expect(seqs[0]).toBeGreaterThan(first.cueBase);
+    // 공개 정보만: 패 종류/id 같은 필드가 신호에 없다
+    for (const cue of next.cues) expect(Object.keys(cue).every((k) => ["seq", "type", "seat", "first", "riichiSticksCollected"].includes(k))).toBe(true);
+    await reader.cancel();
+
+    // 재접속: 그 사이의 모든 신호는 과거이므로 다시 보내지 않고, 기준점만 최신으로 알려준다.
+    const again = await fetch(`${baseUrl}/events`);
+    const reader2 = again.body!.getReader();
+    const reconnect = (await readOneSseMessage(reader2, { text: "" })) as { cues: unknown[]; cueBase: number };
+    expect(reconnect.cues).toEqual([]);
+    expect(reconnect.cueBase).toBeGreaterThanOrEqual(seqs[seqs.length - 1]!);
+    await reader2.cancel();
+  }, 60000);
 
   it("rejects an illegal discard response over HTTP with a 400, instead of silently corrupting the hand", async () => {
     const { baseUrl, close } = await startServer(newHumanGame("gui-http-illegal"));
