@@ -65,7 +65,9 @@ describe("Milestone 1: human-controlled seat plays a full hand via the interacti
       const gs = new GameState({ rules: DEFAULT_SANMA_RULES, seed: `human-play-coverage-${i}`, humanSeats: [0] });
       driveInteractiveHand(gs, acceptPonAndKita);
     }
-    expect([...seen].sort()).toEqual(["ankan", "call_daiminkan", "call_pon", "discard", "kakan", "kita"]);
+    // Later milestones add more request types (ron, nine_terminals); this test only guards that
+    // all six Milestone 1 types keep occurring.
+    expect([...seen].sort()).toEqual(expect.arrayContaining(["ankan", "call_daiminkan", "call_pon", "discard", "kakan", "kita"]));
   });
 
   it("playHand() (the AI-only sync entry point) throws instead of silently proceeding when a human seat is configured", () => {

@@ -1,7 +1,7 @@
 import type { RuleConfig } from "../rules/RuleConfig.js";
 import { Wall } from "./Wall.js";
 import { Hand } from "./Hand.js";
-import { allKindsForRules, type Tile, type TileKind } from "./tiles.js";
+import { allKindsForRules, isTerminalOrHonor, type Tile, type TileKind } from "./tiles.js";
 import { tilesToCounts } from "./tileIndex.js";
 import { FuritenTracker } from "../actions/furiten.js";
 import { computeWinningTiles } from "../actions/winSearch.js";
@@ -9,7 +9,7 @@ import { canAnkan, applyAnkan, canPon, applyPon, canDaiminkan, applyDaiminkan, c
 import { applyKita, canKita, canRiichiKita, type KitaAction } from "../actions/kita.js";
 import { canRiichiAnkan } from "../actions/riichiAnkan.js";
 import { canDeclareRiichi, riichiDiscardCandidates } from "../actions/riichi.js";
-import type { CallDecisionRequest, CallDecisionResponse, DecisionRequest, DecisionResponse, DiscardDecisionRequest, DiscardDecisionResponse, RonDecisionContext, RonDecisionRequest, RonDecisionResponse } from "./decisions.js";
+import type { CallDecisionRequest, CallDecisionResponse, DecisionRequest, DecisionResponse, DiscardDecisionRequest, DiscardDecisionResponse, NineTerminalsDecisionRequest, NineTerminalsDecisionResponse, RonDecisionContext, RonDecisionRequest, RonDecisionResponse } from "./decisions.js";
 import { buildPlayerView, type PlayerView } from "./playerView.js";
 import { isKokushiAnkanRon } from "../actions/kokushiAnkan.js";
 import {
@@ -1008,6 +1008,21 @@ export class GameState {
       return response.declare ? "kita" : "pass";
     }
 
+    /** Human-only 九種九牌 choice; only ever called once eligibility (9+ distinct terminal/honor
+     *  kinds on the first draw) is already established. */
+    function* decideNineTerminals(player: number, hand: Hand): Generator<DecisionRequest, boolean, DecisionResponse> {
+      const response = (yield {
+        type: "nine_terminals",
+        seat: player,
+        distinctTerminalKinds: new Set(hand.concealed.filter((t) => isTerminalOrHonor(t.kind)).map((t) => t.kind)).size,
+        view: buildViewFor(player),
+      } satisfies NineTerminalsDecisionRequest) as NineTerminalsDecisionResponse;
+      if (response.type !== "nine_terminals") {
+        throw new Error(`GameState: expected a "nine_terminals" response for seat ${player}, got "${response.type}"`);
+      }
+      return response.declare === true;
+    }
+
     /** Discard and riichi are answered together: riichi is a property of a specific
      *  discard, not an independent decision - see DiscardDecisionRequest. AI/SimpleAI seats
      *  keep the exact existing two-call sequence (chooseDiscardFor then
@@ -1318,10 +1333,13 @@ export class GameState {
         return;
       }
 
+      // Same eligibility test as always; only who answers differs: a human seat is asked
+      // (declining plays on), every other seat still defers to nineTerminalsPolicy exactly as
+      // before - which, like the old && chain, is only consulted once eligibility holds.
       if (
         isAbortiveDrawReasonEnabled("nine_terminals", this.rules.playerCount) &&
         canDeclareNineTerminals(hand, drawCountByPlayer[current] === 1, tableInterrupted) &&
-        this.nineTerminalsPolicy(current, hand)
+        (isHumanSeat(current) ? yield* decideNineTerminals(current, hand) : this.nineTerminalsPolicy(current, hand))
       ) {
         finishAbortiveDraw("nine_terminals");
         return;

@@ -73,5 +73,21 @@ export interface RonDecisionResponse {
   declare: boolean;
 }
 
-export type DecisionRequest = DiscardDecisionRequest | CallDecisionRequest | RonDecisionRequest;
-export type DecisionResponse = DiscardDecisionResponse | CallDecisionResponse | RonDecisionResponse;
+/** The 九種九牌 abortive-draw option: offered only to a human seat, only on its own first
+ *  draw when the hand really has 9+ distinct terminal/honor kinds (same eligibility as ever).
+ *  `declare: true` aborts the hand; false plays on. AI seats still use
+ *  GameStateOptions.nineTerminalsPolicy and never see this request. */
+export interface NineTerminalsDecisionRequest {
+  type: "nine_terminals";
+  seat: number;
+  distinctTerminalKinds: number;
+  view: PlayerView;
+}
+
+export interface NineTerminalsDecisionResponse {
+  type: "nine_terminals";
+  declare: boolean;
+}
+
+export type DecisionRequest = DiscardDecisionRequest | CallDecisionRequest | RonDecisionRequest | NineTerminalsDecisionRequest;
+export type DecisionResponse = DiscardDecisionResponse | CallDecisionResponse | RonDecisionResponse | NineTerminalsDecisionResponse;

@@ -1,5 +1,5 @@
 import type { GameState } from "../core/GameState.js";
-import type { CallDecisionRequest, DecisionRequest, DecisionResponse, DiscardDecisionRequest, RonDecisionRequest } from "../core/decisions.js";
+import type { CallDecisionRequest, DecisionRequest, DecisionResponse, DiscardDecisionRequest, NineTerminalsDecisionRequest, RonDecisionRequest } from "../core/decisions.js";
 import type { PlayerView } from "../core/playerView.js";
 import type { TileRef, MeldSnapshot } from "../core/GameLog.js";
 import { parseKind } from "../core/tiles.js";
@@ -172,10 +172,23 @@ async function askRonDecision(request: RonDecisionRequest, io: CliIO): Promise<D
   }
 }
 
+async function askNineTerminalsDecision(request: NineTerminalsDecisionRequest, io: CliIO): Promise<DecisionResponse> {
+  io.print(`구종구패: 요구패(1·9·자패)가 ${request.distinctTerminalKinds}종 있습니다. 유국을 선언할 수 있습니다.`);
+  while (true) {
+    const declare = parseYesNo(await io.ask(`구종구패로 유국을 선언하시겠습니까? (n이면 계속 진행) [y/n] `));
+    if (declare === undefined) {
+      io.print(`Please answer "y" or "n".`);
+      continue;
+    }
+    return { type: "nine_terminals", declare };
+  }
+}
+
 async function resolveRequest(request: DecisionRequest, io: CliIO): Promise<DecisionResponse> {
   renderView(io, request.view);
   if (request.type === "discard") return askDiscardDecision(request, io);
   if (request.type === "ron") return askRonDecision(request, io);
+  if (request.type === "nine_terminals") return askNineTerminalsDecision(request, io);
   return askCallDecision(request, io);
 }
 

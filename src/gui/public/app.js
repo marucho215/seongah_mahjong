@@ -373,6 +373,21 @@ function renderCallRequest(request) {
   addActionButton("아니오", () => sendResponse({ type: request.type, declare: false }));
 }
 
+function renderNineTerminalsRequest(request) {
+  renderTable(request.view);
+  const drawnId = request.view.concealedTiles.length > 0
+    ? request.view.concealedTiles[request.view.concealedTiles.length - 1].id
+    : undefined;
+  renderMySeat(request.view, { drawnTileId: drawnId });
+
+  clearActionBar();
+  const label = el("span", "section-label");
+  label.textContent = `구종구패: 요구패가 ${request.distinctTerminalKinds}종 있습니다. 유국을 선언하시겠습니까?`;
+  document.getElementById("action-bar").appendChild(label);
+  addActionButton("유국 선언", () => sendResponse({ type: "nine_terminals", declare: true }));
+  addActionButton("계속 진행", () => sendResponse({ type: "nine_terminals", declare: false }));
+}
+
 const RON_CONTEXT_KO = {
   discard: "버림패",
   riichi_discard: "리치 선언패",
@@ -646,6 +661,7 @@ function handleMessage(msg) {
   lastKnownMySeat = request.view.seat;
   if (request.type === "discard") renderDiscardRequest(request);
   else if (request.type === "ron") renderRonRequest(request);
+  else if (request.type === "nine_terminals") renderNineTerminalsRequest(request);
   else renderCallRequest(request);
 }
 
