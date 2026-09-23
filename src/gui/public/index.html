@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>Seongah Majak — Human Play</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="table">
+    <div id="opponent-1" class="seat opponent-seat seat-top-left"></div>
+    <div id="opponent-2" class="seat opponent-seat seat-top-right"></div>
+    <div id="center-info" class="center"></div>
+    <div id="my-river" class="river my-river"></div>
+
+    <div id="my-seat" class="seat seat-bottom">
+      <div class="seat-header">
+        <span id="my-name" class="seat-name"></span>
+        <span id="my-score" class="seat-score"></span>
+        <span id="my-riichi" class="riichi-marker hidden">리치</span>
+      </div>
+      <div id="my-melds" class="tile-row small"></div>
+      <div id="my-kita" class="tile-row small"></div>
+      <div id="my-hand" class="tile-row"></div>
+    </div>
+  </div>
+
+  <div id="action-bar"></div>
+
+  <div id="hand-end-overlay" class="overlay hidden">
+    <div id="hand-end-panel" class="overlay-panel"></div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

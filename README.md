@@ -28,6 +28,31 @@ npm run sim -- --save-replays       # also save one JSON kifu per game to ./repl
 npm run sim -- --games 100 --save-replays
 ```
 
+### Human play
+
+Play one sanma hand yourself (seat 0) against 2 CharacterAI opponents. Ron is always
+auto-declared; every other decision (discard/riichi, pon, daiminkan, ankan, kakan, kita)
+is yours.
+
+**Browser GUI** (real mahjong tile art, click-to-discard):
+
+```bash
+npm run play:gui           # random seed
+npm run play:gui my-seed   # fixed seed, for a reproducible hand
+```
+
+Then open the printed `http://localhost:3000` URL in a browser.
+
+**Terminal CLI** (text-based, same rules/decisions as the GUI):
+
+```bash
+npm run play           # random seed
+npm run play my-seed   # fixed seed
+```
+
+Both are one-hand-per-process (restart to play another hand) and share the same
+underlying decision engine, so anything legal in one is legal in the other.
+
 ### Direct 3-player CharacterAI battle
 
 Seat any 3 characterIds at the same table against each other instead:

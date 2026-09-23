@@ -208,4 +208,27 @@ describe("PlayerView information boundary", () => {
 
     expect(view.opponents[0]!.discards).toEqual(["z3"]);
   });
+
+  it("own discards mirror the opponent-discards convention (visible, excludes called-away tiles)", () => {
+    const hands = [new Hand(), new Hand()];
+    hands[0]!.dealIn([tile("p1", 1)]);
+    hands[0]!.discards.push({ tile: tile("m3", 10), calledAway: false, isRiichiDeclaration: false, tsumogiri: false });
+    hands[0]!.discards.push({ tile: tile("m4", 11), calledAway: true, isRiichiDeclaration: false, tsumogiri: false });
+    hands[1]!.dealIn([tile("s5", 5)]);
+
+    const view = buildPlayerView({
+      seat: 0,
+      hands,
+      doraIndicators: [],
+      scores: [35000, 35000],
+      dealerSeat: 0,
+      roundWind: 1,
+      roundHandNumber: 1,
+      honba: 0,
+      kyotaku: 0,
+      wallRemainingLive: 50,
+    });
+
+    expect(view.discards).toEqual(["m3"]);
+  });
 });

@@ -11,7 +11,9 @@
     "sim:yonma": "tsx src/sim/yonmaCharacterSim.ts",
     "sim:ari-ab": "tsx src/sim/ariSpecialLogicAB.ts",
     "analyze:ari": "tsx src/sim/ariDiagnosticStats.ts",
-    "validate": "tsx src/sim/validationHarness.ts"
+    "validate": "tsx src/sim/validationHarness.ts",
+    "play": "tsx src/cli/humanPlayCli.ts",
+    "play:gui": "tsx src/gui/server.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

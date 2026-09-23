@@ -24,6 +24,10 @@ export interface PlayerView {
   concealedTiles: TileRef[];
   melds: MeldSnapshot[];
   kitaTiles: TileRef[];
+  /** Own discards only, excluding any that were called away - same convention as
+   *  PlayerViewOpponent.discards. Additive field (GUI river rendering needs this;
+   *  the CLI driver does not use it). */
+  discards: TileKind[];
   riichi: boolean;
   opponents: PlayerViewOpponent[];
   doraIndicators: TileRef[];
@@ -67,6 +71,7 @@ export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
     concealedTiles: own.concealed.map(tileToRef),
     melds: own.melds.map(meldToSnapshot),
     kitaTiles: own.kitaTiles.map(tileToRef),
+    discards: own.discards.filter((d) => !d.calledAway).map((d) => d.tile.kind),
     riichi: own.riichi,
     opponents,
     doraIndicators: doraIndicators.map(tileToRef),

@@ -1,0 +1,345 @@
+:root {
+  --tile-w: 44px;
+  --tile-h: 59px;
+  --tile-w-small: 30px;
+  --tile-h-small: 40px;
+  color-scheme: light dark;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: system-ui, "Malgun Gothic", sans-serif;
+  background: #1e5631;
+  color: #f0f0f0;
+  margin: 0;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+/* !important: a utility class meant to always win, regardless of another class's own
+ * `display` (e.g. `.overlay { display: flex }` on the same element - source order alone
+ * would let that win over plain `.hidden` at equal specificity). */
+.hidden {
+  display: none !important;
+}
+
+/* --- Table (the whole green area is the table, not a stack of cards) --- */
+
+#table {
+  position: relative;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto auto auto auto;
+  /* Each named area must form a single rectangle (CSS Grid requirement) - opp1/opp2 are
+   * therefore a plain 1-column-wide rectangle each, with the row-1/col-2 cell left
+   * unnamed ("."; empty space above the center panel) rather than folded into opp1. */
+  grid-template-areas:
+    "opp1 .      opp2"
+    "opp1 center opp2"
+    "myriver myriver myriver"
+    "myseat myseat myseat";
+  row-gap: 10px;
+  column-gap: 8px;
+  align-items: start;
+}
+
+.seat-header {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 5px;
+  padding: 3px 9px;
+  width: fit-content;
+}
+
+.seat-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.seat-score {
+  font-size: 13px;
+  opacity: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+
+.riichi-marker {
+  color: #ffd54a;
+  font-weight: bold;
+  font-size: 12px;
+}
+
+.opponent-seat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.seat-top-left { grid-area: opp1; align-items: flex-start; }
+.seat-top-right { grid-area: opp2; align-items: flex-end; }
+
+.opponent-melds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+#center-info {
+  grid-area: center;
+  justify-self: center;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  min-width: 140px;
+}
+
+#center-info .round-line {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+#center-info .score-line {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.my-river {
+  grid-area: myriver;
+  justify-self: center;
+}
+
+/* --- Tiles --- */
+
+.tile-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px;
+  min-height: calc(var(--tile-h) + 6px);
+}
+
+.tile-row.small {
+  min-height: calc(var(--tile-h-small) + 4px);
+}
+
+.tile-img {
+  width: var(--tile-w);
+  height: var(--tile-h);
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  background: #fff;
+  cursor: default;
+  transition: transform 0.08s ease;
+}
+
+.tile-img.small {
+  width: var(--tile-w-small);
+  height: var(--tile-h-small);
+}
+
+.tile-img.clickable {
+  cursor: pointer;
+}
+
+.tile-img.clickable:hover {
+  transform: translateY(-6px);
+}
+
+.tile-img.riichi-legal {
+  outline: 3px solid #ffd54a;
+  outline-offset: 1px;
+}
+
+.suit-gap {
+  width: 14px;
+  flex: 0 0 auto;
+}
+
+.drawn-gap {
+  width: 20px;
+  flex: 0 0 auto;
+  border-left: 1px dashed rgba(255, 255, 255, 0.5);
+}
+
+.river {
+  display: grid;
+  grid-template-columns: repeat(6, var(--tile-w-small));
+  gap: 3px;
+}
+
+.river img {
+  width: var(--tile-w-small);
+  height: var(--tile-h-small);
+  border-radius: 3px;
+  background: #fff;
+}
+
+.meld-group {
+  display: inline-flex;
+  gap: 1px;
+  margin-right: 8px;
+  padding: 2px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.meld-group.meld-concealed {
+  outline: 1px dashed rgba(255, 255, 255, 0.4);
+}
+
+.meld-group img {
+  width: var(--tile-w-small);
+  height: var(--tile-h-small);
+}
+
+.meld-label {
+  font-size: 10px;
+  opacity: 0.8;
+  margin-right: 4px;
+  align-self: center;
+}
+
+/* --- My seat (fixed at the bottom) --- */
+
+.seat-bottom {
+  grid-area: myseat;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* --- Action bar: a thin strip, not a big panel --- */
+
+#action-bar {
+  display: flex;
+  gap: 8px;
+  min-height: 20px;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+#action-bar button {
+  font-size: 14px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  background: #f0f0f0;
+}
+
+#action-bar button:hover {
+  background: #fff;
+}
+
+.section-label {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+/* --- Hand-end overlay: sits over the table, doesn't replace it --- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.overlay-panel {
+  background: #24402c;
+  border-radius: 10px;
+  padding: 22px 28px;
+  max-width: 520px;
+  width: 90%;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.overlay-panel h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.overlay-panel .result-headline {
+  font-size: 15px;
+  margin-bottom: 12px;
+  opacity: 0.9;
+}
+
+.overlay-panel .win-tile-row {
+  margin: 8px 0;
+}
+
+.overlay-panel .yaku-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.overlay-panel .yaku-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.overlay-panel .score-changes {
+  margin-top: 14px;
+  font-size: 13px;
+}
+
+.overlay-panel .score-changes .row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.overlay-panel .delta-pos { color: #7fe08a; }
+.overlay-panel .delta-neg { color: #ff8a80; }
+
+.overlay-panel .next-hand {
+  margin-top: 14px;
+  font-weight: 600;
+}
+
+.debug-toggle {
+  margin-top: 14px;
+  font-size: 11px;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.debug-json {
+  white-space: pre-wrap;
+  font-size: 10px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 6px;
+  border-radius: 4px;
+  margin-top: 6px;
+}

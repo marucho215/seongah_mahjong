@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gui",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "src/gui/server.ts", "gui-smoke-1"],
+      "port": 3000
+    }
+  ]
+}
