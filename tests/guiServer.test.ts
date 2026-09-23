@@ -67,6 +67,20 @@ describe("GUI HTTP/SSE server (createGuiServer)", () => {
     expect(svgText).toContain("<svg");
   });
 
+  it("marks the frequently edited frontend files no-store, but not the tile assets", async () => {
+    const { baseUrl, close } = await startServer(newHumanGame("gui-http-cache"));
+    cleanup = close;
+    for (const path of ["/", "/index.html", "/app.js", "/style.css"]) {
+      const res = await fetch(`${baseUrl}${path}`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("cache-control"), path).toBe("no-store");
+      await res.arrayBuffer();
+    }
+    const tile = await fetch(`${baseUrl}/assets/mahjong/regular/Man1.svg`);
+    expect(tile.headers.get("cache-control")).toBeNull();
+    await tile.arrayBuffer();
+  });
+
   it("rejects path traversal outside the public directory", async () => {
     const { baseUrl, close } = await startServer(newHumanGame("gui-http-traversal"));
     cleanup = close;

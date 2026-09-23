@@ -703,7 +703,10 @@ function renderScoreChanges(before, after, mySeat) {
 function nextHandLine(result) {
   if (!result) return null;
   const line = el("div", "next-hand");
-  line.textContent = `다음: ${ROUND_WIND_KO[result.nextRoundWind] ?? result.nextRoundWind}${result.nextRoundHandNumber}국`;
+  // Same wind and hand number as this hand = the dealer stays (연장): only the honba grows.
+  const repeats = result.nextRoundWind === result.roundWind && result.nextRoundHandNumber === result.roundHandNumber;
+  const round = `${ROUND_WIND_KO[result.nextRoundWind] ?? result.nextRoundWind}${result.nextRoundHandNumber}국`;
+  line.textContent = `다음: ${round} ${result.honbaAfter}본장${repeats ? " (친 연장)" : ""}`;
   return line;
 }
 
@@ -827,7 +830,7 @@ function renderHandEnd(handEndEvent, mySeat) {
 const GAME_END_REASON_KO = {
   length: "정규 국수 종료",
   extension_end: "연장 종료",
-  tobi: "파산 (트비) 종료",
+  tobi: "파산 (토비) 종료",
 };
 
 function renderGameEndExtra(gameEndEvent, mySeat) {

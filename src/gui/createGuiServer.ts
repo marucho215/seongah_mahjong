@@ -19,6 +19,10 @@ const MIME_TYPES: Record<string, string> = {
   ".md": "text/plain; charset=utf-8",
 };
 
+/** The frontend files that change constantly during development are never cached, so a normal
+ *  reload always shows the current UI. Tile SVGs and other static assets are left cacheable. */
+const NO_STORE_FILES = new Set(["/index.html", "/app.js", "/style.css"]);
+
 export interface GuiServerHandle {
   server: Server;
   session: GuiSession;
@@ -105,7 +109,9 @@ export function createGuiServer(game: GameState): GuiServerHandle {
       readFile(filePath)
         .then((data) => {
           const contentType = MIME_TYPES[extname(filePath)] ?? "application/octet-stream";
-          res.writeHead(200, { "Content-Type": contentType }).end(data);
+          const headers: Record<string, string> = { "Content-Type": contentType };
+          if (NO_STORE_FILES.has(relative)) headers["Cache-Control"] = "no-store";
+          res.writeHead(200, headers).end(data);
         })
         .catch(() => res.writeHead(404).end("Not found"));
       return;
