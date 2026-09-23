@@ -4,6 +4,7 @@ import type { MeldSnapshot, TileRef } from "./GameLog.js";
 import { tileToRef } from "../yaku/doraBreakdown.js";
 import { meldToSnapshot } from "../yaku/winSnapshot.js";
 import { NO_FURITEN, type FuritenSnapshot } from "../actions/furiten.js";
+import { seatDistance } from "./seats.js";
 
 /** Position, within the visible river (`discards`, called-away tiles excluded), of the tile
  *  to draw sideways because it declared riichi - null when no riichi declaration. If the
@@ -50,6 +51,9 @@ export interface PlayerView {
   /** See riichiDiscardIndexOf. */
   riichiDiscardIndex: number | null;
   riichi: boolean;
+  /** Seat wind of every seat this hand, indexed by seat: 1 East, 2 South, 3 West, 4 North -
+   *  the same relation to the dealer the scorer uses. */
+  seatWinds: number[];
   /** This seat's own furiten state by cause (see FuritenSnapshot). Never another seat's. */
   furiten: FuritenSnapshot;
   opponents: PlayerViewOpponent[];
@@ -101,6 +105,7 @@ export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
     discards: own.discards.filter((d) => !d.calledAway).map((d) => d.tile.kind),
     riichiDiscardIndex: riichiDiscardIndexOf(own),
     riichi: own.riichi,
+    seatWinds: hands.map((_, s) => seatDistance(options.dealerSeat, s, hands.length) + 1),
     furiten: furiten ?? NO_FURITEN,
     opponents,
     doraIndicators: doraIndicators.map(tileToRef),

@@ -273,6 +273,14 @@ describe("riichiDiscardIndexOf (which visible river tile is drawn sideways)", ()
     expect(view.opponents.map((o) => o.riichiDiscardIndex)).toEqual([0, null]);
   });
 
+  it("reports every seat's seat wind relative to the dealer", () => {
+    const hands = [new Hand(), new Hand(), new Hand()];
+    const base = { seat: 0, hands, doraIndicators: [], scores: [35000, 35000, 35000], roundWind: 1, roundHandNumber: 1, honba: 0, kyotaku: 0, wallRemainingLive: 50 };
+    expect(buildPlayerView({ ...base, dealerSeat: 0 }).seatWinds).toEqual([1, 2, 3]);
+    expect(buildPlayerView({ ...base, dealerSeat: 1 }).seatWinds).toEqual([3, 1, 2]);
+    expect(buildPlayerView({ ...base, dealerSeat: 2 }).seatWinds).toEqual([2, 3, 1]);
+  });
+
   it("exposes only the SIZE of an opponent's concealed hand, never its tiles", () => {
     const hands = [new Hand(), new Hand(), new Hand()];
     hands[1]!.dealIn([tile("s9", 90), tile("s8", 91), tile("z1", 92)]);

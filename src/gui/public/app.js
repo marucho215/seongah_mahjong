@@ -351,34 +351,54 @@ function placeRotated(wrapper, inner, deg) {
 function renderHandEdge(container, count, pos) {
   container.innerHTML = "";
   for (let i = 0; i < count; i++) {
-    const img = el("img", "back-tile" + (pos === "top" ? "" : " side"));
+    const img = el("img", "back-tile");
     img.src = BACK_ASSET;
     img.alt = "";
-    container.appendChild(img);
+    if (pos === "top") {
+      container.appendChild(img);
+    } else {
+      // side seats: the same tile art turned a quarter turn inside a box of swapped size
+      const box = el("div", "back-box");
+      box.appendChild(img);
+      container.appendChild(box);
+    }
   }
 }
 
+const WIND_KO = ["", "동", "남", "서", "북"];
+
+/** Three visually separate groups: [turn marker, outside the plate] | [seat wind + dealer badge]
+ *  | [name + score] (+ small notes). Turn and dealer are independent: either, both or neither. */
 function renderNameplate(plate, seat, mySeat, view, extras) {
   plate.innerHTML = "";
   plate.classList.toggle("is-turn", extras.turn);
-  if (extras.turn) {
-    const marker = el("span", "turn-marker");
-    marker.textContent = "▶";
-    plate.appendChild(marker);
-  }
+
+  const winds = el("span", "np-winds");
+  const wind = el("span", "wind-badge");
+  wind.textContent = WIND_KO[view.seatWinds[seat]] ?? "";
+  wind.title = "자풍";
+  winds.appendChild(wind);
   if (seat === view.dealerSeat) {
     const dealer = el("span", "dealer-badge");
     dealer.textContent = "친";
     dealer.title = "친(딜러)";
-    plate.appendChild(dealer);
+    winds.appendChild(dealer);
   }
+  plate.appendChild(winds);
+
+  const who = el("span", "np-who");
   const name = el("span", "np-name");
   name.textContent = displayNameForSeat(seat, mySeat);
   name.title = `Seat ${seat}`;
-  plate.appendChild(name);
+  who.appendChild(name);
+  const score = el("span", "np-score");
+  score.textContent = formatPoints(view.scores[seat] ?? 0);
+  who.appendChild(score);
+  plate.appendChild(who);
+
   if (extras.kitaCount > 0) {
     const kita = el("span", "np-note");
-    kita.textContent = `북 ×${extras.kitaCount}`;
+    kita.textContent = `북패 ×${extras.kitaCount}`;
     plate.appendChild(kita);
   }
   if (extras.furiten && extras.furiten.active) {
@@ -399,10 +419,15 @@ function renderCenter(view, n, turnSeat) {
   main.innerHTML = "";
   const round = el("div", "round-line");
   round.textContent = `${ROUND_WIND_KO[view.roundWind] ?? view.roundWind}${view.roundHandNumber}국`;
+  round.title = "장풍 · 국";
   main.appendChild(round);
-  const counts = el("div", "count-line");
-  counts.textContent = `본장 ${view.honba} · 공탁 ×${view.kyotaku}`;
-  main.appendChild(counts);
+  const chips = el("div", "chip-row");
+  for (const [label, value] of [["본장", view.honba], ["공탁", "×" + view.kyotaku]]) {
+    const chip = el("span", "chip");
+    chip.textContent = `${label} ${value}`;
+    chips.appendChild(chip);
+  }
+  main.appendChild(chips);
   const dora = el("div", "dora-row");
   const label = el("span", "section-label");
   label.textContent = "도라";

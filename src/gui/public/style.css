@@ -39,13 +39,14 @@ body {
   position: relative;
   flex: 1;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, auto) auto minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
-    ".    top   ."
-    "left board right"
-    ".    bottom .";
-  gap: 6px;
+    ".  .    top    .     ."
+    ". left board right ."
+    ".  .    bottom .     .";
+  column-gap: 8px;
+  row-gap: 6px;
   min-height: 0;
 }
 
@@ -98,13 +99,47 @@ body {
   text-align: center;
 }
 
-.nameplate.is-turn {
-  border-color: #ffd54a;
+/* Turn = the plate lights up (border + a small pointer outside it); dealer = a badge on the
+ * wind group. The two never share a spot. */
+.nameplate {
+  position: relative;
 }
 
+.nameplate.is-turn {
+  border-color: #ffd54a;
+  background: rgba(255, 213, 74, 0.12);
+}
+
+.nameplate.is-turn::before {
+  content: "\25B6";
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: #ffd54a;
+}
+
+.zone[data-pos="left"] .nameplate.is-turn::before, .zone[data-pos="right"] .nameplate.is-turn::before {
+  left: 50%;
+  top: -12px;
+  transform: translateX(-50%) rotate(90deg);
+}
+
+.np-winds { display: inline-flex; align-items: center; gap: 3px; }
+.np-who { display: inline-flex; align-items: baseline; gap: 6px; }
 .np-name { font-weight: 600; }
+.np-score { font-size: 12px; opacity: 0.9; font-variant-numeric: tabular-nums; }
 .np-note { font-size: 11px; opacity: 0.85; }
-.turn-marker { color: #ffd54a; font-size: 11px; }
+
+.wind-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #e9efe5;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 3px;
+  padding: 0 4px;
+}
 
 .dealer-badge {
   font-size: 11px;
@@ -152,16 +187,27 @@ body {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-.back-tile.side {
+.back-box {
+  position: relative;
   width: calc(var(--tile-h-small) * 0.75);
   height: calc(var(--tile-w-small) * 0.75);
-  object-fit: fill;
+}
+
+.back-box .back-tile {
+  position: absolute;
+  left: calc((var(--tile-h-small) - var(--tile-w-small)) * 0.375);
+  top: calc((var(--tile-w-small) - var(--tile-h-small)) * 0.375);
+  transform: rotate(90deg);
 }
 
 /* --- Board: the four rivers around a small central status panel --- */
 
 .board {
   grid-area: board;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.035);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   grid-template-rows: auto auto auto;
@@ -198,10 +244,10 @@ body {
   gap: 4px 10px;
   align-items: center;
   justify-items: center;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.22);
-  font-size: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.24);
+  font-size: 13px;
 }
 
 .center-main {
@@ -213,11 +259,12 @@ body {
   min-width: 96px;
 }
 
-.round-line { font-weight: 700; font-size: 15px; }
-.count-line { font-size: 11px; opacity: 0.9; }
-.dora-row { display: flex; align-items: center; gap: 4px; }
+.round-line { font-weight: 800; font-size: 22px; letter-spacing: 1px; line-height: 1.1; }
+.chip-row { display: flex; gap: 6px; }
+.chip { font-size: 12px; padding: 1px 7px; border-radius: 9px; background: rgba(255, 255, 255, 0.12); }
+.dora-row { display: flex; align-items: center; gap: 5px; margin-top: 2px; }
 
-.score-slot { font-variant-numeric: tabular-nums; font-size: 13px; padding: 0 4px; border-radius: 3px; }
+.score-slot { font-variant-numeric: tabular-nums; font-size: 14px; padding: 0 4px; border-radius: 3px; }
 .score-slot[data-pos="top"] { grid-area: s-top; }
 .score-slot[data-pos="left"] { grid-area: s-left; }
 .score-slot[data-pos="right"] { grid-area: s-right; }
