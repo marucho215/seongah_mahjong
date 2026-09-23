@@ -251,6 +251,15 @@ function renderMySeat(view, options) {
   document.getElementById("my-score").textContent = formatPoints(view.scores[view.seat] ?? 0);
   document.getElementById("my-riichi").classList.toggle("hidden", !view.riichi);
 
+  // Furiten is shown exactly as the engine reports it (PlayerView.furiten) - never derived here.
+  const furitenEl = document.getElementById("my-furiten");
+  furitenEl.classList.toggle("hidden", !view.furiten.active);
+  furitenEl.title = [
+    view.furiten.selfDiscard && "자신의 버림패에 대기패가 있음 (영구)",
+    view.furiten.temporary && "론을 패스함 (다음 자기 쯔모까지)",
+    view.furiten.riichi && "리치 중 론을 패스함 (이번 국 내내)",
+  ].filter(Boolean).join(" / ");
+
   const melds = document.getElementById("my-melds");
   melds.innerHTML = "";
   for (const m of view.melds) melds.appendChild(renderMeldGroup(m));
@@ -362,6 +371,43 @@ function renderCallRequest(request) {
   document.getElementById("action-bar").appendChild(label);
   addActionButton("예", () => sendResponse({ type: request.type, declare: true }));
   addActionButton("아니오", () => sendResponse({ type: request.type, declare: false }));
+}
+
+const RON_CONTEXT_KO = {
+  discard: "버림패",
+  riichi_discard: "리치 선언패",
+  kita: "뽑은 북",
+  chankan: "창깡",
+  kokushi_ankan: "국사무쌍 암깡",
+};
+
+function renderRonRequest(request) {
+  renderTable(request.view);
+  const drawnId = request.view.concealedTiles.length > 0
+    ? request.view.concealedTiles[request.view.concealedTiles.length - 1].id
+    : undefined;
+  renderMySeat(request.view, { drawnTileId: drawnId });
+
+  clearActionBar();
+  const bar = document.getElementById("action-bar");
+  const preview = request.preview;
+  const info = el("span", "ron-preview");
+  const tileName = koreanTileLabel(request.winningTile.kind, request.winningTile.red);
+  const from = displayNameForSeat(request.fromSeat, request.view.seat);
+  const score = preview.yakumanUnits > 0
+    ? (preview.yakumanUnits === 1 ? "역만" : `역만 x${preview.yakumanUnits}`)
+    : `${preview.han}판 ${preview.fu}부`;
+  info.appendChild(tileImg(request.winningTile, { small: true }));
+  const text = el("span");
+  text.textContent =
+    `론 가능! ${from}의 ${RON_CONTEXT_KO[request.context] ?? request.context} ${tileName} - ${score} ${formatPoints(preview.totalPoints)}점 (` +
+    preview.yaku.map((y) => `${translateYaku(y.name)} ${y.han}`).join(", ") + ")";
+  info.appendChild(text);
+  bar.appendChild(info);
+  const ronBtn = addActionButton("론", () => sendResponse({ type: "ron", declare: true }));
+  ronBtn.classList.add("ron-button");
+  const passBtn = addActionButton("패스", () => sendResponse({ type: "ron", declare: false }));
+  passBtn.title = "패스하면 후리텐이 됩니다";
 }
 
 // --- Hand-end result screen (human-readable overlay; raw JSON stays available only via
@@ -599,6 +645,7 @@ function handleMessage(msg) {
   const request = msg.request;
   lastKnownMySeat = request.view.seat;
   if (request.type === "discard") renderDiscardRequest(request);
+  else if (request.type === "ron") renderRonRequest(request);
   else renderCallRequest(request);
 }
 

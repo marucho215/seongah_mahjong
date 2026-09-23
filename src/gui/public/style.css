@@ -78,6 +78,25 @@ body {
   font-size: 12px;
 }
 
+.furiten-marker {
+  color: #ff8a80;
+  font-weight: bold;
+  font-size: 12px;
+  cursor: help;
+}
+
+.ron-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+#action-bar button.ron-button {
+  background: #ffd54a;
+  font-weight: bold;
+}
+
 .opponent-seat {
   display: flex;
   flex-direction: column;

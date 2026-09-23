@@ -1,5 +1,5 @@
 import type { GameState } from "../core/GameState.js";
-import type { CallDecisionRequest, DecisionRequest, DecisionResponse, DiscardDecisionRequest } from "../core/decisions.js";
+import type { CallDecisionRequest, DecisionRequest, DecisionResponse, DiscardDecisionRequest, RonDecisionRequest } from "../core/decisions.js";
 import type { PlayerView } from "../core/playerView.js";
 import type { TileRef, MeldSnapshot } from "../core/GameLog.js";
 import { parseKind } from "../core/tiles.js";
@@ -50,6 +50,10 @@ function renderView(io: CliIO, view: PlayerView): void {
   io.print(`Melds: ${view.melds.length > 0 ? view.melds.map(formatMeld).join(" ") : "(none)"}`);
   io.print(`Kita: ${view.kitaTiles.length > 0 ? view.kitaTiles.map(formatTileRef).join(" ") : "(none)"}`);
   io.print(`Riichi: ${view.riichi ? "yes" : "no"}`);
+  if (view.furiten.active) {
+    const causes = [view.furiten.selfDiscard && "own discard", view.furiten.temporary && "temporary", view.furiten.riichi && "riichi miss"].filter(Boolean);
+    io.print(`Furiten: yes (${causes.join(", ")}) - you cannot ron right now`);
+  }
   io.print(`--- Opponents ---`);
   for (const opponent of view.opponents) {
     io.print(
@@ -142,9 +146,37 @@ async function askDiscardDecision(request: DiscardDecisionRequest, io: CliIO): P
   }
 }
 
+const RON_CONTEXT_LABEL: Record<RonDecisionRequest["context"], string> = {
+  discard: "버림패",
+  riichi_discard: "리치 선언패",
+  kita: "북 뽑기",
+  chankan: "창깡",
+  kokushi_ankan: "국사무쌍 암깡",
+};
+
+async function askRonDecision(request: RonDecisionRequest, io: CliIO): Promise<DecisionResponse> {
+  const { preview } = request;
+  const tileName = formatTileRef(request.winningTile);
+  io.print(
+    `론 가능! seat ${request.fromSeat}의 ${RON_CONTEXT_LABEL[request.context]} ${tileName}` +
+      ` - ${preview.yakumanUnits > 0 ? `역만 x${preview.yakumanUnits}` : `${preview.han}판 ${preview.fu}부`}, ${preview.totalPoints}점`
+  );
+  io.print(`  역: ${preview.yaku.map((y) => `${y.name} ${y.han}`).join(", ")}`);
+  while (true) {
+    const declare = parseYesNo(await io.ask(`론 하시겠습니까? (패스하면 후리텐이 됩니다) [y/n] `));
+    if (declare === undefined) {
+      io.print(`Please answer "y" or "n".`);
+      continue;
+    }
+    return { type: "ron", declare };
+  }
+}
+
 async function resolveRequest(request: DecisionRequest, io: CliIO): Promise<DecisionResponse> {
   renderView(io, request.view);
-  return request.type === "discard" ? askDiscardDecision(request, io) : askCallDecision(request, io);
+  if (request.type === "discard") return askDiscardDecision(request, io);
+  if (request.type === "ron") return askRonDecision(request, io);
+  return askCallDecision(request, io);
 }
 
 /**

@@ -30,9 +30,10 @@ npm run sim -- --games 100 --save-replays
 
 ### Human play
 
-Play one sanma hand yourself (seat 0) against 2 CharacterAI opponents. Ron is always
-auto-declared; every other decision (discard/riichi, pon, daiminkan, ankan, kakan, kita)
-is yours.
+Play a sanma game yourself (seat 0) against 2 CharacterAI opponents. You decide every
+discard/riichi, pon, daiminkan, ankan, kakan, kita, and each ron / pass (passing a valid ron
+makes you furiten - temporary until your next draw, or for the rest of the hand in riichi).
+Tsumo is still auto-declared.
 
 **Browser GUI** (real mahjong tile art, click-to-discard):
 
@@ -50,8 +51,9 @@ npm run play           # random seed
 npm run play my-seed   # fixed seed
 ```
 
-Both are one-hand-per-process (restart to play another hand) and share the same
-underlying decision engine, so anything legal in one is legal in the other.
+The GUI plays the whole game in one browser session ("다음 국 시작" between hands, final
+standings at the end); the CLI plays one hand per run. Both share the same decision engine,
+so anything legal in one is legal in the other.
 
 ### Direct 3-player CharacterAI battle
 

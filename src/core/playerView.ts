@@ -3,6 +3,7 @@ import type { Tile, TileKind } from "./tiles.js";
 import type { MeldSnapshot, TileRef } from "./GameLog.js";
 import { tileToRef } from "../yaku/doraBreakdown.js";
 import { meldToSnapshot } from "../yaku/winSnapshot.js";
+import { NO_FURITEN, type FuritenSnapshot } from "../actions/furiten.js";
 
 export interface PlayerViewOpponent {
   seat: number;
@@ -29,6 +30,8 @@ export interface PlayerView {
    *  the CLI driver does not use it). */
   discards: TileKind[];
   riichi: boolean;
+  /** This seat's own furiten state by cause (see FuritenSnapshot). Never another seat's. */
+  furiten: FuritenSnapshot;
   opponents: PlayerViewOpponent[];
   doraIndicators: TileRef[];
   scores: number[];
@@ -42,6 +45,8 @@ export interface PlayerView {
 
 export interface BuildPlayerViewOptions {
   seat: number;
+  /** Defaults to "not furiten" when omitted. */
+  furiten?: FuritenSnapshot;
   hands: readonly Hand[];
   doraIndicators: readonly Tile[];
   scores: readonly number[];
@@ -54,7 +59,7 @@ export interface BuildPlayerViewOptions {
 }
 
 export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
-  const { seat, hands, doraIndicators, scores, ...rest } = options;
+  const { seat, hands, doraIndicators, scores, furiten, ...rest } = options;
   const own = hands[seat]!;
   const opponents: PlayerViewOpponent[] = hands
     .map((hand, i) => ({ hand, seat: i }))
@@ -73,6 +78,7 @@ export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
     kitaTiles: own.kitaTiles.map(tileToRef),
     discards: own.discards.filter((d) => !d.calledAway).map((d) => d.tile.kind),
     riichi: own.riichi,
+    furiten: furiten ?? NO_FURITEN,
     opponents,
     doraIndicators: doraIndicators.map(tileToRef),
     scores: [...scores],

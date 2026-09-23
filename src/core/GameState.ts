@@ -9,7 +9,7 @@ import { canAnkan, applyAnkan, canPon, applyPon, canDaiminkan, applyDaiminkan, c
 import { applyKita, canKita, canRiichiKita, type KitaAction } from "../actions/kita.js";
 import { canRiichiAnkan } from "../actions/riichiAnkan.js";
 import { canDeclareRiichi, riichiDiscardCandidates } from "../actions/riichi.js";
-import type { CallDecisionRequest, CallDecisionResponse, DecisionRequest, DecisionResponse, DiscardDecisionRequest, DiscardDecisionResponse } from "./decisions.js";
+import type { CallDecisionRequest, CallDecisionResponse, DecisionRequest, DecisionResponse, DiscardDecisionRequest, DiscardDecisionResponse, RonDecisionContext, RonDecisionRequest, RonDecisionResponse } from "./decisions.js";
 import { buildPlayerView, type PlayerView } from "./playerView.js";
 import { isKokushiAnkanRon } from "../actions/kokushiAnkan.js";
 import {
@@ -104,6 +104,18 @@ function seatWindFor(player: number, dealer: number, playerCount: number): numbe
  *  that window and lets the hand continue commits the interruption/cancellation. */
 export function resolveRonBeforeInterruption<T>(offerRon: () => T[], commitInterruption: () => void): T[] {
   const winners = offerRon();
+  if (winners.length === 0) commitInterruption();
+  return winners;
+}
+
+/** Same contract as resolveRonBeforeInterruption, for an offer that may yield a human ron
+ *  decision. Kept separate so the synchronous exported helper's signature (and its direct
+ *  callers/tests) never changes. */
+export function* resolveRonBeforeInterruptionInteractive<T>(
+  offerRon: () => Generator<DecisionRequest, T[], DecisionResponse>,
+  commitInterruption: () => void
+): Generator<DecisionRequest, T[], DecisionResponse> {
+  const winners = yield* offerRon();
   if (winners.length === 0) commitInterruption();
   return winners;
 }
@@ -496,18 +508,29 @@ export class GameState {
       }
     };
 
-    /** Offers `tile` (from `fromSeat`) to the other two players for ron, in turn order.
-     *  Any player whose shape matches but who has no yaku becomes temporarily furiten -
-     *  this is the "atozuke" case where a hand-completing tile legally can't be ronned. */
-    const offerRon = (
+    const ronPlayerCount = this.rules.playerCount;
+    const ronDoubleRonMode = this.rules.doubleRonMode;
+
+    /** Offers `tile` (from `fromSeat`) to the other players for ron, in turn order (closest
+     *  to the discarder first), one candidate at a time.
+     *  - Any player whose shape matches but who has no yaku becomes temporarily furiten -
+     *    the "atozuke" case where a hand-completing tile legally can't be ronned.
+     *  - A furiten seat is skipped entirely (never asked, never a new miss).
+     *  - A non-human seat with a valid ron always takes it (unchanged auto-ron). A human seat
+     *    is asked; passing is a genuine missed chance (onMissedRonChance).
+     *  - "atamahane": the first accepted ron ends the offer, so later candidates are never
+     *    evaluated - being head-bumped is not a pass and grants no furiten. "all": every
+     *    candidate is handled independently. With no human seat this never yields. */
+    function* offerRon(
       fromSeat: number,
       tile: Tile,
       isHoutei: boolean,
       isChankan: boolean,
+      context: RonDecisionContext,
       restriction: "any" | "kokushi-ankan" = "any"
-    ): { player: number; result: FullWinResult }[] => {
-      const order = seatsInTurnOrder(fromSeat, this.rules.playerCount);
-      const eligible: { player: number; result: FullWinResult }[] = [];
+    ): Generator<DecisionRequest, { player: number; result: FullWinResult }[], DecisionResponse> {
+      const order = seatsInTurnOrder(fromSeat, ronPlayerCount);
+      const accepted: { player: number; result: FullWinResult }[] = [];
       for (const p of order) {
         const otherHand = hands[p]!;
         const winningTiles = cachedWinningTiles[p]!;
@@ -516,14 +539,40 @@ export class GameState {
         if (furiten[p]!.isFuriten(winningTiles, ownDiscardKinds)) continue;
         const result = tryRon(p, tile, fromSeat, isHoutei, isChankan);
         if (result && (restriction === "any" || isKokushiAnkanRon(result))) {
-          eligible.push({ player: p, result });
+          let takesRon = true;
+          if (isHumanSeat(p)) {
+            const response = (yield {
+              type: "ron",
+              seat: p,
+              fromSeat,
+              winningTile: tileToRef(tile),
+              context,
+              preview: {
+                yaku: result.yaku.map((y) => ({ name: y.name, han: y.han })),
+                han: result.han,
+                fu: result.fu,
+                yakumanUnits: result.yakumanUnits,
+                totalPoints: result.score.totalPoints,
+              },
+              view: buildViewFor(p),
+            } satisfies RonDecisionRequest) as RonDecisionResponse;
+            if (response.type !== "ron") {
+              throw new Error(`GameState: expected a "ron" response for seat ${p}, got "${response.type}"`);
+            }
+            takesRon = response.declare === true;
+            if (!takesRon) furiten[p]!.onMissedRonChance();
+          }
+          if (takesRon) {
+            accepted.push({ player: p, result });
+            if (ronDoubleRonMode === "atamahane") break;
+          }
         } else if (!result && restriction === "any") {
           // shape-complete, no legal yaku (atozuke) - this counts as a missed ron chance
           furiten[p]!.onMissedRonChance();
         }
       }
-      return resolveRonWinners(eligible, this.rules.doubleRonMode);
-    };
+      return resolveRonWinners(accepted, ronDoubleRonMode);
+    }
 
     const finishHandWithWin = (winners: { player: number; result: FullWinResult; ronFrom?: number }[]) => {
       const scoresBeforeSettlement = [...this.scores];
@@ -867,6 +916,10 @@ export class GameState {
     const buildViewFor = (seat: number): PlayerView =>
       buildPlayerView({
         seat,
+        furiten: furiten[seat]!.snapshot(
+          cachedWinningTiles[seat]!,
+          hands[seat]!.discards.map((d) => d.tile.kind)
+        ),
         hands,
         doraIndicators: wall.doraIndicators(),
         scores: this.scores,
@@ -1186,7 +1239,7 @@ export class GameState {
       discardedTile: Tile,
       isHoutei: boolean
     ): Generator<DecisionRequest, DiscardResponseFlow, DecisionResponse> {
-      const winners = offerRon(discarderSeat, discardedTile, isHoutei, false);
+      const winners = yield* offerRon(discarderSeat, discardedTile, isHoutei, false, "discard");
       const abortiveReason = postDiscardAbortiveDrawReason(
         hands,
         tableInterrupted,
@@ -1256,6 +1309,8 @@ export class GameState {
       ) {
         queuedRiichiKitaAction = yield* decideKita(current, hand, this.rules.kitaEnabled, extractedThisTurn, isHumanSeat(current));
       }
+      // TODO(milestone 3): tsumo is still auto-declared for every seat, human included -
+      // a human "tsumo / skip" decision is deliberately out of Milestone 2's scope.
       const tsumoResult = tryEvaluate(current, drawnTile, true, undefined, isRinshan, isHaitei, false);
       if (!isRinshan) drawCountByPlayer[current] = drawCountByPlayer[current]! + 1;
       if (tsumoResult && queuedRiichiKitaAction !== "kita") {
@@ -1292,8 +1347,8 @@ export class GameState {
         this.log.push({ type: "kita", player: current, tile: "z4" });
 
         // the extracted north tile can be ronned (not chankan) by a player waiting on it
-        const northWinners = resolveRonBeforeInterruption(
-          () => offerRon(current, northTile, false, false),
+        const northWinners = yield* resolveRonBeforeInterruptionInteractive(
+          () => offerRon(current, northTile, false, false, "kita"),
           () => {
             tableInterrupted = true;
             ippatsuEligible.fill(false);
@@ -1345,8 +1400,8 @@ export class GameState {
           this.log.push({ type: "call", call: "kan_added", player: current, kind: shouminkanKind });
 
           // chankan: the added tile can be robbed by ron before the kan completes
-          const chankanWinners = resolveRonBeforeInterruption(
-            () => offerRon(current, addedTile, false, true),
+          const chankanWinners = yield* resolveRonBeforeInterruptionInteractive(
+            () => offerRon(current, addedTile, false, true, "chankan"),
             () => {
               tableInterrupted = true;
               ippatsuEligible.fill(false);
@@ -1377,8 +1432,8 @@ export class GameState {
       const ankanDeclared = ankanKind ? yield* decideAnkan(current, hand, ankanKind, isHumanSeat(current)) : false;
       if (ankanKind && ankanDeclared && wall.canDrawRinshan(this.rules.maxKans)) {
         const robbedTile = hand.tilesOfKind(ankanKind)[0]!;
-        const kokushiWinners = resolveRonBeforeInterruption(
-          () => offerRon(current, robbedTile, false, true, "kokushi-ankan"),
+        const kokushiWinners = yield* resolveRonBeforeInterruptionInteractive(
+          () => offerRon(current, robbedTile, false, true, "kokushi_ankan", "kokushi-ankan"),
           () => {
             tableInterrupted = true;
             ippatsuEligible.fill(false);
@@ -1447,7 +1502,7 @@ export class GameState {
         // where the hand could otherwise end (e.g. a daiminkan leading into an exhaustive
         // draw) without ever having been committed.
         const wasFirstGoAround = hand.discards.length === 1 && !tableInterrupted;
-        const ronWinners = offerRon(current, discardedTile, isHoutei, false);
+        const ronWinners = yield* offerRon(current, discardedTile, isHoutei, false, "riichi_discard");
         const abortiveReason = postDiscardAbortiveDrawReason(
           hands,
           tableInterrupted,

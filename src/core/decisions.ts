@@ -1,5 +1,6 @@
 import type { TileKind } from "./tiles.js";
 import type { PlayerView } from "./playerView.js";
+import type { TileRef } from "./GameLog.js";
 
 /** A normal turn discard, optionally combined with declaring riichi on it - riichi is a
  *  property of a specific discard, not a separate decision, so the two are answered
@@ -42,5 +43,35 @@ export interface CallDecisionResponse {
   declare: boolean;
 }
 
-export type DecisionRequest = DiscardDecisionRequest | CallDecisionRequest;
-export type DecisionResponse = DiscardDecisionResponse | CallDecisionResponse;
+/** Which situation produced this ron chance - the same physical rule (a completed hand off
+ *  someone else's tile) but different circumstances a UI may want to word differently. */
+export type RonDecisionContext = "discard" | "riichi_discard" | "kita" | "chankan" | "kokushi_ankan";
+
+/** A valid ron chance (shape complete, at least one yaku, not furiten) offered to a human seat.
+ *  `preview` is the engine's own already-computed scoring of that exact ron (the same result
+ *  finishHandWithWin would settle) - a UI must display it, never recompute it. Passing
+ *  (`declare: false`) is a genuine missed ron chance and applies temporary/riichi furiten
+ *  exactly as FuritenTracker.onMissedRonChance() always has. Never asked of a furiten seat. */
+export interface RonDecisionRequest {
+  type: "ron";
+  seat: number;
+  fromSeat: number;
+  winningTile: TileRef;
+  context: RonDecisionContext;
+  preview: {
+    yaku: { name: string; han: number }[];
+    han: number;
+    fu: number;
+    yakumanUnits: number;
+    totalPoints: number;
+  };
+  view: PlayerView;
+}
+
+export interface RonDecisionResponse {
+  type: "ron";
+  declare: boolean;
+}
+
+export type DecisionRequest = DiscardDecisionRequest | CallDecisionRequest | RonDecisionRequest;
+export type DecisionResponse = DiscardDecisionResponse | CallDecisionResponse | RonDecisionResponse;
