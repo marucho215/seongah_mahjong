@@ -6,24 +6,9 @@
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <div id="table">
-    <div id="opponent-1" class="seat opponent-seat seat-top-left"></div>
-    <div id="opponent-2" class="seat opponent-seat seat-top-right"></div>
-    <div id="center-info" class="center"></div>
-    <div id="my-river" class="river my-river"></div>
-
-    <div id="my-seat" class="seat seat-bottom">
-      <div class="seat-header">
-        <span id="my-name" class="seat-name"></span>
-        <span id="my-score" class="seat-score"></span>
-        <span id="my-riichi" class="riichi-marker hidden">리치</span>
-        <span id="my-furiten" class="furiten-marker hidden">후리텐</span>
-      </div>
-      <div id="my-melds" class="tile-row small"></div>
-      <div id="my-kita" class="tile-row small"></div>
-      <div id="my-hand" class="tile-row"></div>
-    </div>
-  </div>
+  <!-- One table, four visual positions (bottom/right/top/left); built by app.js so 3- and
+       4-player games share the same DOM and only hide the unused position. -->
+  <div id="table" data-players="3"></div>
 
   <div id="action-bar"></div>
 

@@ -166,105 +166,309 @@ function displayNameForSeat(seat, mySeat) {
 }
 
 // --- Rendering: table ---
+//
+// The whole page is one table with four VISUAL positions (bottom/right/top/left). Seats are
+// mapped onto positions relative to the local seat, so the same DOM serves 3 and 4 players:
+// positions nobody sits in are simply hidden. Nothing here is specific to seat numbers.
 
-function renderCenterInfo(view) {
-  const c = document.getElementById("center-info");
-  c.innerHTML = "";
+const POSITIONS = ["bottom", "right", "top", "left"];
+const RIVER_TURN_DEG = { bottom: 0, right: -90, top: 180, left: 90 };
 
-  const round = el("div", "round-line");
-  round.textContent = `${ROUND_WIND_KO[view.roundWind] ?? view.roundWind}${view.roundHandNumber}국 · ${view.honba}본장`;
-  c.appendChild(round);
-
-  const pot = el("div", "section-label");
-  pot.textContent = `공탁 ${view.kyotaku}개`;
-  c.appendChild(pot);
-
-  const dora = el("div", "tile-row small");
-  const label = el("span", "section-label");
-  label.textContent = "도라";
-  dora.appendChild(label);
-  for (const t of view.doraIndicators) dora.appendChild(tileImg(t, { small: true }));
-  c.appendChild(dora);
+/** Visual position of `seat` for the local player `mySeat` among `n` players: me at the
+ *  bottom, the next seat in turn order on my right, the previous on my left, and (4 players
+ *  only) the seat two away across the table. */
+function positionOf(seat, mySeat, n) {
+  const offset = (seat - mySeat + n) % n;
+  if (offset === 0) return "bottom";
+  if (offset === 1) return "right";
+  if (offset === n - 1) return "left";
+  return "top";
 }
 
-function renderMeldGroup(meld) {
+let tableBuilt = false;
+
+function buildTableSkeleton() {
+  if (tableBuilt) return;
+  tableBuilt = true;
+  const table = document.getElementById("table");
+
+  for (const pos of ["top", "left", "right", "bottom"]) {
+    const zone = el("div", "zone");
+    zone.dataset.pos = pos;
+    zone.id = "zone-" + pos;
+    const info = el("div", "zone-info");
+    info.appendChild(el("div", "nameplate"));
+    info.appendChild(el("div", "melds"));
+    if (pos === "bottom") info.appendChild(el("div", "kita"));
+    if (pos === "bottom") {
+      zone.appendChild(info);
+      zone.appendChild(el("div", "tile-row hand"));
+    } else {
+      zone.appendChild(el("div", "hand-edge"));
+      zone.appendChild(info);
+    }
+    table.appendChild(zone);
+  }
+
+  const board = el("div", "board");
+  board.id = "board";
+  for (const pos of POSITIONS) {
+    const cell = el("div", "river-cell");
+    cell.dataset.pos = pos;
+    cell.appendChild(el("div", "river-wrap"));
+    cell.appendChild(el("div", "stick"));
+    board.appendChild(cell);
+  }
+  const center = el("div", "center");
+  center.id = "center-info";
+  center.appendChild(el("div", "center-main"));
+  for (const pos of POSITIONS) {
+    const slot = el("div", "score-slot");
+    slot.dataset.pos = pos;
+    center.appendChild(slot);
+  }
+  board.appendChild(center);
+  table.appendChild(board);
+}
+
+function zoneEl(pos) {
+  return document.getElementById("zone-" + pos);
+}
+
+function riverCellEl(pos) {
+  return document.querySelector(`.river-cell[data-pos="${pos}"]`);
+}
+
+function scoreSlotEl(pos) {
+  return document.querySelector(`.score-slot[data-pos="${pos}"]`);
+}
+
+const BACK_ASSET = "/assets/mahjong/regular/Back.svg";
+
+/** A small tile drawn sideways (riichi declaration tile / called tile in a meld). */
+function rotatedTileBox(tileRef) {
+  const box = el("div", "rot-box");
+  box.appendChild(tileImg(tileRef, { small: true }));
+  return box;
+}
+
+function backTileImg() {
+  const img = el("img", "tile-img small");
+  img.src = BACK_ASSET;
+  img.alt = "뒷면";
+  return img;
+}
+
+/** Index (within a meld's tiles) of the sideways called tile, from where it was taken: the
+ *  tile sits on the side of the player it came from - right (next seat), across (middle), or
+ *  left (previous seat) - computed from the relative seat offset, never from seat numbers. */
+function calledTileIndex(ownerSeat, fromSeat, playerCount, tileCount) {
+  const offset = (fromSeat - ownerSeat + playerCount) % playerCount;
+  if (offset === 1) return tileCount - 1;
+  if (offset === playerCount - 1) return 0;
+  return 1; // across (4-player only)
+}
+
+/** Meld as it sits on a real table: the called tile sideways on the side it came from, a
+ *  kakan's added tile stacked on it, and a closed kan (ankan) with its outer two tiles face
+ *  down. Display only - built from MeldSnapshot.type/tiles/fromPlayer. */
+function renderMeldGroup(meld, ownerSeat, playerCount) {
   const group = el("div", "meld-group" + (meld.type === "ankan" ? " meld-concealed" : ""));
   const label = el("span", "meld-label");
   label.textContent = REPLAY_MELD_LABEL[meld.type] ?? meld.type;
   group.appendChild(label);
-  for (const t of meld.tiles) group.appendChild(tileImg(t, { small: true }));
+
+  if (meld.type === "ankan") {
+    meld.tiles.forEach((t, i) => group.appendChild(i === 0 || i === meld.tiles.length - 1 ? backTileImg() : tileImg(t, { small: true })));
+    return group;
+  }
+  if (meld.fromPlayer === undefined || ownerSeat === undefined) {
+    for (const t of meld.tiles) group.appendChild(tileImg(t, { small: true }));
+    return group;
+  }
+
+  if (meld.type === "kakan") {
+    // 3 slots; the called slot holds the original called tile with the added tile stacked on it.
+    const slotCount = meld.tiles.length - 1;
+    const calledSlot = calledTileIndex(ownerSeat, meld.fromPlayer, playerCount, slotCount);
+    const upright = meld.tiles.slice(2);
+    let u = 0;
+    for (let slot = 0; slot < slotCount; slot++) {
+      if (slot === calledSlot) {
+        const stack = el("div", "rot-stack");
+        stack.appendChild(rotatedTileBox(meld.tiles[0]));
+        stack.appendChild(rotatedTileBox(meld.tiles[1]));
+        group.appendChild(stack);
+      } else {
+        group.appendChild(tileImg(upright[u++], { small: true }));
+      }
+    }
+    return group;
+  }
+
+  const calledIdx = calledTileIndex(ownerSeat, meld.fromPlayer, playerCount, meld.tiles.length);
+  meld.tiles.forEach((t, i) => group.appendChild(i === calledIdx ? rotatedTileBox(t) : tileImg(t, { small: true })));
   return group;
 }
 
-function renderOpponent(container, opponent, view) {
-  container.innerHTML = "";
-  const header = el("div", "seat-header");
-  const name = el("span", "seat-name");
-  name.textContent = displayNameForSeat(opponent.seat, view.seat);
-  header.appendChild(name);
-  const score = el("span", "seat-score");
-  score.textContent = formatPoints(view.scores[opponent.seat] ?? 0);
-  header.appendChild(score);
-  if (opponent.riichi) {
-    const marker = el("span", "riichi-marker");
-    marker.textContent = "리치";
-    header.appendChild(marker);
-  }
-  if (opponent.kitaCount > 0) {
-    const kita = el("span", "section-label");
-    kita.textContent = `북 ${opponent.kitaCount}`;
-    header.appendChild(kita);
-  }
-  container.appendChild(header);
-
+/** A discard river: rows of six in discard order, with the riichi declaration tile sideways. */
+function buildRiver(kinds, riichiIndex) {
   const river = el("div", "river");
-  for (const kind of opponent.discards) {
-    const img = el("img");
-    img.src = tileAssetFor(kind);
-    img.alt = koreanTileLabel(kind);
-    img.title = koreanTileLabel(kind);
-    river.appendChild(img);
+  for (let start = 0; start < kinds.length; start += 6) {
+    const row = el("div", "river-row");
+    kinds.slice(start, start + 6).forEach((kind, offset) => {
+      const tileRef = { kind };
+      row.appendChild(start + offset === riichiIndex ? rotatedTileBox(tileRef) : tileImg(tileRef, { small: true }));
+    });
+    river.appendChild(row);
   }
-  container.appendChild(river);
+  return river;
+}
 
-  if (opponent.melds.length > 0) {
-    const melds = el("div", "opponent-melds");
-    for (const m of opponent.melds) melds.appendChild(renderMeldGroup(m));
-    container.appendChild(melds);
+/** Turns `inner` to face its seat: 0 (bottom), 180 (top), or a quarter turn (left 90 / right
+ *  -90), where the wrapper takes the swapped size so the page layout is unaffected. Only the
+ *  tiles turn - names, scores and buttons elsewhere are never rotated. */
+function placeRotated(wrapper, inner, deg) {
+  wrapper.innerHTML = "";
+  wrapper.style.width = "";
+  wrapper.style.height = "";
+  wrapper.appendChild(inner);
+  if (deg === 0) return;
+  if (deg === 180) {
+    inner.style.transform = "rotate(180deg)";
+    return;
+  }
+  wrapper.classList.add("quarter");
+  const w = inner.offsetWidth;
+  const h = inner.offsetHeight;
+  wrapper.style.width = h + "px";
+  wrapper.style.height = w + "px";
+  inner.style.transformOrigin = "top left";
+  inner.style.transform = deg === -90 ? "translateY(" + w + "px) rotate(-90deg)" : "translateX(" + h + "px) rotate(90deg)";
+}
+
+/** Face-down tiles for an opponent's concealed hand along the table edge (count only). */
+function renderHandEdge(container, count, pos) {
+  container.innerHTML = "";
+  for (let i = 0; i < count; i++) {
+    const img = el("img", "back-tile" + (pos === "top" ? "" : " side"));
+    img.src = BACK_ASSET;
+    img.alt = "";
+    container.appendChild(img);
   }
 }
 
-function renderMyRiver(view) {
-  const riverEl = document.getElementById("my-river");
-  riverEl.innerHTML = "";
-  for (const kind of view.discards) {
-    const img = el("img");
-    img.src = tileAssetFor(kind);
-    img.alt = koreanTileLabel(kind);
-    img.title = koreanTileLabel(kind);
-    riverEl.appendChild(img);
+function renderNameplate(plate, seat, mySeat, view, extras) {
+  plate.innerHTML = "";
+  plate.classList.toggle("is-turn", extras.turn);
+  if (extras.turn) {
+    const marker = el("span", "turn-marker");
+    marker.textContent = "▶";
+    plate.appendChild(marker);
+  }
+  if (seat === view.dealerSeat) {
+    const dealer = el("span", "dealer-badge");
+    dealer.textContent = "친";
+    dealer.title = "친(딜러)";
+    plate.appendChild(dealer);
+  }
+  const name = el("span", "np-name");
+  name.textContent = displayNameForSeat(seat, mySeat);
+  name.title = `Seat ${seat}`;
+  plate.appendChild(name);
+  if (extras.kitaCount > 0) {
+    const kita = el("span", "np-note");
+    kita.textContent = `북 ×${extras.kitaCount}`;
+    plate.appendChild(kita);
+  }
+  if (extras.furiten && extras.furiten.active) {
+    // Furiten is shown exactly as the engine reports it (PlayerView.furiten) - never derived here.
+    const f = el("span", "furiten-marker");
+    f.textContent = "후리텐";
+    f.title = [
+      extras.furiten.selfDiscard && "자신의 버림패에 대기패가 있음 (영구)",
+      extras.furiten.temporary && "론을 패스함 (다음 자기 쯔모까지)",
+      extras.furiten.riichi && "리치 중 론을 패스함 (이번 국 내내)",
+    ].filter(Boolean).join(" / ");
+    plate.appendChild(f);
   }
 }
 
+function renderCenter(view, n, turnSeat) {
+  const main = document.querySelector("#center-info .center-main");
+  main.innerHTML = "";
+  const round = el("div", "round-line");
+  round.textContent = `${ROUND_WIND_KO[view.roundWind] ?? view.roundWind}${view.roundHandNumber}국`;
+  main.appendChild(round);
+  const counts = el("div", "count-line");
+  counts.textContent = `본장 ${view.honba} · 공탁 ×${view.kyotaku}`;
+  main.appendChild(counts);
+  const dora = el("div", "dora-row");
+  const label = el("span", "section-label");
+  label.textContent = "도라";
+  dora.appendChild(label);
+  for (const t of view.doraIndicators) dora.appendChild(tileImg(t, { small: true }));
+  main.appendChild(dora);
+
+  for (let seat = 0; seat < n; seat++) {
+    const slot = scoreSlotEl(positionOf(seat, view.seat, n));
+    slot.textContent = formatPoints(view.scores[seat] ?? 0);
+    slot.classList.toggle("is-turn", seat === turnSeat);
+  }
+}
+
+/** Renders everything on the table except my own concealed hand (see renderMySeat). */
+function renderTable(view, turnSeat) {
+  buildTableSkeleton();
+  const n = view.scores.length;
+  const table = document.getElementById("table");
+  table.dataset.players = String(n);
+
+  const seatOfPos = {};
+  for (let seat = 0; seat < n; seat++) seatOfPos[positionOf(seat, view.seat, n)] = seat;
+  for (const pos of POSITIONS) {
+    const active = pos in seatOfPos;
+    zoneEl(pos).classList.toggle("hidden", !active);
+    riverCellEl(pos).classList.toggle("hidden", !active);
+    scoreSlotEl(pos).classList.toggle("hidden", !active);
+  }
+
+  renderCenter(view, n, turnSeat);
+
+  for (const pos of POSITIONS) {
+    if (!(pos in seatOfPos)) continue;
+    const seat = seatOfPos[pos];
+    const isMe = seat === view.seat;
+    const data = isMe
+      ? { discards: view.discards, riichiDiscardIndex: view.riichiDiscardIndex, melds: view.melds, riichi: view.riichi, kitaCount: 0, concealedCount: 0 }
+      : view.opponents.find((o) => o.seat === seat);
+    const zone = zoneEl(pos);
+
+    renderNameplate(zone.querySelector(".nameplate"), seat, view.seat, view, {
+      turn: seat === turnSeat,
+      kitaCount: isMe ? 0 : data.kitaCount,
+      furiten: isMe ? view.furiten : null,
+    });
+
+    const melds = zone.querySelector(".melds");
+    melds.innerHTML = "";
+    for (const m of data.melds) melds.appendChild(renderMeldGroup(m, seat, n));
+
+    if (!isMe) renderHandEdge(zone.querySelector(".hand-edge"), data.concealedCount, pos);
+
+    const cell = riverCellEl(pos);
+    const wrap = cell.querySelector(".river-wrap");
+    wrap.classList.remove("quarter");
+    cell.querySelector(".stick").classList.toggle("on", data.riichi);
+    placeRotated(wrap, buildRiver(data.discards, data.riichiDiscardIndex), RIVER_TURN_DEG[pos]);
+  }
+}
+
+/** My concealed hand (sorted, with the just-drawn tile set apart) and my extracted kita. */
 function renderMySeat(view, options) {
-  document.getElementById("my-name").textContent = displayNameForSeat(view.seat, view.seat);
-  document.getElementById("my-score").textContent = formatPoints(view.scores[view.seat] ?? 0);
-  document.getElementById("my-riichi").classList.toggle("hidden", !view.riichi);
+  const zone = zoneEl("bottom");
 
-  // Furiten is shown exactly as the engine reports it (PlayerView.furiten) - never derived here.
-  const furitenEl = document.getElementById("my-furiten");
-  furitenEl.classList.toggle("hidden", !view.furiten.active);
-  furitenEl.title = [
-    view.furiten.selfDiscard && "자신의 버림패에 대기패가 있음 (영구)",
-    view.furiten.temporary && "론을 패스함 (다음 자기 쯔모까지)",
-    view.furiten.riichi && "리치 중 론을 패스함 (이번 국 내내)",
-  ].filter(Boolean).join(" / ");
-
-  const melds = document.getElementById("my-melds");
-  melds.innerHTML = "";
-  for (const m of view.melds) melds.appendChild(renderMeldGroup(m));
-
-  const kita = document.getElementById("my-kita");
+  const kita = zone.querySelector(".kita");
   kita.innerHTML = "";
   if (view.kitaTiles.length > 0) {
     const label = el("span", "section-label");
@@ -273,7 +477,7 @@ function renderMySeat(view, options) {
     for (const t of view.kitaTiles) kita.appendChild(tileImg(t, { small: true }));
   }
 
-  const hand = document.getElementById("my-hand");
+  const hand = zone.querySelector(".hand");
   hand.innerHTML = "";
   const drawnId = options && options.drawnTileId;
   const sorted = [...view.concealedTiles].sort(compareTilesForDisplay);
@@ -288,6 +492,21 @@ function renderMySeat(view, options) {
     if (options && options.onTileClick) img.addEventListener("click", () => options.onTileClick(t, riichiLegal));
     hand.appendChild(img);
   }
+}
+
+/** Whose turn it currently is, from what the request itself says: my own actions are my turn;
+ *  a ron/pon/daiminkan offer is on the seat that just discarded. */
+function turnSeatOf(request) {
+  if (request.type === "ron") return request.fromSeat;
+  if ((request.type === "call_pon" || request.type === "call_daiminkan") && request.fromPlayer !== undefined) return request.fromPlayer;
+  return request.view.seat;
+}
+
+/** Only my own turn's requests have a just-drawn tile to set apart in the hand. */
+function drawnTileIdFor(request) {
+  const ownTurn = ["discard", "kita", "ankan", "kakan", "nine_terminals"].includes(request.type);
+  const tiles = request.view.concealedTiles;
+  return ownTurn && tiles.length > 0 ? tiles[tiles.length - 1].id : undefined;
 }
 
 function clearActionBar() {
@@ -313,19 +532,10 @@ async function sendResponse(response) {
   });
 }
 
-function renderTable(view) {
-  renderCenterInfo(view);
-  renderOpponent(document.getElementById("opponent-1"), view.opponents[0], view);
-  renderOpponent(document.getElementById("opponent-2"), view.opponents[1], view);
-  renderMyRiver(view);
-}
-
 function renderDiscardRequest(request) {
-  renderTable(request.view);
+  renderTable(request.view, turnSeatOf(request));
 
-  const drawnId = request.view.concealedTiles.length > 0
-    ? request.view.concealedTiles[request.view.concealedTiles.length - 1].id
-    : undefined;
+  const drawnId = drawnTileIdFor(request);
 
   renderMySeat(request.view, {
     drawnTileId: drawnId,
@@ -347,10 +557,8 @@ function renderDiscardRequest(request) {
 }
 
 function renderCallRequest(request) {
-  renderTable(request.view);
-  const drawnId = request.view.concealedTiles.length > 0
-    ? request.view.concealedTiles[request.view.concealedTiles.length - 1].id
-    : undefined;
+  renderTable(request.view, turnSeatOf(request));
+  const drawnId = drawnTileIdFor(request);
   renderMySeat(request.view, { drawnTileId: drawnId });
 
   clearActionBar();
@@ -374,10 +582,8 @@ function renderCallRequest(request) {
 }
 
 function renderNineTerminalsRequest(request) {
-  renderTable(request.view);
-  const drawnId = request.view.concealedTiles.length > 0
-    ? request.view.concealedTiles[request.view.concealedTiles.length - 1].id
-    : undefined;
+  renderTable(request.view, turnSeatOf(request));
+  const drawnId = drawnTileIdFor(request);
   renderMySeat(request.view, { drawnTileId: drawnId });
 
   clearActionBar();
@@ -397,10 +603,8 @@ const RON_CONTEXT_KO = {
 };
 
 function renderRonRequest(request) {
-  renderTable(request.view);
-  const drawnId = request.view.concealedTiles.length > 0
-    ? request.view.concealedTiles[request.view.concealedTiles.length - 1].id
-    : undefined;
+  renderTable(request.view, turnSeatOf(request));
+  const drawnId = drawnTileIdFor(request);
   renderMySeat(request.view, { drawnTileId: drawnId });
 
   clearActionBar();

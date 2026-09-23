@@ -155,6 +155,10 @@ describe("human ron decision (Milestone 2)", () => {
     expect(seat1Rons).toHaveLength(1);
     expect(seat1Rons[0]!.fromSeat).toBe(2);
     expect(seat1Rons[0]!.preview.yaku.some((y) => y.name.includes("Riichi"))).toBe(true);
+    // the declaration tile (z6) is seat 1's first river tile; both its own and seat 2's view say so
+    expect(seat1Rons[0]!.view.riichiDiscardIndex).toBe(0);
+    const seat2Discard = requests.find((r) => r.type === "discard" && r.seat === 2)!;
+    expect(seat2Discard.view.opponents.find((o) => o.seat === 1)!.riichiDiscardIndex).toBe(0);
     expect(spy).toHaveBeenCalledTimes(1);
     // the second p8 by seat 2 was really discarded (the scenario got that far), just not offered
     expect(log.filter((e) => e.type === "discard" && e.player === 2 && e.tile === "p8")).toHaveLength(2);

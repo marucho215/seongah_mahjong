@@ -1,8 +1,10 @@
 :root {
-  --tile-w: 44px;
-  --tile-h: 59px;
-  --tile-w-small: 30px;
-  --tile-h-small: 40px;
+  /* Tile sizes follow the viewport height (capped at the full-size art) so the same table
+   * fits 3 or 4 seats on smaller windows. */
+  --tile-w: clamp(28px, 6.4vh, 46px);
+  --tile-h: calc(var(--tile-w) * 59 / 44);
+  --tile-w-small: clamp(16px, 3.5vh, 30px);
+  --tile-h-small: calc(var(--tile-w-small) * 4 / 3);
   color-scheme: light dark;
 }
 
@@ -19,7 +21,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   box-sizing: border-box;
 }
 
@@ -30,52 +33,86 @@ body {
   display: none !important;
 }
 
-/* --- Table (the whole green area is the table, not a stack of cards) --- */
+/* --- Table: one surface, four visual positions (bottom / right / top / left) --- */
 
 #table {
   position: relative;
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  grid-template-rows: auto auto auto auto;
-  /* Each named area must form a single rectangle (CSS Grid requirement) - opp1/opp2 are
-   * therefore a plain 1-column-wide rectangle each, with the row-1/col-2 cell left
-   * unnamed ("."; empty space above the center panel) rather than folded into opp1. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
-    "opp1 .      opp2"
-    "opp1 center opp2"
-    "myriver myriver myriver"
-    "myseat myseat myseat";
-  row-gap: 10px;
-  column-gap: 8px;
-  align-items: start;
+    ".    top   ."
+    "left board right"
+    ".    bottom .";
+  gap: 6px;
+  min-height: 0;
 }
 
-.seat-header {
+.zone {
+  display: flex;
+  gap: 6px;
+}
+
+.zone[data-pos="top"] { grid-area: top; flex-direction: column; align-items: center; }
+/* Side seats: a narrow column - name/melds on top, the concealed-hand edge below - so they
+ * leave the board as much room as possible. */
+.zone[data-pos="left"] { grid-area: left; flex-direction: column; align-items: center; align-self: center; }
+.zone[data-pos="right"] { grid-area: right; flex-direction: column; align-items: center; align-self: center; }
+.zone[data-pos="left"] .zone-info, .zone[data-pos="right"] .zone-info { order: 1; max-width: 120px; }
+.zone[data-pos="left"] .hand-edge, .zone[data-pos="right"] .hand-edge { order: 2; }
+.zone[data-pos="bottom"] { grid-area: bottom; flex-direction: column; align-items: center; }
+
+.zone-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.zone[data-pos="top"] .zone-info,
+.zone[data-pos="bottom"] .zone-info {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Name / dealer / turn / notes: always upright, never rotated. */
+.nameplate {
   display: inline-flex;
   align-items: baseline;
-  gap: 8px;
-  background: rgba(0, 0, 0, 0.35);
-  border-radius: 5px;
-  padding: 3px 9px;
-  width: fit-content;
-}
-
-.seat-name {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.seat-score {
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 4px;
   font-size: 13px;
-  opacity: 0.9;
-  font-variant-numeric: tabular-nums;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid transparent;
+  white-space: nowrap;
 }
 
-.riichi-marker {
-  color: #ffd54a;
-  font-weight: bold;
-  font-size: 12px;
+.zone[data-pos="left"] .nameplate, .zone[data-pos="right"] .nameplate {
+  white-space: normal;
+  flex-wrap: wrap;
+  justify-content: center;
+  text-align: center;
+}
+
+.nameplate.is-turn {
+  border-color: #ffd54a;
+}
+
+.np-name { font-weight: 600; }
+.np-note { font-size: 11px; opacity: 0.85; }
+.turn-marker { color: #ffd54a; font-size: 11px; }
+
+.dealer-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1e5631;
+  background: #ffd54a;
+  border-radius: 3px;
+  padding: 0 4px;
 }
 
 .furiten-marker {
@@ -85,63 +122,136 @@ body {
   cursor: help;
 }
 
-.ron-preview {
+.melds, .kita {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px;
+  min-height: 0;
+}
+
+.zone[data-pos="left"] .melds, .zone[data-pos="right"] .melds {
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Opponents' concealed hands: face-down tiles along the outer table edge. */
+.hand-edge {
+  display: flex;
+  gap: 1px;
+}
+
+.zone[data-pos="left"] .hand-edge, .zone[data-pos="right"] .hand-edge {
+  flex-direction: column;
+}
+
+.back-tile {
+  width: calc(var(--tile-w-small) * 0.75);
+  height: calc(var(--tile-h-small) * 0.75);
+  border-radius: 3px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.back-tile.side {
+  width: calc(var(--tile-h-small) * 0.75);
+  height: calc(var(--tile-w-small) * 0.75);
+  object-fit: fill;
+}
+
+/* --- Board: the four rivers around a small central status panel --- */
+
+.board {
+  grid-area: board;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  align-content: center;
+  grid-template-areas:
+    ".      r-top    ."
+    "r-left center   r-right"
+    ".      r-bottom .";
+  align-items: center;
+  justify-items: center;
+  min-height: 0;
+  min-width: 0;
+}
+
+.river-cell {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 6px;
 }
 
-#action-bar button.ron-button {
-  background: #ffd54a;
-  font-weight: bold;
-}
+.river-cell[data-pos="top"] { grid-area: r-top; flex-direction: column-reverse; align-self: end; }
+.river-cell[data-pos="bottom"] { grid-area: r-bottom; flex-direction: column; align-self: start; }
+.river-cell[data-pos="left"] { grid-area: r-left; flex-direction: row-reverse; justify-self: end; }
+.river-cell[data-pos="right"] { grid-area: r-right; flex-direction: row; justify-self: start; }
 
-.opponent-seat {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.seat-top-left { grid-area: opp1; align-items: flex-start; }
-.seat-top-right { grid-area: opp2; align-items: flex-end; }
-
-.opponent-melds {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-#center-info {
+.center {
   grid-area: center;
-  justify-self: center;
-  align-self: start;
+  display: grid;
+  grid-template-columns: auto auto auto;
+  grid-template-areas:
+    ".        s-top    ."
+    "s-left   main     s-right"
+    ".        s-bottom .";
+  gap: 4px 10px;
+  align-items: center;
+  justify-items: center;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.22);
+  font-size: 12px;
+}
+
+.center-main {
+  grid-area: main;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 12px;
-  min-width: 140px;
+  gap: 3px;
+  min-width: 96px;
 }
 
-#center-info .round-line {
-  font-weight: 600;
-  font-size: 13px;
+.round-line { font-weight: 700; font-size: 15px; }
+.count-line { font-size: 11px; opacity: 0.9; }
+.dora-row { display: flex; align-items: center; gap: 4px; }
+
+.score-slot { font-variant-numeric: tabular-nums; font-size: 13px; padding: 0 4px; border-radius: 3px; }
+.score-slot[data-pos="top"] { grid-area: s-top; }
+.score-slot[data-pos="left"] { grid-area: s-left; }
+.score-slot[data-pos="right"] { grid-area: s-right; }
+.score-slot[data-pos="bottom"] { grid-area: s-bottom; }
+.score-slot.is-turn { outline: 1px solid #ffd54a; }
+
+/* Riichi stick (1000): a small bar with a red dot, laid along the seat's edge. */
+.stick {
+  display: none;
+  position: relative;
+  width: 46px;
+  height: 7px;
+  border-radius: 4px;
+  background: #f1efe6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-#center-info .score-line {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: center;
+.stick.on { display: block; }
+
+.stick::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: #c62828;
 }
 
-.my-river {
-  grid-area: myriver;
-  justify-self: center;
+.river-cell[data-pos="left"] .stick, .river-cell[data-pos="right"] .stick {
+  width: 7px;
+  height: 46px;
 }
 
 /* --- Tiles --- */
@@ -198,16 +308,50 @@ body {
 }
 
 .river {
-  display: grid;
-  grid-template-columns: repeat(6, var(--tile-w-small));
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: max-content;
+}
+
+.river-row {
+  display: flex;
+  align-items: flex-end;
   gap: 3px;
 }
 
-.river img {
-  width: var(--tile-w-small);
-  height: var(--tile-h-small);
-  border-radius: 3px;
-  background: #fff;
+/* wrapper whose size is set from JS to the river's quarter-turned size */
+.river-wrap {
+  position: relative;
+}
+
+.river-wrap.quarter .river {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+/* A small tile lying on its side (riichi declaration / called tile): a 40x30 box holding
+ * the 30x40 image turned 90 degrees about the box centre. */
+.rot-box {
+  position: relative;
+  flex: 0 0 auto;
+  width: var(--tile-h-small);
+  height: var(--tile-w-small);
+}
+
+.rot-box img {
+  position: absolute;
+  left: calc((var(--tile-h-small) - var(--tile-w-small)) / 2);
+  top: calc((var(--tile-w-small) - var(--tile-h-small)) / 2);
+  transform: rotate(90deg);
+}
+
+.rot-stack {
+  display: flex;
+  flex-direction: column;
+  align-self: flex-end;
+  gap: 1px;
 }
 
 .meld-group {
@@ -223,6 +367,10 @@ body {
   outline: 1px dashed rgba(255, 255, 255, 0.4);
 }
 
+.meld-group {
+  align-items: flex-end;
+}
+
 .meld-group img {
   width: var(--tile-w-small);
   height: var(--tile-h-small);
@@ -235,26 +383,37 @@ body {
   align-self: center;
 }
 
-/* --- My seat (fixed at the bottom) --- */
+/* --- My hand: along the bottom edge --- */
 
-.seat-bottom {
-  grid-area: myseat;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.zone[data-pos="bottom"] .hand {
+  flex-wrap: nowrap;
+  justify-content: center;
+  min-height: calc(var(--tile-h) + 6px);
 }
 
-/* --- Action bar: a thin strip, not a big panel --- */
+/* --- Action bar: a small floating strip above my hand, not a panel --- */
 
 #action-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tile-h) + 72px);
+  transform: translateX(-50%);
+  z-index: 5;
   display: flex;
   gap: 8px;
-  min-height: 20px;
   align-items: center;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 6px;
-  padding: 6px 10px;
+  max-width: 92vw;
+  flex-wrap: wrap;
+  justify-content: center;
+  background: rgba(10, 30, 16, 0.88);
+  border-radius: 8px;
+  padding: 6px 12px;
   font-size: 13px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
+#action-bar:empty {
+  display: none;
 }
 
 #action-bar button {
@@ -268,6 +427,18 @@ body {
 
 #action-bar button:hover {
   background: #fff;
+}
+
+#action-bar button.ron-button {
+  background: #ffd54a;
+  font-weight: bold;
+}
+
+.ron-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .section-label {

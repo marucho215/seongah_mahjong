@@ -3,7 +3,7 @@ import { GameState } from "../src/core/GameState.js";
 import { DEFAULT_SANMA_RULES } from "../src/rules/RuleConfig.js";
 import { getCharacterProfile } from "../src/ai/characterProfiles.js";
 import { collectAllInvariantViolations } from "../src/validation/invariants.js";
-import { buildPlayerView } from "../src/core/playerView.js";
+import { buildPlayerView, riichiDiscardIndexOf } from "../src/core/playerView.js";
 import { Hand } from "../src/core/Hand.js";
 import { parseKind, type Tile, type TileKind } from "../src/core/tiles.js";
 import type { DecisionRequest, DecisionResponse } from "../src/core/decisions.js";
@@ -232,5 +232,54 @@ describe("PlayerView information boundary", () => {
     });
 
     expect(view.discards).toEqual(["m3"]);
+  });
+});
+
+describe("riichiDiscardIndexOf (which visible river tile is drawn sideways)", () => {
+  const entry = (kind: TileKind, id: number, opts: { riichi?: boolean; called?: boolean } = {}) => ({
+    tile: tile(kind, id),
+    calledAway: !!opts.called,
+    isRiichiDeclaration: !!opts.riichi,
+    tsumogiri: false,
+  });
+  const handWith = (...entries: ReturnType<typeof entry>[]) => {
+    const h = new Hand();
+    h.discards.push(...entries);
+    return h;
+  };
+
+  it("is null without a riichi declaration", () => {
+    expect(riichiDiscardIndexOf(handWith(entry("m1", 1), entry("p2", 2)))).toBeNull();
+  });
+
+  it("is the declaration tile's position among the visible discards", () => {
+    expect(riichiDiscardIndexOf(handWith(entry("m1", 1), entry("p2", 2, { riichi: true }), entry("s3", 3)))).toBe(1);
+    // an earlier called-away tile is not in the visible river, so it does not shift the count wrongly
+    expect(riichiDiscardIndexOf(handWith(entry("m1", 1, { called: true }), entry("p2", 2, { riichi: true })))).toBe(0);
+  });
+
+  it("moves to the next visible discard when the declaration tile itself was called away", () => {
+    expect(riichiDiscardIndexOf(handWith(entry("m1", 1), entry("p2", 2, { riichi: true, called: true }), entry("s3", 3)))).toBe(1);
+  });
+
+  it("is null when the declaration tile was called away and nothing was discarded after it", () => {
+    expect(riichiDiscardIndexOf(handWith(entry("m1", 1), entry("p2", 2, { riichi: true, called: true })))).toBeNull();
+  });
+
+  it("is exposed for the seat itself and for opponents in a PlayerView", () => {
+    const hands = [handWith(entry("m1", 1), entry("p2", 2, { riichi: true })), handWith(entry("s3", 3, { riichi: true })), new Hand()];
+    const view = buildPlayerView({ seat: 0, hands, doraIndicators: [], scores: [35000, 35000, 35000], dealerSeat: 0, roundWind: 1, roundHandNumber: 1, honba: 0, kyotaku: 0, wallRemainingLive: 50 });
+    expect(view.riichiDiscardIndex).toBe(1);
+    expect(view.opponents.map((o) => o.riichiDiscardIndex)).toEqual([0, null]);
+  });
+
+  it("exposes only the SIZE of an opponent's concealed hand, never its tiles", () => {
+    const hands = [new Hand(), new Hand(), new Hand()];
+    hands[1]!.dealIn([tile("s9", 90), tile("s8", 91), tile("z1", 92)]);
+    const view = buildPlayerView({ seat: 0, hands, doraIndicators: [], scores: [35000, 35000, 35000], dealerSeat: 0, roundWind: 1, roundHandNumber: 1, honba: 0, kyotaku: 0, wallRemainingLive: 50 });
+    expect(view.opponents.map((o) => o.concealedCount)).toEqual([3, 0]);
+    const serialized = JSON.stringify(view);
+    expect(serialized).not.toContain('"s9"');
+    expect(serialized).not.toContain('"z1"');
   });
 });
