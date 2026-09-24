@@ -161,3 +161,84 @@ describe("GuiSession", () => {
     console.log("game_end reasons observed across the batch:", [...reasons]);
   }, 60000);
 });
+
+describe("GuiSession: 잘못된 응답이 진행 중인 국을 망가뜨리지 않는다", () => {
+  /** kita 제안 등 discard가 아닌 요청이 먼저 오면 거절로 넘기고, 첫 discard 요청까지 진행한다. */
+  function sessionAtFirstDiscard(seed: string) {
+    const gs = newHumanGame(seed);
+    const session = new GuiSession(gs);
+    let req = session.getCurrentRequest()!;
+    while (req.type !== "discard") {
+      session.respond({ type: req.type, declare: false } as DecisionResponse);
+      req = session.getCurrentRequest()!;
+    }
+    return { gs, session, req: req as Extract<DecisionRequest, { type: "discard" }> };
+  }
+
+  it("합법이 아닌 패 응답은 거절되고, 같은 요청이 그대로 남아 이후 올바른 응답으로 정상 진행된다", () => {
+    const { gs, session, req } = sessionAtFirstDiscard("gui-session-reject-then-ok");
+    const logLength = gs.log.length;
+
+    expect(() => session.respond({ type: "discard", tileId: -999, declareRiichi: false })).toThrow(/not a legal discard/);
+    expect(session.getPhase()).toBe("decision");
+    expect(session.getCurrentRequest()).toBe(req); // 같은 요청 객체 - 아무것도 진행되지 않았다
+    expect(gs.log.length).toBe(logLength);
+
+    session.respond({ type: "discard", tileId: req.legalTileIds[0]!, declareRiichi: false });
+    expect(gs.log.length).toBeGreaterThan(logLength);
+    // 국이 끝났다면 반드시 결과 이벤트가 있어야 한다 (이벤트 없는 hand_end 상태가 되면 안 된다)
+    if (session.getPhase() !== "decision") expect(session.getHandEndEvent()).toBeDefined();
+  });
+
+  it("리치가 불가능한 패로 리치를 선언하는 응답은 거절되고 세션은 그대로다", () => {
+    const { session, req } = sessionAtFirstDiscard("gui-session-reject-riichi");
+    const notRiichi = req.legalTileIds.find((id) => !req.riichiLegalTileIds.includes(id))!;
+    expect(() => session.respond({ type: "discard", tileId: notRiichi, declareRiichi: true })).toThrow(/not a legal riichi discard/);
+    expect(session.getCurrentRequest()).toBe(req);
+  });
+
+  it("요청과 종류가 다른 응답, declare/declareRiichi가 불리언이 아닌 응답은 거절된다", () => {
+    const { session, req } = sessionAtFirstDiscard("gui-session-reject-shape");
+    expect(() => session.respond({ type: "call_pon", declare: true })).toThrow(/expected a "discard" response/);
+    expect(() => session.respond({ type: "discard", tileId: req.legalTileIds[0]!, declareRiichi: undefined as unknown as boolean })).toThrow(/boolean/);
+    expect(() => session.respond(null as unknown as DecisionResponse)).toThrow(/expected a "discard" response/);
+    expect(session.getCurrentRequest()).toBe(req);
+  });
+
+  it("예/아니오 요청에 boolean이 아닌 declare가 오면 거절된다", () => {
+    const gs = newHumanGame("gui-session-reject-declare");
+    const session = new GuiSession(gs);
+    let req = session.getCurrentRequest()!;
+    // 이 시드에서 non-discard 요청이 없으면 검증할 대상이 없으므로 다른 시드를 찾는다
+    for (let i = 0; req.type === "discard" && i < 400; i++) {
+      const g = newHumanGame(`gui-session-find-call-${i}`);
+      const s = new GuiSession(g);
+      for (let step = 0; step < 60 && s.getPhase() === "decision"; step++) {
+        const r = s.getCurrentRequest()!;
+        if (r.type !== "discard") {
+          expect(() => s.respond({ type: r.type, declare: "yes" as unknown as boolean } as DecisionResponse)).toThrow(/boolean "declare"/);
+          expect(s.getCurrentRequest()).toBe(r);
+          return;
+        }
+        s.respond(alwaysPassResponse(r));
+      }
+    }
+    throw new Error("예/아니오 요청을 만나지 못했습니다");
+  });
+
+  it("엔진이 예외를 던져 세션이 죽으면, 이후 응답을 조용히 받아들이지 않고 명확히 거절한다", () => {
+    const request = { type: "kita", seat: 0, tileKind: "z4", view: {} } as unknown as DecisionRequest;
+    const fakeGame = {
+      log: [],
+      recordHumanDecision: () => {},
+      playHandInteractive: function* () {
+        yield request;
+        throw new Error("boom");
+      },
+    } as unknown as GameState;
+    const session = new GuiSession(fakeGame);
+    expect(() => session.respond({ type: "kita", declare: true })).toThrow(/boom/);
+    expect(() => session.respond({ type: "kita", declare: true })).toThrow(/stopped after an earlier engine error/);
+    expect(() => session.continueToNextHand()).toThrow(/stopped after an earlier engine error/);
+  });
+});

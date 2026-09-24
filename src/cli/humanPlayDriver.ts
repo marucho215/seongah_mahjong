@@ -1,5 +1,5 @@
 import type { GameState } from "../core/GameState.js";
-import type { CallDecisionRequest, DecisionRequest, DecisionResponse, DiscardDecisionRequest, NineTerminalsDecisionRequest, RonDecisionRequest } from "../core/decisions.js";
+import type { CallDecisionRequest, ChiDecisionRequest, DecisionRequest, DecisionResponse, DiscardDecisionRequest, NineTerminalsDecisionRequest, RonDecisionRequest, TsumoDecisionRequest } from "../core/decisions.js";
 import type { PlayerView } from "../core/playerView.js";
 import type { TileRef, MeldSnapshot } from "../core/GameLog.js";
 import { parseKind } from "../core/tiles.js";
@@ -172,6 +172,47 @@ async function askRonDecision(request: RonDecisionRequest, io: CliIO): Promise<D
   }
 }
 
+/** 치 후보는 엔진이 준 options를 그대로 보여준다 (조합 계산은 하지 않는다). 번호 = options 배열 순서, p = 패스. */
+export async function askChiDecision(request: ChiDecisionRequest, io: CliIO): Promise<DecisionResponse> {
+  const called = formatTileRef(request.discardedTile);
+  io.print(`${called}${josaEulReul(called)} 치할 수 있습니다. (seat ${request.fromSeat}의 버림패)`);
+  request.options.forEach((option, index) => {
+    const own = option.sequence.filter((kind, i) => {
+      const firstCalled = option.sequence.indexOf(request.discardedTile.kind);
+      return i !== firstCalled;
+    });
+    io.print(`  [${index}] ${own.map((kind) => koreanTileLabel(kind)).join(" ")} + ${called}`);
+  });
+  io.print("  [p] 패스");
+  while (true) {
+    const input = (await io.ask("치 조합 번호를 선택하세요 (p = 패스): ")).trim().toLowerCase();
+    if (input === "p" || input === "pass") return { type: "chi", optionId: null };
+    if (/^\d+$/.test(input)) {
+      const option = request.options[Number(input)];
+      if (option) return { type: "chi", optionId: option.id };
+    }
+    io.print(`0-${request.options.length - 1} 사이의 번호나 p(패스)를 입력하세요.`);
+  }
+}
+
+function formatPreviewScore(preview: TsumoDecisionRequest["preview"]): string {
+  return preview.yakumanUnits > 0 ? `역만 x${preview.yakumanUnits}` : `${preview.han}판 ${preview.fu}부`;
+}
+
+async function askTsumoDecision(request: TsumoDecisionRequest, io: CliIO): Promise<DecisionResponse> {
+  const { preview } = request;
+  io.print(`쯔모 화료가 가능합니다! ${formatTileRef(request.winningTile)} - ${formatPreviewScore(preview)}, ${preview.totalPoints}점`);
+  io.print(`  역: ${preview.yaku.map((y) => `${y.name} ${y.han}`).join(", ")}`);
+  while (true) {
+    const declare = parseYesNo(await io.ask("쯔모하시겠습니까? (n이면 화료하지 않고 계속 진행) [y/n] "));
+    if (declare === undefined) {
+      io.print(`Please answer "y" or "n".`);
+      continue;
+    }
+    return { type: "tsumo", declare };
+  }
+}
+
 async function askNineTerminalsDecision(request: NineTerminalsDecisionRequest, io: CliIO): Promise<DecisionResponse> {
   io.print(`구종구패: 요구패(1·9·자패)가 ${request.distinctTerminalKinds}종 있습니다. 유국을 선언할 수 있습니다.`);
   while (true) {
@@ -189,6 +230,8 @@ async function resolveRequest(request: DecisionRequest, io: CliIO): Promise<Deci
   if (request.type === "discard") return askDiscardDecision(request, io);
   if (request.type === "ron") return askRonDecision(request, io);
   if (request.type === "nine_terminals") return askNineTerminalsDecision(request, io);
+  if (request.type === "chi") return askChiDecision(request, io);
+  if (request.type === "tsumo") return askTsumoDecision(request, io);
   return askCallDecision(request, io);
 }
 
@@ -204,6 +247,7 @@ export async function runInteractiveHand(gs: GameState, io: CliIO): Promise<void
   let step = session.next();
   while (!step.done) {
     const response = await resolveRequest(step.value, io);
+    gs.recordHumanDecision(step.value, response);
     step = session.next(response);
   }
 }

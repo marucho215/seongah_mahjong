@@ -7,6 +7,7 @@ import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GameState, FinalStanding } from "../core/GameState.js";
 import type { GameEvent, AiDecisionEntry } from "../core/GameLog.js";
+import type { HumanDecisionEntry } from "../core/humanDecisionLog.js";
 import type { RuleConfig } from "../rules/RuleConfig.js";
 
 /** This file lives at <project root>/src/sim/replayRecorder.ts, so two levels up from
@@ -25,8 +26,17 @@ export function resolveReplayDir(dir: string): string {
 
 export interface ReplaySeatInfo {
   seat: number;
-  kind: "characterAI" | "simpleAI";
+  /** 이 좌석을 누가 조종했는가 (GameState.controllers). 캐릭터 정체성(characterId)과는 별개다. */
+  kind: "characterAI" | "simpleAI" | "human" | "customAI";
   characterId?: string;
+}
+
+/** GameState의 controllers/characterProfiles에서 리플레이용 좌석 정보를 만든다 (사람 대국용). */
+export function replaySeatsFromGame(gs: GameState): ReplaySeatInfo[] {
+  return gs.controllers.map((kind, seat) => {
+    const characterId = gs.characterProfiles[seat]?.characterId;
+    return { seat, kind, ...(characterId ? { characterId } : {}) };
+  });
 }
 
 export interface GameReplayRecord {
@@ -49,6 +59,8 @@ export interface GameReplayRecord {
   events: GameEvent[];
   /** CharacterAI decision-debug entries, kept separate from the rule events above. */
   aiDecisions: AiDecisionEntry[];
+  /** 사람이 내린 결정 기록. 사람 좌석이 있는 대국에만 존재하는 선택 필드다 (v2 유지, AI-only 리플레이에는 없음). */
+  humanDecisions?: HumanDecisionEntry[];
   finalStandings: FinalStanding[];
 }
 
@@ -62,6 +74,7 @@ export function buildGameReplayRecord(
     meta: { replaySchemaVersion: 2, simulationLabel, gameIndex, gameSeed: gs.baseSeed, rules: gs.rules, seats },
     events: gs.log,
     aiDecisions: gs.aiDecisionLog,
+    ...(gs.controllers.includes("human") ? { humanDecisions: gs.humanDecisionLog } : {}),
     finalStandings: gs.computeFinalStandings(),
   };
 }

@@ -372,6 +372,7 @@ const WIND_KO = ["", "동", "남", "서", "북"];
 function renderNameplate(plate, seat, mySeat, view, extras) {
   plate.innerHTML = "";
   plate.classList.toggle("is-turn", extras.turn);
+  plate.classList.toggle("is-actor", !!extras.actor);
 
   const winds = el("span", "np-winds");
   const wind = el("span", "wind-badge");
@@ -443,7 +444,7 @@ function renderCenter(view, n, turnSeat) {
 }
 
 /** Renders everything on the table except my own concealed hand (see renderMySeat). */
-function renderTable(view, turnSeat) {
+function renderTable(view, turnSeat, emphasis) {
   buildTableSkeleton();
   const n = view.scores.length;
   const table = document.getElementById("table");
@@ -471,6 +472,7 @@ function renderTable(view, turnSeat) {
 
     renderNameplate(zone.querySelector(".nameplate"), seat, view.seat, view, {
       turn: seat === turnSeat,
+      actor: !!emphasis && emphasis.actorSeat === seat,
       kitaCount: isMe ? 0 : data.kitaCount,
       furiten: isMe ? view.furiten : null,
     });
@@ -486,6 +488,10 @@ function renderTable(view, turnSeat) {
     wrap.classList.remove("quarter");
     cell.querySelector(".stick").classList.toggle("on", data.riichi);
     placeRotated(wrap, buildRiver(data.discards, data.riichiDiscardIndex), RIVER_TURN_DEG[pos]);
+    if (emphasis && emphasis.latestDiscardSeat === seat) {
+      const last = wrap.querySelector(".river-row:last-child > :last-child");
+      if (last) last.classList.add("latest");
+    }
   }
 }
 
@@ -513,8 +519,15 @@ function renderMySeat(view, options) {
     currentSuit = suit;
     if (drawnId !== undefined && t.id === drawnId) hand.appendChild(el("div", "drawn-gap"));
     const riichiLegal = !!(options && options.riichiLegalTileIds && options.riichiLegalTileIds.includes(t.id));
-    const img = tileImg(t, { clickable: !!(options && options.onTileClick), riichiLegal });
-    if (options && options.onTileClick) img.addEventListener("click", () => options.onTileClick(t, riichiLegal));
+    // 엔진이 알려준 legalTileIds에 없는 패(예: 쿠이카에로 지금 못 버리는 패)는 누를 수 없다.
+    const legal = !(options && options.legalTileIds) || options.legalTileIds.includes(t.id);
+    const clickable = !!(options && options.onTileClick) && legal;
+    const img = tileImg(t, { clickable, riichiLegal });
+    if (options && options.legalTileIds && !legal) {
+      img.classList.add("not-legal");
+      img.title = `${img.title} - 지금은 버릴 수 없습니다`;
+    }
+    if (clickable) img.addEventListener("click", () => options.onTileClick(t, riichiLegal));
     hand.appendChild(img);
   }
 }
@@ -522,14 +535,14 @@ function renderMySeat(view, options) {
 /** Whose turn it currently is, from what the request itself says: my own actions are my turn;
  *  a ron/pon/daiminkan offer is on the seat that just discarded. */
 function turnSeatOf(request) {
-  if (request.type === "ron") return request.fromSeat;
+  if (request.type === "ron" || request.type === "chi") return request.fromSeat;
   if ((request.type === "call_pon" || request.type === "call_daiminkan") && request.fromPlayer !== undefined) return request.fromPlayer;
   return request.view.seat;
 }
 
 /** Only my own turn's requests have a just-drawn tile to set apart in the hand. */
 function drawnTileIdFor(request) {
-  const ownTurn = ["discard", "kita", "ankan", "kakan", "nine_terminals"].includes(request.type);
+  const ownTurn = ["discard", "kita", "ankan", "kakan", "nine_terminals", "tsumo"].includes(request.type);
   const tiles = request.view.concealedTiles;
   return ownTurn && tiles.length > 0 ? tiles[tiles.length - 1].id : undefined;
 }
@@ -553,12 +566,35 @@ function addActionButton(label, onClick, kind = "confirm") {
 
 // --- Networking ---
 
+// 응답을 보낸 뒤 서버의 다음 메시지가 올 때까지는 더블클릭 등으로 또 보내지 않는다.
+let awaitingServer = false;
+
+function showActionError(text) {
+  const bar = document.getElementById("action-bar");
+  const note = el("span", "action-error");
+  note.textContent = text;
+  bar.appendChild(note);
+  placeActionBar();
+}
+
 async function sendResponse(response) {
-  await fetch("/respond", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(response),
-  });
+  if (awaitingServer) return;
+  awaitingServer = true;
+  try {
+    const res = await fetch("/respond", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(response),
+    });
+    if (!res.ok) {
+      // 거절된 응답은 게임 상태를 바꾸지 않으므로 다시 시도할 수 있게 풀어 준다.
+      awaitingServer = false;
+      showActionError(`응답이 거절되었습니다: ${await res.text()}`);
+    }
+  } catch (err) {
+    awaitingServer = false;
+    showActionError("서버에 연결하지 못했습니다. 새로고침 후 다시 시도해 주세요.");
+  }
 }
 
 function renderDiscardRequest(request) {
@@ -569,6 +605,7 @@ function renderDiscardRequest(request) {
   renderMySeat(request.view, {
     drawnTileId: drawnId,
     riichiLegalTileIds: request.riichiLegalTileIds,
+    legalTileIds: request.legalTileIds,
     onTileClick: (tile, riichiLegal) => {
       let declareRiichi = false;
       if (riichiLegal) {
@@ -630,6 +667,62 @@ const RON_CONTEXT_KO = {
   chankan: "창깡",
   kokushi_ankan: "국사무쌍 암깡",
 };
+
+/** 치: 엔진이 준 options를 그대로 타일 그림으로 보여준다 (조합은 계산하지 않는다). 버림패는 강조 표시. */
+function renderChiRequest(request) {
+  renderTable(request.view, turnSeatOf(request), { actorSeat: null, latestDiscardSeat: request.fromSeat });
+  renderMySeat(request.view, {});
+
+  clearActionBar();
+  const bar = document.getElementById("action-bar");
+  const label = el("span", "section-label");
+  const called = koreanTileLabel(request.discardedTile.kind, request.discardedTile.red);
+  label.textContent = `${called}${josaEulReul(called)} 치하시겠습니까? (${displayNameForSeat(request.fromSeat, request.view.seat)} 버림패)`;
+  bar.appendChild(label);
+
+  for (const option of request.options) {
+    const btn = el("button", "chi-option");
+    let calledMarked = false;
+    for (const kind of option.sequence) {
+      const isCalled = !calledMarked && kind === request.discardedTile.kind;
+      if (isCalled) calledMarked = true;
+      const img = tileImg(isCalled ? request.discardedTile : { kind }, { small: true });
+      if (isCalled) img.classList.add("called-tile");
+      btn.appendChild(img);
+    }
+    btn.title = option.sequence.map((kind) => koreanTileLabel(kind)).join(" ");
+    btn.addEventListener("click", () => {
+      AudioManager.play("ui.confirm");
+      sendResponse({ type: "chi", optionId: option.id });
+    });
+    bar.appendChild(btn);
+  }
+  addActionButton("넘기기", () => sendResponse({ type: "chi", optionId: null }), "cancel");
+}
+
+/** 쯔모: 화료 가능 여부와 점수는 엔진이 준 preview를 그대로 보여준다. 넘기면 바로 버릴 패 선택으로 이어진다. */
+function renderTsumoRequest(request) {
+  renderTable(request.view, request.view.seat);
+  renderMySeat(request.view, { drawnTileId: drawnTileIdFor(request) });
+
+  clearActionBar();
+  const bar = document.getElementById("action-bar");
+  const preview = request.preview;
+  const info = el("span", "ron-preview");
+  info.appendChild(tileImg(request.winningTile, { small: true }));
+  const text = el("span");
+  const score = preview.yakumanUnits > 0
+    ? (preview.yakumanUnits === 1 ? "역만" : `역만 x${preview.yakumanUnits}`)
+    : `${preview.han}판 ${preview.fu}부`;
+  text.textContent =
+    `쯔모할 수 있습니다 - ${score} ${formatPoints(preview.totalPoints)}점 (` +
+    preview.yaku.map((y) => `${translateYaku(y.name)} ${y.han}`).join(", ") + ")";
+  info.appendChild(text);
+  bar.appendChild(info);
+  const btn = addActionButton("쯔모", () => sendResponse({ type: "tsumo", declare: true }));
+  btn.classList.add("ron-button");
+  addActionButton("넘기기", () => sendResponse({ type: "tsumo", declare: false }), "cancel");
+}
 
 function renderRonRequest(request) {
   renderTable(request.view, turnSeatOf(request));
@@ -901,8 +994,54 @@ function handleMessage(msg) {
   AudioManager.enqueueCues(msg.cues);
 }
 
+const FEED_TEXT = { discard: "타패", chi: "치", pon: "퐁", kan: "깡", kita: "북 빼기", riichi: "리치", ron: "론", tsumo: "쯔모" };
+const FEED_MAX = 5;
+let recentFeed = [];
+
+function pushRecentFeed(actions, mySeat) {
+  for (const a of actions) {
+    const who = displayNameForSeat(a.seat, mySeat);
+    const what = a.action === "discard" ? `${koreanTileLabel(a.tile)} 타패` : a.tile ? `${koreanTileLabel(a.tile)} ${FEED_TEXT[a.action]}` : FEED_TEXT[a.action];
+    recentFeed.push({ text: `${who}: ${what}`, win: a.action === "ron" || a.action === "tsumo" });
+  }
+  recentFeed = recentFeed.slice(-FEED_MAX);
+  const box = document.getElementById("recent-feed");
+  box.innerHTML = "";
+  for (const item of recentFeed) {
+    const row = el("div", "feed-item" + (item.win ? " is-win" : ""));
+    row.textContent = item.text;
+    box.appendChild(row);
+  }
+  box.classList.toggle("hidden", recentFeed.length === 0);
+}
+
+function clearRecentFeed() {
+  recentFeed = [];
+  const box = document.getElementById("recent-feed");
+  box.innerHTML = "";
+  box.classList.add("hidden");
+}
+
 function handleMessageBody(msg) {
+  awaitingServer = false; // 서버가 새 상태를 보냈으니 다음 응답을 보낼 수 있다
   currentCharacterNames = msg.characterNames ?? [];
+  if (msg.type === "hand_end" || msg.type === "game_end") clearRecentFeed();
+  if (msg.type === "watch") {
+    // AI 턴 진행 장면: 판을 그리되 행동창은 비운다 (아직 내가 할 일이 없다)
+    document.getElementById("hand-end-overlay").classList.add("hidden");
+    lastKnownMySeat = msg.view.seat;
+    const calledAway = msg.actions.some((a) => a.action === "pon" || a.action === "kan");
+    renderTable(msg.view, msg.actor, { actorSeat: msg.actor, latestDiscardSeat: calledAway ? null : msg.latestDiscardSeat });
+    pushRecentFeed(msg.actions, msg.view.seat);
+    renderMySeat(msg.view, {});
+    clearActionBar();
+    const label = el("span", "section-label");
+    label.textContent = "상대 차례 진행 중...";
+    document.getElementById("action-bar").appendChild(label);
+    placeActionBar();
+    awaitingServer = true; // 재생이 끝나 새 요청이 오기 전에는 응답을 보내지 않는다
+    return;
+  }
   if (msg.type === "game_end") {
     renderGameEnd(msg.event, msg.handEvent, lastKnownMySeat);
     return;
@@ -917,6 +1056,8 @@ function handleMessageBody(msg) {
   if (request.type === "discard") renderDiscardRequest(request);
   else if (request.type === "ron") renderRonRequest(request);
   else if (request.type === "nine_terminals") renderNineTerminalsRequest(request);
+  else if (request.type === "chi") renderChiRequest(request);
+  else if (request.type === "tsumo") renderTsumoRequest(request);
   else renderCallRequest(request);
   placeActionBar();
 }

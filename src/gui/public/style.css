@@ -105,6 +105,37 @@ body {
   position: relative;
 }
 
+.nameplate.is-actor {
+  box-shadow: 0 0 0 2px #ff8a65, 0 0 14px rgba(255, 138, 101, 0.6);
+}
+
+.river .latest {
+  outline: 2px solid #ff8a65;
+  outline-offset: -1px;
+  border-radius: 3px;
+  box-shadow: 0 0 10px rgba(255, 138, 101, 0.9);
+}
+
+#recent-feed {
+  position: fixed;
+  left: 12px;
+  top: 12px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: none;
+  min-width: 130px;
+}
+#recent-feed .feed-item { opacity: 0.55; }
+#recent-feed .feed-item:last-child { opacity: 1; font-weight: 600; }
+#recent-feed .feed-item.is-win { color: #ffd54a; }
+
 .nameplate.is-turn {
   border-color: #ffd54a;
   background: rgba(255, 213, 74, 0.14);
@@ -327,6 +358,17 @@ body {
   transform: translateY(-6px);
 }
 
+.tile-img.not-legal {
+  opacity: 0.4;
+  filter: grayscale(0.6);
+  cursor: not-allowed;
+}
+
+.action-error {
+  color: #ffb4a8;
+  font-size: 12px;
+}
+
 .tile-img.riichi-legal {
   outline: 3px solid #ffd54a;
   outline-offset: 1px;
@@ -468,6 +510,18 @@ body {
 #action-bar button.ron-button {
   background: #ffd54a;
   font-weight: bold;
+}
+
+#action-bar button.chi-option {
+  display: inline-flex;
+  gap: 2px;
+  padding: 4px 6px;
+}
+
+.tile-img.called-tile {
+  outline: 2px solid #ff8a65;
+  outline-offset: -1px;
+  border-radius: 3px;
 }
 
 .ron-preview {

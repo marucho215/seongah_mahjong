@@ -1,6 +1,43 @@
 import type { GameState } from "../core/GameState.js";
-import type { DecisionRequest, DecisionResponse } from "../core/decisions.js";
+import type { DecisionRequest, DecisionResponse, DiscardDecisionResponse } from "../core/decisions.js";
 import type { GameEndEvent, GameEvent } from "../core/GameLog.js";
+import type { PlayerView } from "../core/playerView.js";
+
+/** AI 턴 도중의 한 장면. 엔진이 타패를 기록할 때마다 하나씩 쌓이며, 표시(재생) 전용이다. */
+export interface WatchFrame {
+  view: PlayerView;
+  /** 행동한 좌석 (타패/울기/리치/화료 등) */
+  actor: number;
+  /** 이 장면이 만들어진 시점의 game.log 길이 (효과음을 장면에 맞추는 데 쓴다) */
+  logLength: number;
+}
+
+/**
+ * 응답을 엔진(generator)에 넣기 전에 현재 요청과 대조한다. 엔진은 잘못된 응답을 generator 안에서
+ * 예외로 거절하는데, generator는 예외가 나면 즉시 종료되어 되살릴 수 없다. 즉 잘못된 클릭 한 번이
+ * 진행 중인 국을 망가뜨릴 수 있으므로, 거절은 generator를 건드리기 전에 여기서 해야 한다.
+ */
+function validateResponse(request: DecisionRequest, response: DecisionResponse): void {
+  const got = (response as { type?: unknown } | null)?.type;
+  if (got !== request.type) throw new Error(`GuiSession: expected a "${request.type}" response, got "${String(got)}"`);
+  if (request.type === "discard") {
+    const r = response as DiscardDecisionResponse;
+    if (!request.legalTileIds.includes(r.tileId)) throw new Error(`GuiSession: tileId ${String(r.tileId)} is not a legal discard right now`);
+    if (typeof r.declareRiichi !== "boolean") throw new Error('GuiSession: a "discard" response needs a boolean "declareRiichi"');
+    if (r.declareRiichi && !request.riichiLegalTileIds.includes(r.tileId)) throw new Error(`GuiSession: tileId ${r.tileId} is not a legal riichi discard`);
+    return;
+  }
+  if (request.type === "chi") {
+    const optionId = (response as { optionId?: unknown }).optionId;
+    if (optionId !== null && !request.options.some((option) => option.id === optionId)) {
+      throw new Error(`GuiSession: chi option "${String(optionId)}" is not one of the offered options`);
+    }
+    return;
+  }
+  if (typeof (response as { declare?: unknown }).declare !== "boolean") {
+    throw new Error(`GuiSession: a "${request.type}" response needs a boolean "declare"`);
+  }
+}
 
 export type GuiSessionPhase = "decision" | "hand_end" | "game_end";
 
@@ -26,14 +63,24 @@ export class GuiSession {
   private phase: GuiSessionPhase = "decision";
   private lastHandEndEvent: Extract<GameEvent, { type: "hand_end" }> | undefined;
   private gameEndEvent: GameEndEvent | undefined;
+  /** 엔진이 예외를 던져 generator가 죽은 뒤에는 세션을 더 진행하지 않는다 (조용히 잘못된 상태로 이어가지 않기 위해). */
+  private broken: Error | undefined;
+  private frames: WatchFrame[] = [];
 
   constructor(readonly game: GameState) {
+    game.frameObserver = (view, actor, logLength) => this.frames.push({ view, actor, logLength });
     this.session = game.playHandInteractive();
     this.advance();
   }
 
   private advance(response?: DecisionResponse): void {
-    const step = response === undefined ? this.session.next() : this.session.next(response);
+    let step: IteratorResult<DecisionRequest, void>;
+    try {
+      step = response === undefined ? this.session.next() : this.session.next(response);
+    } catch (err) {
+      this.broken = err instanceof Error ? err : new Error(String(err));
+      throw err;
+    }
     if (step.done) {
       this.onHandFinished();
     } else {
@@ -59,6 +106,13 @@ export class GuiSession {
     }
   }
 
+  /** 마지막으로 가져간 뒤 쌓인 장면들을 돌려주고 비운다. */
+  takeFrames(): WatchFrame[] {
+    const out = this.frames;
+    this.frames = [];
+    return out;
+  }
+
   getPhase(): GuiSessionPhase {
     return this.phase;
   }
@@ -80,10 +134,17 @@ export class GuiSession {
   }
 
   respond(response: DecisionResponse): void {
-    if (this.phase !== "decision") {
+    this.assertNotBroken();
+    if (this.phase !== "decision" || this.current === null) {
       throw new Error(`GuiSession: no decision is currently pending (phase is "${this.phase}")`);
     }
+    validateResponse(this.current, response); // 거절되면 세션 상태는 그대로 (같은 요청이 계속 대기)
+    this.game.recordHumanDecision(this.current, response);
     this.advance(response);
+  }
+
+  private assertNotBroken(): void {
+    if (this.broken) throw new Error(`GuiSession: session stopped after an earlier engine error: ${this.broken.message}`);
   }
 
   /** Starts the next hand on the SAME GameState (scores/dealer/honba/kyotaku/round carry
@@ -91,6 +152,7 @@ export class GuiSession {
    *  finished game or restarting a hand still in progress, so a stray double-click or an
    *  out-of-order client message can't corrupt the sequence. */
   continueToNextHand(): void {
+    this.assertNotBroken();
     if (this.phase !== "hand_end") {
       throw new Error(`GuiSession: cannot continue to the next hand from phase "${this.phase}"`);
     }

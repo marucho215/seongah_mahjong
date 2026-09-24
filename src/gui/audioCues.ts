@@ -44,6 +44,31 @@ export function toAudioCue(event: GameEvent): DistributiveOmit<AudioCue, "seq"> 
   }
 }
 
+/** 최근 행동 목록(화면 표시용)에 쓰는 공개 행동. 버림패/울림/화료처럼 모두에게 보이는 것만 담는다. */
+export interface PublicAction {
+  seat: number;
+  action: "discard" | "chi" | "pon" | "kan" | "kita" | "riichi" | "ron" | "tsumo";
+  /** 버림패/울린 패의 종류 (공개 정보) */
+  tile?: string;
+}
+
+export function toPublicAction(event: GameEvent): PublicAction | null {
+  switch (event.type) {
+    case "discard":
+      return { seat: event.player, action: "discard", tile: event.tile };
+    case "call":
+      return { seat: event.player, action: event.call === "chi" ? "chi" : event.call === "pon" ? "pon" : "kan", tile: event.kind };
+    case "kita":
+      return { seat: event.player, action: "kita" };
+    case "riichi":
+      return { seat: event.player, action: "riichi" };
+    case "win":
+      return { seat: event.player, action: event.isTsumo ? "tsumo" : "ron" };
+    default:
+      return null;
+  }
+}
+
 /**
  * game.log를 앞에서부터 한 번씩만 읽어 순서를 보존한 AudioCue 목록을 만든다. 각 cue에는 세션 내내
  * 증가하는 seq가 붙는다. 서버는 "마지막으로 보낸 seq"를 기억해 그 이후 cue만 보내고, 새로 접속한
@@ -53,6 +78,8 @@ export class AudioCueTracker {
   private nextLogIndex = 0;
   private lastSeq = 0;
   private pending: AudioCue[] = [];
+  /** seq → 그 cue를 만든 로그 인덱스 */
+  private readonly logIndexOfSeq = new Map<number, number>();
 
   constructor(private readonly log: readonly GameEvent[]) {}
 
@@ -60,13 +87,23 @@ export class AudioCueTracker {
   sync(): void {
     for (; this.nextLogIndex < this.log.length; this.nextLogIndex++) {
       const cue = toAudioCue(this.log[this.nextLogIndex]!);
-      if (cue) this.pending.push({ ...cue, seq: ++this.lastSeq } as AudioCue);
+      if (cue) {
+        this.pending.push({ ...cue, seq: ++this.lastSeq } as AudioCue);
+        this.logIndexOfSeq.set(this.lastSeq, this.nextLogIndex);
+      }
     }
   }
 
   /** 지금까지 만들어진 마지막 seq (아직 없으면 0). */
   latestSeq(): number {
     return this.lastSeq;
+  }
+
+  /** 로그의 앞 logLength개 이벤트까지에서 만들어진 마지막 seq. */
+  seqThroughLogLength(logLength: number): number {
+    let best = 0;
+    for (const [seq, idx] of this.logIndexOfSeq) if (idx < logLength && seq > best) best = seq;
+    return best;
   }
 
   /** seq보다 뒤에 만들어진 cue를 순서대로 돌려준다. */
@@ -77,5 +114,6 @@ export class AudioCueTracker {
   /** seq 이하 cue는 더 필요하지 않으므로 버린다 (메모리 정리). */
   discardThrough(seq: number): void {
     this.pending = this.pending.filter((c) => c.seq > seq);
+    for (const s of this.logIndexOfSeq.keys()) if (s <= seq) this.logIndexOfSeq.delete(s);
   }
 }

@@ -30,8 +30,8 @@ async function readOneSseMessage(reader: ReadableStreamDefaultReader<Uint8Array>
   }
 }
 
-async function startServer(game: GameState): Promise<{ baseUrl: string; close: () => Promise<void>; getSession: () => ReturnType<typeof createGuiServer>["session"] }> {
-  const { server, session } = createGuiServer(game);
+async function startServer(game: GameState, frameDelayMs = 0): Promise<{ baseUrl: string; close: () => Promise<void>; getSession: () => ReturnType<typeof createGuiServer>["session"] }> {
+  const { server, session } = createGuiServer(game, { frameDelayMs });
   await new Promise<void>((resolve) => server.listen(0, resolve));
   const port = (server.address() as AddressInfo).port;
   return {
@@ -50,6 +50,39 @@ describe("GUI HTTP/SSE server (createGuiServer)", () => {
   afterEach(async () => {
     if (cleanup) await cleanup();
     cleanup = undefined;
+  });
+
+  it("AI 턴은 장면(watch)으로 한 수씩 먼저 보내고, 재생이 끝난 뒤에 다음 상태를 보낸다", async () => {
+    const { baseUrl, close, getSession } = await startServer(newHumanGame("gui-watch-frames"), 15);
+    cleanup = close;
+    const stream = await fetch(`${baseUrl}/events`);
+    const reader = stream.body!.getReader();
+    const buffer = { text: "" };
+    await readOneSseMessage(reader, buffer); // 접속 시 현재 상태
+
+    // 북빼기 같은 선택은 거절하고, 첫 타패를 낼 때까지 응답한다. 타패 뒤에는 AI 턴 장면이 온다.
+    const kinds: string[] = [];
+    let sawDiscardAnswer = false;
+    for (let guard = 0; guard < 6 && !sawDiscardAnswer; guard++) {
+      const request = getSession().getCurrentRequest()!;
+      sawDiscardAnswer = request.type === "discard";
+      const answer =
+        request.type === "discard"
+          ? { type: "discard", tileId: request.legalTileIds[0], declareRiichi: false }
+          : { type: request.type, declare: false };
+      const res = await fetch(`${baseUrl}/respond`, { method: "POST", body: JSON.stringify(answer) });
+      expect(res.status).toBe(204);
+      let last: { type: string } | undefined;
+      do {
+        last = (await readOneSseMessage(reader, buffer)) as typeof last;
+        kinds.push(last!.type);
+      } while (last!.type === "watch");
+    }
+    await reader.cancel();
+
+    // 내 타패 + 상대 타패마다 장면이 있고, 마지막에만 결정/국 종료 상태가 온다
+    expect(kinds.filter((k) => k === "watch").length).toBeGreaterThanOrEqual(2);
+    expect(kinds[kinds.length - 1]).not.toBe("watch");
   });
 
   it("serves the static client shell and tile assets", async () => {
@@ -254,6 +287,16 @@ describe("GUI HTTP/SSE server (createGuiServer)", () => {
       body: JSON.stringify({ type: "discard", tileId: -999999, declareRiichi: false }),
     });
     expect(res.status).toBe(400);
+
+    // 거절된 뒤에도 세션은 멀쩡해야 한다: 올바른 응답이 정상 처리되고, 다음 메시지는 이벤트 없는 hand_end가 아니다.
+    const legal = await fetch(`${baseUrl}/respond`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "discard", tileId: request.legalTileIds[0], declareRiichi: false }),
+    });
+    expect(legal.status).toBe(204);
+    const next = (await readOneSseMessage(reader, buffer)) as { type: string; event?: unknown };
+    if (next.type === "hand_end") expect(next.event).toBeDefined();
     await reader.cancel();
   }, 30000);
 });

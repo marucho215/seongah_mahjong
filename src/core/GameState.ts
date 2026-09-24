@@ -9,7 +9,7 @@ import { canAnkan, applyAnkan, canPon, applyPon, canDaiminkan, applyDaiminkan, c
 import { applyKita, canKita, canRiichiKita, type KitaAction } from "../actions/kita.js";
 import { canRiichiAnkan } from "../actions/riichiAnkan.js";
 import { canDeclareRiichi, riichiDiscardCandidates } from "../actions/riichi.js";
-import type { CallDecisionRequest, CallDecisionResponse, DecisionRequest, DecisionResponse, DiscardDecisionRequest, DiscardDecisionResponse, NineTerminalsDecisionRequest, NineTerminalsDecisionResponse, RonDecisionContext, RonDecisionRequest, RonDecisionResponse } from "./decisions.js";
+import type { CallDecisionRequest, CallDecisionResponse, ChiDecisionRequest, ChiDecisionResponse, ChiOption, DecisionRequest, DecisionResponse, DiscardDecisionRequest, DiscardDecisionResponse, NineTerminalsDecisionRequest, NineTerminalsDecisionResponse, RonDecisionContext, RonDecisionRequest, RonDecisionResponse, TsumoDecisionRequest, TsumoDecisionResponse, WinPreview } from "./decisions.js";
 import { buildPlayerView, type PlayerView } from "./playerView.js";
 import { isKokushiAnkanRon } from "../actions/kokushiAnkan.js";
 import {
@@ -24,6 +24,8 @@ import {
 } from "../ai/simpleAI.js";
 import type { CharacterProfile } from "../ai/characterProfile.js";
 import { CharacterAI, type CallDecisionTrace, type CharacterDecisionContext } from "../ai/characterAI.js";
+import { summarizeHumanDecision, type HumanDecisionEntry } from "./humanDecisionLog.js";
+import type { ChiCandidate } from "./discardResponses.js";
 import type { ChiDecisionEvaluation } from "../ai/chiDecision.js";
 import {
   buildCallDecisionEntry,
@@ -93,6 +95,9 @@ export interface GameStateOptions {
    *  is designated: ron stays auto-declared for every seat - only discard+riichi, pon,
    *  daiminkan, ankan, kakan, and kita are ever asked of a human seat. */
   humanSeats?: number[];
+  /** 표시 전용 관찰 콜백. 타패/울기/북빼기/리치/화료/유국이 로그에 기록되는 시점(론 판정 전 포함)에 사람 좌석의 PlayerView와 행동 좌석을 넘긴다.
+   *  GUI가 AI 턴을 한 수씩 보여주는 데 쓰며, 게임 진행/로그/결과에는 영향이 없다. */
+  frameObserver?: (view: PlayerView, actor: number, logLength: number) => void;
 }
 
 /** seatWind: 1=East, 2=South, 3=West, relative to who is dealer this hand. */
@@ -168,6 +173,8 @@ export class GameState {
   readonly discardResponsePolicy?: GameStateOptions["discardResponsePolicy"];
   readonly nineTerminalsPolicy: NonNullable<GameStateOptions["nineTerminalsPolicy"]>;
   readonly kitaDecisionPolicy?: GameStateOptions["kitaDecisionPolicy"];
+  /** GameStateOptions.frameObserver와 같다. GuiSession이 생성 후에 붙일 수 있도록 공개한다. */
+  frameObserver?: GameStateOptions["frameObserver"];
   /** Per-seat controller assignment - see ControllerKind and GameStateOptions.controllers
    *  for the exact derivation/precedence. This, not characterProfiles, is the source of
    *  truth for who decides a seat's actions. */
@@ -183,6 +190,8 @@ export class GameState {
   /** CharacterAI decision-debug entries (see AiDecisionEntry) - a separate, purely
    *  additive instrumentation layer. Empty for any game with no character profiles. */
   readonly aiDecisionLog: AiDecisionEntry[] = [];
+  /** 사람 좌석이 내린 결정 기록 (리플레이 `humanDecisions`). 사람이 없는 게임에서는 항상 비어 있다. */
+  readonly humanDecisionLog: HumanDecisionEntry[] = [];
   /** Set the instant any player's score goes below 0 (tobi/bust), checked once per hand
    *  in advanceAfterHand right after that hand's win/exhaustive-draw scoring is fully
    *  final - never mid-hand. Once true, isGameOver() is true regardless of round/hand
@@ -210,6 +219,7 @@ export class GameState {
     this.discardResponsePolicy = opts.discardResponsePolicy;
     this.nineTerminalsPolicy = opts.nineTerminalsPolicy ?? (() => true);
     this.kitaDecisionPolicy = opts.kitaDecisionPolicy;
+    this.frameObserver = opts.frameObserver;
     const humanSeatSet = new Set(opts.humanSeats ?? []);
     this.controllers = allSeats(opts.rules.playerCount).map((i) => {
       const explicit = opts.controllers?.[i];
@@ -521,6 +531,38 @@ export class GameState {
      *  - "atamahane": the first accepted ron ends the offer, so later candidates are never
      *    evaluated - being head-bumped is not a pass and grants no furiten. "all": every
      *    candidate is handled independently. With no human seat this never yields. */
+    const winPreviewOf = (result: FullWinResult): WinPreview => ({
+      yaku: result.yaku.map((y) => ({ name: y.name, han: y.han })),
+      han: result.han,
+      fu: result.fu,
+      yakumanUnits: result.yakumanUnits,
+      totalPoints: result.score.totalPoints,
+    });
+
+    /** 스스로 뽑은 패로 유효한 쯔모가 되었을 때 화료 여부를 정한다. AI 좌석은 요청 없이 항상 true (기존 자동 쯔모).
+     *  사람이 넘기면 false - 그 차례는 평소대로 이어지며 후리텐 등 어떤 상태도 바뀌지 않는다. */
+    function* decideTsumo(
+      seat: number,
+      winningTile: Tile,
+      result: FullWinResult
+    ): Generator<DecisionRequest, boolean, DecisionResponse> {
+      if (!isHumanSeat(seat)) return true;
+      const response = (yield {
+        type: "tsumo",
+        seat,
+        winningTile: tileToRef(winningTile),
+        preview: winPreviewOf(result),
+        view: buildViewFor(seat),
+      } satisfies TsumoDecisionRequest) as TsumoDecisionResponse;
+      if (response?.type !== "tsumo") {
+        throw new Error(`GameState: expected a "tsumo" response for seat ${seat}, got "${String((response as { type?: unknown } | undefined)?.type)}"`);
+      }
+      if (typeof response.declare !== "boolean") {
+        throw new Error(`GameState: a "tsumo" response for seat ${seat} needs a boolean "declare"`);
+      }
+      return response.declare;
+    }
+
     function* offerRon(
       fromSeat: number,
       tile: Tile,
@@ -547,13 +589,7 @@ export class GameState {
               fromSeat,
               winningTile: tileToRef(tile),
               context,
-              preview: {
-                yaku: result.yaku.map((y) => ({ name: y.name, han: y.han })),
-                han: result.han,
-                fu: result.fu,
-                yakumanUnits: result.yakumanUnits,
-                totalPoints: result.score.totalPoints,
-              },
+              preview: winPreviewOf(result),
               view: buildViewFor(p),
             } satisfies RonDecisionRequest) as RonDecisionResponse;
             if (response.type !== "ron") {
@@ -625,6 +661,8 @@ export class GameState {
           },
         },
       }));
+      // 점수/공탁이 정산되기 전 장면. 곧 기록될 win 이벤트 수만큼 logLength를 앞당겨 넘긴다.
+      emitFrame(adjustedWinners[0]!.player, adjustedWinners.length);
       const deltas = settlement.combinedDeltas;
       this.kyotaku = 0;
       for (const p of seats) this.scores[p]! += deltas[p]!;
@@ -735,6 +773,7 @@ export class GameState {
       });
       for (const p of seats) this.scores[p]! += deltas[p]!;
       this.log.push({ type: "exhaustive_draw", tenpaiPlayers, deltas });
+      emitFrame(current);
 
       this.advanceAfterHand(
         shouldDealerContinue({
@@ -931,6 +970,12 @@ export class GameState {
         wallRemainingLive: wall.remainingLiveCount(),
       });
 
+    const emitFrame = (actor: number, pendingEvents = 0): void => {
+      if (!this.frameObserver) return;
+      const humanSeat = this.controllers.indexOf("human");
+      if (humanSeat >= 0) this.frameObserver(buildViewFor(humanSeat), actor, this.log.length + pendingEvents);
+    };
+
     // --- Human decision points (Milestone 1: discard+riichi, pon, daiminkan, ankan, kakan,
     // kita). Each wrapper below defers to the existing AI/SimpleAI function unchanged - byte
     // for byte the same call, same RNG consumption - whenever the seat isn't human-driven,
@@ -971,6 +1016,39 @@ export class GameState {
         view: buildViewFor(player),
       } satisfies CallDecisionRequest) as CallDecisionResponse;
       return { called: response.declare, trace: null };
+    }
+
+    /** 치 후보(엔진이 이미 합법성을 계산·중재한 것)를 사람에게 보여주고 하나를 고르게 한다. undefined = 패스. */
+    function* decideChi(
+      seat: number,
+      candidates: readonly ChiCandidate[],
+      discardedTile: Tile,
+      fromSeat: number
+    ): Generator<DecisionRequest, ChiCandidate | undefined, DecisionResponse> {
+      const hand = hands[seat]!;
+      const options: ChiOption[] = candidates.map((candidate) => ({
+        id: candidate.sequence.join("-"),
+        sequence: candidate.sequence,
+        // applyChi가 손에서 고르는 패와 같은 규칙 (종류별 첫 번째)
+        consumeTileIds: candidate.consumedKinds.map((kind) => hand.tilesOfKind(kind)[0]!.id) as [number, number],
+      }));
+      const response = (yield {
+        type: "chi",
+        seat,
+        fromSeat,
+        discardedTile: tileToRef(discardedTile),
+        options,
+        view: buildViewFor(seat),
+      } satisfies ChiDecisionRequest) as ChiDecisionResponse;
+      if (response?.type !== "chi") {
+        throw new Error(`GameState: expected a "chi" response for seat ${seat}, got "${String((response as { type?: unknown } | undefined)?.type)}"`);
+      }
+      if (response.optionId === null) return undefined;
+      const index = options.findIndex((option) => option.id === response.optionId);
+      if (index < 0) {
+        throw new Error(`GameState: human chi response chose option "${String(response.optionId)}", which is not a legal chi option for seat ${seat}`);
+      }
+      return candidates[index];
     }
 
     function* decideShouminkan(
@@ -1040,7 +1118,8 @@ export class GameState {
         const declaringRiichi = shouldDeclareRiichiFor(player, hand, discardId);
         return { discardId, declaringRiichi };
       }
-      const legalTileIds = hand.concealed.filter((t) => !forbiddenDiscardKinds.includes(t.kind)).map((t) => t.id);
+      let legalTileIds = hand.concealed.filter((t) => !forbiddenDiscardKinds.includes(t.kind)).map((t) => t.id);
+      if (legalTileIds.length === 0) legalTileIds = hand.concealed.map((t) => t.id); // 전부 쿠이카에면 제한을 풀어 교착을 막는다
       const riichiLegalTileIds = canDeclareRiichi(hand, score, wallRemainingLive)
         ? riichiDiscardCandidates(hand).filter((id) => legalTileIds.includes(id))
         : [];
@@ -1103,9 +1182,12 @@ export class GameState {
             continue;
           }
           if (candidate.type === "daiminkan" && !wall.canDrawRinshan(this.rules.maxKans)) continue;
+          const human = isHumanSeat(candidate.seat);
+          // 사람에게 같은 패로 깡을 이미 받아들였다면 퐁은 다시 묻지 않는다 (샨마 경로와 같은 순서).
+          if (human && candidate.type === "pon" && willing.some((w) => w.type === "daiminkan" && w.seat === candidate.seat)) continue;
           const evaluation = candidate.type === "pon"
-            ? evaluatePonFor(candidate.seat, hands[candidate.seat]!, discardedTile.kind)
-            : evaluateDaiminkanFor(candidate.seat, hands[candidate.seat]!, discardedTile.kind);
+            ? yield* decidePon(candidate.seat, hands[candidate.seat]!, discardedTile.kind, discarderSeat, human)
+            : yield* decideDaiminkan(candidate.seat, hands[candidate.seat]!, discardedTile.kind, discarderSeat, human);
           evaluatedCalls.push({ candidate, trace: evaluation.trace });
           if (evaluation.called) willing.push(candidate);
         }
@@ -1124,7 +1206,15 @@ export class GameState {
           .filter((entry): entry is { candidate: Extract<NonWinningCallCandidate, { type: "chi" }>; evaluation: ChiDecisionEvaluation } => entry.evaluation !== undefined)
           .sort((a, b) => b.evaluation.score - a.evaluation.score);
         const selectedChi = chiEvaluations.find((entry) => entry.evaluation.shouldCall);
-        const selected = selectedByPolicy ?? defaultNonChi ?? selectedChi?.candidate;
+        let selected: NonWinningCallCandidate | undefined;
+        const humanChiOptions = resolution.candidates.filter(
+          (candidate): candidate is Extract<NonWinningCallCandidate, { type: "chi" }> => candidate.type === "chi"
+        );
+        if (!selectedByPolicy && !defaultNonChi && humanChiOptions.length > 0 && isHumanSeat(resolution.seat)) {
+          selected = yield* decideChi(resolution.seat, humanChiOptions, discardedTile, discarderSeat);
+        } else {
+          selected = selectedByPolicy ?? defaultNonChi ?? selectedChi?.candidate;
+        }
         for (const entry of evaluatedCalls) {
           const actualCalled = selected?.type === entry.candidate.type && selected.seat === entry.candidate.seat;
           logCallTrace(entry.candidate.seat, discarderSeat, discardedTile.kind, entry.trace, actualCalled);
@@ -1174,18 +1264,30 @@ export class GameState {
           kind: discardedTile.kind,
           fromPlayer: discarderSeat,
         });
+        emitFrame(selected.seat);
 
         if (applied.replacementTile) {
           pendingCalledKanDraw = { player: selected.seat, tile: applied.replacementTile };
           return { ended: false, from: selected.seat, resumePostDrawSeat: selected.seat };
         }
 
-        const discardId = chooseDiscardFor(selected.seat, hands[selected.seat]!, applied.forbiddenDiscardKinds);
+        // AI 좌석은 기존과 똑같이 chooseDiscardFor 한 번만 (리치 판단/RNG 소비 없음). 사람만 요청을 받는다.
+        const discardId = isHumanSeat(selected.seat)
+          ? (yield* decideDiscardAndRiichi(
+              selected.seat,
+              hands[selected.seat]!,
+              true,
+              this.scores[selected.seat]!,
+              wall.remainingLiveCount(),
+              applied.forbiddenDiscardKinds
+            )).discardId
+          : chooseDiscardFor(selected.seat, hands[selected.seat]!, applied.forbiddenDiscardKinds);
         const newTile = hands[selected.seat]!.discardById(discardId, { tsumogiri: false, isRiichiDeclaration: false });
         this.log.push({ type: "discard", player: selected.seat, tile: newTile.kind, tsumogiri: false, riichiDeclaration: false });
         wall.revealPendingKanDora();
         emitNewlyRevealedDoraIndicators();
         refreshWinningTiles(selected.seat);
+        emitFrame(selected.seat);
         return yield* handleDiscardResponses(selected.seat, newTile, wall.isExhausted());
       }
 
@@ -1202,6 +1304,7 @@ export class GameState {
           applyDaiminkan(hands[p]!, discardedTile, discarderSeat);
           recordPaoLiabilityAfterOpenCall(hands[p]!, "kan_open", discardedTile.kind, discarderSeat);
           this.log.push({ type: "call", call: "kan_open", player: p, kind: discardedTile.kind, fromPlayer: discarderSeat });
+          emitFrame(p);
           tableInterrupted = true;
           ippatsuEligible.fill(false);
           wall.commitKan("after-discard");
@@ -1222,6 +1325,7 @@ export class GameState {
           applyPon(hands[p]!, discardedTile, discarderSeat);
           recordPaoLiabilityAfterOpenCall(hands[p]!, "pon", discardedTile.kind, discarderSeat);
           this.log.push({ type: "call", call: "pon", player: p, kind: discardedTile.kind, fromPlayer: discarderSeat });
+          emitFrame(p);
           tableInterrupted = true;
           ippatsuEligible.fill(false);
           // kita may not be declared immediately after a pon - go straight to discard (riichi
@@ -1232,6 +1336,7 @@ export class GameState {
           const newTile = hands[p]!.discardById(discardId, { tsumogiri: false, isRiichiDeclaration: false });
           this.log.push({ type: "discard", player: p, tile: newTile.kind, tsumogiri: false, riichiDeclaration: false });
           refreshWinningTiles(p);
+          emitFrame(p);
           return yield* handleDiscardResponses(p, newTile, wall.isExhausted());
         }
       }
@@ -1324,11 +1429,9 @@ export class GameState {
       ) {
         queuedRiichiKitaAction = yield* decideKita(current, hand, this.rules.kitaEnabled, extractedThisTurn, isHumanSeat(current));
       }
-      // TODO(milestone 3): tsumo is still auto-declared for every seat, human included -
-      // a human "tsumo / skip" decision is deliberately out of Milestone 2's scope.
       const tsumoResult = tryEvaluate(current, drawnTile, true, undefined, isRinshan, isHaitei, false);
       if (!isRinshan) drawCountByPlayer[current] = drawCountByPlayer[current]! + 1;
-      if (tsumoResult && queuedRiichiKitaAction !== "kita") {
+      if (tsumoResult && queuedRiichiKitaAction !== "kita" && (yield* decideTsumo(current, drawnTile, tsumoResult))) {
         finishHandWithWin([{ player: current, result: tsumoResult }]);
         return;
       }
@@ -1363,6 +1466,7 @@ export class GameState {
         applyKita(hand, northTile.id);
         extractedThisTurn++;
         this.log.push({ type: "kita", player: current, tile: "z4" });
+        emitFrame(current);
 
         // the extracted north tile can be ronned (not chankan) by a player waiting on it
         const northWinners = yield* resolveRonBeforeInterruptionInteractive(
@@ -1399,7 +1503,7 @@ export class GameState {
           queuedRiichiKitaAction = yield* decideKita(current, hand, this.rules.kitaEnabled, extractedThisTurn, isHumanSeat(current));
         }
         const kitaTsumo = tryEvaluate(current, replacement, true, undefined, true, false, false);
-        if (kitaTsumo && queuedRiichiKitaAction !== "kita") {
+        if (kitaTsumo && queuedRiichiKitaAction !== "kita" && (yield* decideTsumo(current, replacement, kitaTsumo))) {
           finishHandWithWin([{ player: current, result: kitaTsumo }]);
           return;
         }
@@ -1416,6 +1520,7 @@ export class GameState {
           const addedTile = hand.tilesOfKind(shouminkanKind)[0]!;
           applyShouminkan(hand, addedTile.id);
           this.log.push({ type: "call", call: "kan_added", player: current, kind: shouminkanKind });
+          emitFrame(current);
 
           // chankan: the added tile can be robbed by ron before the kan completes
           const chankanWinners = yield* resolveRonBeforeInterruptionInteractive(
@@ -1436,7 +1541,7 @@ export class GameState {
           latestDrawnTile = replacement;
           this.log.push({ type: "draw", player: current, tile: replacement.kind, source: "rinshan" });
           const rinshanTsumo = tryEvaluate(current, replacement, true, undefined, true, false, false);
-          if (rinshanTsumo) {
+          if (rinshanTsumo && (yield* decideTsumo(current, replacement, rinshanTsumo))) {
             finishHandWithWin([{ player: current, result: rinshanTsumo }]);
             return;
           }
@@ -1473,6 +1578,7 @@ export class GameState {
         // after the pendingRinshan draw below completes, at the top of the next loop turn.
         wall.commitKan("immediate");
         this.log.push({ type: "call", call: "kan_closed", player: current, kind: ankanKind });
+        emitFrame(current);
         pendingRinshan = true;
         continue;
       }
@@ -1507,6 +1613,7 @@ export class GameState {
       wall.revealPendingKanDora();
       emitNewlyRevealedDoraIndicators();
       refreshWinningTiles(current);
+      emitFrame(current);
 
       if (declaringRiichi) {
         // riichi intent is declared and the tile is out, but the deposit is only
@@ -1547,6 +1654,7 @@ export class GameState {
         this.scores[current]! -= 1000;
         this.kyotaku += 1;
         this.log.push({ type: "riichi", player: current });
+        emitFrame(current);
 
         if (
           isAbortiveDrawReasonEnabled("four_riichi", this.rules.playerCount) &&
@@ -1626,6 +1734,17 @@ export class GameState {
    * Works identically for an all-AI hand too (the loop above just never executes its body),
    * but playHand() remains the simpler call for that case.
    */
+  /** 사람이 응답한 결정을 기록한다 (GUI 세션/CLI 드라이버가 검증을 통과한 응답마다 호출). 게임 진행에는 영향이 없다. */
+  recordHumanDecision(request: DecisionRequest, response: DecisionResponse): void {
+    this.humanDecisionLog.push({
+      handIndex: this.handIndex,
+      seat: request.seat,
+      atEventIndex: this.log.length,
+      type: request.type,
+      choice: summarizeHumanDecision(request, response),
+    });
+  }
+
   playHandInteractive(): Generator<DecisionRequest, void, DecisionResponse> {
     return this.playHandSession();
   }
