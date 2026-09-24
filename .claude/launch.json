@@ -6,6 +6,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["tsx", "src/gui/server.ts", "gui-smoke-1"],
       "port": 3000
+    },
+    {
+      "name": "gui-yonma",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "src/gui/server.ts", "chi-0", "--mode", "yonma"],
+      "port": 3000
     }
   ]
 }

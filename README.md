@@ -31,9 +31,9 @@ npm run sim -- --games 100 --save-replays
 ### Human play
 
 Play a sanma game yourself (seat 0) against 2 CharacterAI opponents. You decide every
-discard/riichi, pon, daiminkan, ankan, kakan, kita, and each ron / pass (passing a valid ron
+discard/riichi, pon, chi (yonma), daiminkan, ankan, kakan, kita, and each ron / pass (passing a valid ron
 makes you furiten - temporary until your next draw, or for the rest of the hand in riichi).
-Tsumo is still auto-declared.
+Tsumo is offered too (declare or skip; AI seats still auto-declare).
 
 **Browser GUI** (real mahjong tile art, click-to-discard):
 
@@ -44,16 +44,49 @@ npm run play:gui my-seed   # fixed seed, for a reproducible hand
 
 Then open the printed `http://localhost:3000` URL in a browser.
 
+4-player (yonma) table: add `--mode yonma` (1 human + 3 CharacterAI, same GUI and session code):
+
+```bash
+npm run play:gui -- --mode yonma
+npm run play:gui -- my-seed --mode yonma
+```
+
+In yonma you also get chi choices: the engine lists every legal sequence and the GUI/CLI show them to pick from (or pass).
+
 **Terminal CLI** (text-based, same rules/decisions as the GUI):
 
 ```bash
-npm run play           # random seed
-npm run play my-seed   # fixed seed
+npm run play                        # random seed, sanma
+npm run play my-seed                # fixed seed
+npm run play -- --mode yonma        # 4-player table (same engine/CLI, only the ruleset differs)
 ```
 
 The GUI plays the whole game in one browser session ("다음 국 시작" between hands, final
 standings at the end); the CLI plays one hand per run. Both share the same decision engine,
 so anything legal in one is legal in the other.
+
+### Saving replays of human games
+
+Human+AI games can save the same replay JSON (schema v2) as the AI-only simulations - for the GUI, once the
+game ends (the whole game), for the CLI, the single hand it plays:
+
+```bash
+npm run play:gui -- --save-replays                 # sanma
+npm run play:gui -- my-seed --mode yonma --save-replays
+npm run play -- --save-replays
+```
+
+Files go to `replays/<label>_game0.json` (label = `human-<mode>-<seed>`, or `human-cli-<mode>-<seed>` for the CLI).
+Compared with an AI-only replay: `meta.seats[].kind` is `"human"` for the human seat (character identity stays separate),
+and an optional `humanDecisions` array records each choice the human made (`type`, `choice`, `handIndex`, and
+`atEventIndex`, the length of `events` when the decision was made). A browser refresh keeps recording; if the server
+process dies mid-game the unfinished replay is not recovered. There is no replay viewer yet.
+
+### Future work
+
+- **CustomAI**: the `customAI` controller slot is reserved in `GameState` (`ControllerKind`) but not implemented -
+  constructing a game with it throws. User-authored AI, its editor/settings UI, a replay viewer, extra presentation
+  polish, and character voice/cut-ins are all future updates.
 
 ### 효과음
 
