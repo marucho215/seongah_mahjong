@@ -105,6 +105,26 @@ body {
   position: relative;
 }
 
+.waits {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 13px;
+}
+.waits .waits-label { margin-right: 4px; opacity: 0.9; }
+.waits .furiten-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #b71c1c;
+  color: #fff;
+  font-weight: 600;
+}
+
 .nameplate.is-actor {
   box-shadow: 0 0 0 2px #ff8a65, 0 0 14px rgba(255, 138, 101, 0.6);
 }

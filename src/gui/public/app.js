@@ -203,6 +203,7 @@ function buildTableSkeleton() {
     if (pos === "bottom") {
       zone.appendChild(info);
       zone.appendChild(el("div", "tile-row hand"));
+      zone.appendChild(el("div", "waits hidden"));
     } else {
       zone.appendChild(el("div", "hand-edge"));
       zone.appendChild(info);
@@ -528,7 +529,43 @@ function renderMySeat(view, options) {
       img.title = `${img.title} - 지금은 버릴 수 없습니다`;
     }
     if (clickable) img.addEventListener("click", () => options.onTileClick(t, riichiLegal));
+    // 리치 전 미리보기: 리치 가능한 패에 마우스를 올리면 그 패를 버린 뒤의 대기패를 보여준다 (엔진이 계산한 값)
+    const previewWaits = riichiLegal ? waitsForTile(options.riichiWaits, t.id) : null;
+    if (previewWaits) {
+      img.addEventListener("mouseenter", () => showWaits(zone, "리치하면 대기", previewWaits, view.furiten));
+      img.addEventListener("mouseleave", () => showWaits(zone, "대기", view.waits, view.furiten));
+    }
     hand.appendChild(img);
+  }
+  showWaits(zone, "대기", view.waits, view.furiten);
+}
+
+function waitsForTile(riichiWaits, tileId) {
+  const entry = (riichiWaits || []).find((w) => w.tileId === tileId);
+  return entry ? entry.waits : null;
+}
+
+/** 대기패 줄: "대기: [패] [패]". 후리텐이면 원인과 함께 표시한다 (view.furiten, 엔진이 계산한 값). 대기가 없으면 숨긴다. */
+function showWaits(zone, label, waits, furiten) {
+  const box = zone.querySelector(".waits");
+  box.innerHTML = "";
+  if (!waits || waits.length === 0) {
+    box.classList.add("hidden");
+    return;
+  }
+  box.classList.remove("hidden");
+  const text = el("span", "waits-label");
+  text.textContent = label + ":";
+  box.appendChild(text);
+  for (const kind of waits) box.appendChild(tileImg({ kind }, { small: true }));
+  if (furiten && furiten.active) {
+    const causes = [];
+    if (furiten.selfDiscard) causes.push("자기 버림패");
+    if (furiten.temporary) causes.push("일시");
+    if (furiten.riichi) causes.push("리치 후");
+    const badge = el("span", "furiten-badge");
+    badge.textContent = "후리텐" + (causes.length ? " (" + causes.join(", ") + ")" : "");
+    box.appendChild(badge);
   }
 }
 
@@ -605,12 +642,15 @@ function renderDiscardRequest(request) {
   renderMySeat(request.view, {
     drawnTileId: drawnId,
     riichiLegalTileIds: request.riichiLegalTileIds,
+    riichiWaits: request.riichiWaits,
     legalTileIds: request.legalTileIds,
     onTileClick: (tile, riichiLegal) => {
       let declareRiichi = false;
       if (riichiLegal) {
         const tileName = koreanTileLabel(tile.kind, tile.red);
-        declareRiichi = window.confirm(`${tileName}${josaEulReul(tileName)} 버리면서 리치를 선언할까요?\n(취소를 누르면 그냥 버립니다)`);
+        const waits = waitsForTile(request.riichiWaits, tile.id);
+        const waitText = waits && waits.length ? "\n대기: " + waits.map((k) => koreanTileLabel(k)).join(" ") : "";
+        declareRiichi = window.confirm(`${tileName}${josaEulReul(tileName)} 버리면서 리치를 선언할까요?${waitText}\n(취소를 누르면 그냥 버립니다)`);
       }
       sendResponse({ type: "discard", tileId: tile.id, declareRiichi });
     },

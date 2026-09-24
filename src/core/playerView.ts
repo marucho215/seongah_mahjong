@@ -56,6 +56,9 @@ export interface PlayerView {
   seatWinds: number[];
   /** This seat's own furiten state by cause (see FuritenSnapshot). Never another seat's. */
   furiten: FuritenSnapshot;
+  /** 리치 중인 이 좌석의 현재 대기패 (종류만). 엔진의 기존 대기 계산(computeWinningTiles)을 그대로 쓰며, 자기 손패에서만
+   *  나온다 - 남은 장수처럼 상대 손패/벽에 의존하는 정보는 담지 않는다. 리치가 아니면 빈 배열. */
+  waits: TileKind[];
   opponents: PlayerViewOpponent[];
   doraIndicators: TileRef[];
   scores: number[];
@@ -71,6 +74,8 @@ export interface BuildPlayerViewOptions {
   seat: number;
   /** Defaults to "not furiten" when omitted. */
   furiten?: FuritenSnapshot;
+  /** 리치 중인 이 좌석의 대기패. 생략하면 빈 배열. */
+  waits?: readonly TileKind[];
   hands: readonly Hand[];
   doraIndicators: readonly Tile[];
   scores: readonly number[];
@@ -83,7 +88,7 @@ export interface BuildPlayerViewOptions {
 }
 
 export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
-  const { seat, hands, doraIndicators, scores, furiten, ...rest } = options;
+  const { seat, hands, doraIndicators, scores, furiten, waits, ...rest } = options;
   const own = hands[seat]!;
   const opponents: PlayerViewOpponent[] = hands
     .map((hand, i) => ({ hand, seat: i }))
@@ -107,6 +112,7 @@ export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
     riichi: own.riichi,
     seatWinds: hands.map((_, s) => seatDistance(options.dealerSeat, s, hands.length) + 1),
     furiten: furiten ?? NO_FURITEN,
+    waits: [...(waits ?? [])],
     opponents,
     doraIndicators: doraIndicators.map(tileToRef),
     scores: [...scores],

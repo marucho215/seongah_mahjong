@@ -959,6 +959,7 @@ export class GameState {
           cachedWinningTiles[seat]!,
           hands[seat]!.discards.map((d) => d.tile.kind)
         ),
+        waits: hands[seat]!.riichi ? cachedWinningTiles[seat]! : [],
         hands,
         doraIndicators: wall.doraIndicators(),
         scores: this.scores,
@@ -1101,6 +1102,20 @@ export class GameState {
       return response.declare === true;
     }
 
+    /** 리치 가능한 각 버림패를 버린 뒤의 대기패 (같은 종류는 한 번만 계산). 기존 computeWinningTiles를 그대로 쓴다. */
+    const riichiWaitsFor = (hand: Hand, tileIds: readonly number[]): { tileId: number; waits: TileKind[] }[] => {
+      const byKind = new Map<TileKind, TileKind[]>();
+      return tileIds.map((tileId) => {
+        const tile = hand.concealed.find((t) => t.id === tileId)!;
+        let waits = byKind.get(tile.kind);
+        if (!waits) {
+          waits = computeWinningTiles(tilesToCounts(hand.concealed.filter((t) => t.id !== tileId)), hand.melds.length, this.rules);
+          byKind.set(tile.kind, waits);
+        }
+        return { tileId, waits };
+      });
+    };
+
     /** Discard and riichi are answered together: riichi is a property of a specific
      *  discard, not an independent decision - see DiscardDecisionRequest. AI/SimpleAI seats
      *  keep the exact existing two-call sequence (chooseDiscardFor then
@@ -1128,6 +1143,7 @@ export class GameState {
         seat: player,
         legalTileIds,
         riichiLegalTileIds,
+        riichiWaits: riichiWaitsFor(hand, riichiLegalTileIds),
         view: buildViewFor(player),
       } satisfies DiscardDecisionRequest) as DiscardDecisionResponse;
       if (!legalTileIds.includes(response.tileId)) {
