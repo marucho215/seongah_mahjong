@@ -10,7 +10,7 @@ import { applyKita, canKita, canRiichiKita, type KitaAction } from "../actions/k
 import { canRiichiAnkan } from "../actions/riichiAnkan.js";
 import { canDeclareRiichi, riichiDiscardCandidates } from "../actions/riichi.js";
 import type { CallDecisionRequest, CallDecisionResponse, ChiDecisionRequest, ChiDecisionResponse, ChiOption, DecisionRequest, DecisionResponse, DiscardDecisionRequest, DiscardDecisionResponse, NineTerminalsDecisionRequest, NineTerminalsDecisionResponse, RonDecisionContext, RonDecisionRequest, RonDecisionResponse, TsumoDecisionRequest, TsumoDecisionResponse, WinPreview } from "./decisions.js";
-import { buildPlayerView, type PlayerView } from "./playerView.js";
+import { buildPlayerView, withUnseenCounts, type PlayerView, type WaitInfo } from "./playerView.js";
 import { isKokushiAnkanRon } from "../actions/kokushiAnkan.js";
 import {
   chooseDiscard,
@@ -1103,13 +1103,14 @@ export class GameState {
     }
 
     /** 리치 가능한 각 버림패를 버린 뒤의 대기패 (같은 종류는 한 번만 계산). 기존 computeWinningTiles를 그대로 쓴다. */
-    const riichiWaitsFor = (hand: Hand, tileIds: readonly number[]): { tileId: number; waits: TileKind[] }[] => {
-      const byKind = new Map<TileKind, TileKind[]>();
+    const riichiWaitsFor = (hand: Hand, tileIds: readonly number[], view: PlayerView): { tileId: number; waits: WaitInfo[] }[] => {
+      const byKind = new Map<TileKind, WaitInfo[]>();
       return tileIds.map((tileId) => {
         const tile = hand.concealed.find((t) => t.id === tileId)!;
         let waits = byKind.get(tile.kind);
         if (!waits) {
-          waits = computeWinningTiles(tilesToCounts(hand.concealed.filter((t) => t.id !== tileId)), hand.melds.length, this.rules);
+          // 미확인 장수는 지금 view의 공개 정보로 센다 (버릴 패는 손패에서 강으로 옮겨 가도 보이는 장수는 그대로다)
+          waits = withUnseenCounts(view, computeWinningTiles(tilesToCounts(hand.concealed.filter((t) => t.id !== tileId)), hand.melds.length, this.rules));
           byKind.set(tile.kind, waits);
         }
         return { tileId, waits };
@@ -1138,13 +1139,14 @@ export class GameState {
       const riichiLegalTileIds = canDeclareRiichi(hand, score, wallRemainingLive)
         ? riichiDiscardCandidates(hand).filter((id) => legalTileIds.includes(id))
         : [];
+      const view = buildViewFor(player);
       const response = (yield {
         type: "discard",
         seat: player,
         legalTileIds,
         riichiLegalTileIds,
-        riichiWaits: riichiWaitsFor(hand, riichiLegalTileIds),
-        view: buildViewFor(player),
+        riichiWaits: riichiWaitsFor(hand, riichiLegalTileIds, view),
+        view,
       } satisfies DiscardDecisionRequest) as DiscardDecisionResponse;
       if (!legalTileIds.includes(response.tileId)) {
         throw new Error(

@@ -557,7 +557,16 @@ function showWaits(zone, label, waits, furiten) {
   const text = el("span", "waits-label");
   text.textContent = label + ":";
   box.appendChild(text);
-  for (const kind of waits) box.appendChild(tileImg({ kind }, { small: true }));
+  // 각 대기패 + 아직 보이지 않은 장수 (엔진이 공개 정보만으로 센 추정치, 실제 남은 장수가 아니다)
+  for (const wait of waits) {
+    const item = el("span", "wait-item");
+    item.title = `아직 보이지 않은 ${koreanTileLabel(wait.kind)}: 최대 ${wait.unseenCount}장 (공개된 패 기준 추정)`;
+    item.appendChild(tileImg({ kind: wait.kind }, { small: true }));
+    const n = el("span", "wait-count");
+    n.textContent = "×" + wait.unseenCount;
+    item.appendChild(n);
+    box.appendChild(item);
+  }
   if (furiten && furiten.active) {
     const causes = [];
     if (furiten.selfDiscard) causes.push("자기 버림패");
@@ -649,7 +658,7 @@ function renderDiscardRequest(request) {
       if (riichiLegal) {
         const tileName = koreanTileLabel(tile.kind, tile.red);
         const waits = waitsForTile(request.riichiWaits, tile.id);
-        const waitText = waits && waits.length ? "\n대기: " + waits.map((k) => koreanTileLabel(k)).join(" ") : "";
+        const waitText = waits && waits.length ? "\n대기: " + waits.map((w) => `${koreanTileLabel(w.kind)} ×${w.unseenCount}`).join(" / ") : "";
         declareRiichi = window.confirm(`${tileName}${josaEulReul(tileName)} 버리면서 리치를 선언할까요?${waitText}\n(취소를 누르면 그냥 버립니다)`);
       }
       sendResponse({ type: "discard", tileId: tile.id, declareRiichi });

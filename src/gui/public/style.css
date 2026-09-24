@@ -116,6 +116,8 @@ body {
   font-size: 13px;
 }
 .waits .waits-label { margin-right: 4px; opacity: 0.9; }
+.waits .wait-item { display: inline-flex; align-items: center; gap: 1px; margin-right: 6px; }
+.waits .wait-count { font-variant-numeric: tabular-nums; opacity: 0.95; }
 .waits .furiten-badge {
   margin-left: 6px;
   padding: 1px 6px;

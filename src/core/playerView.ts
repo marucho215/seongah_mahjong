@@ -18,6 +18,46 @@ export function riichiDiscardIndexOf(hand: Hand): number | null {
   return visibleBefore < visibleTotal ? visibleBefore : null;
 }
 
+/** 대기패 한 종류와, 이 플레이어에게 아직 보이지 않은 장수. */
+export interface WaitInfo {
+  kind: TileKind;
+  /** 4 - (이 플레이어가 지금 알고 있는 같은 종류의 장수). 실제 패산 잔여 수가 아니라 "공개 정보 기준 추정치"다:
+   *  자기 손패/멘츠/북, 모든 버림패, 모든 공개 멘츠/북, 도라 표시패만 센다. 상대 손패나 패산의 실제 내용은 쓰지 않는다. */
+  unseenCount: number;
+}
+
+/**
+ * view 안에 이미 담긴 공개 정보만으로 `kind`의 미확인 장수를 센다 (4 - 보이는 장수, 0 미만은 0).
+ * 이 함수는 PlayerView의 필드만 읽으므로, view에 없는 정보(상대 손패, 패산)는 구조적으로 쓸 수 없다.
+ */
+export function unseenCountOf(
+  view: Pick<PlayerView, "concealedTiles" | "melds" | "kitaTiles" | "discards" | "opponents" | "doraIndicators">,
+  kind: TileKind
+): number {
+  let visible = 0;
+  const count = (k: TileKind): void => {
+    if (k === kind) visible++;
+  };
+  for (const t of view.concealedTiles) count(t.kind);
+  for (const m of view.melds) for (const t of m.tiles) count(t.kind);
+  for (const t of view.kitaTiles) count(t.kind);
+  for (const k of view.discards) count(k);
+  for (const o of view.opponents) {
+    for (const k of o.discards) count(k);
+    for (const m of o.melds) for (const t of m.tiles) count(t.kind);
+    if (kind === "z4") visible += o.kitaCount; // 북빼기 패는 모두 북(z4)이며 공개돼 있다
+  }
+  for (const t of view.doraIndicators) count(t.kind);
+  return Math.max(0, 4 - visible);
+}
+
+export function withUnseenCounts(
+  view: Parameters<typeof unseenCountOf>[0],
+  kinds: readonly TileKind[]
+): WaitInfo[] {
+  return kinds.map((kind) => ({ kind, unseenCount: unseenCountOf(view, kind) }));
+}
+
 export interface PlayerViewOpponent {
   seat: number;
   /** Own discards only, excluding any that were called away (those tiles now live in the
@@ -58,7 +98,7 @@ export interface PlayerView {
   furiten: FuritenSnapshot;
   /** 리치 중인 이 좌석의 현재 대기패 (종류만). 엔진의 기존 대기 계산(computeWinningTiles)을 그대로 쓰며, 자기 손패에서만
    *  나온다 - 남은 장수처럼 상대 손패/벽에 의존하는 정보는 담지 않는다. 리치가 아니면 빈 배열. */
-  waits: TileKind[];
+  waits: WaitInfo[];
   opponents: PlayerViewOpponent[];
   doraIndicators: TileRef[];
   scores: number[];
@@ -102,7 +142,7 @@ export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
       riichi: hand.riichi,
       kitaCount: hand.kitaTiles.length,
     }));
-  return {
+  const base = {
     seat,
     concealedTiles: own.concealed.map(tileToRef),
     melds: own.melds.map(meldToSnapshot),
@@ -112,10 +152,11 @@ export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
     riichi: own.riichi,
     seatWinds: hands.map((_, s) => seatDistance(options.dealerSeat, s, hands.length) + 1),
     furiten: furiten ?? NO_FURITEN,
-    waits: [...(waits ?? [])],
     opponents,
     doraIndicators: doraIndicators.map(tileToRef),
     scores: [...scores],
     ...rest,
   };
+  // 대기패의 미확인 장수는 방금 만든 view의 공개 정보만으로 센다
+  return { ...base, waits: withUnseenCounts(base, waits ?? []) };
 }

@@ -1,5 +1,5 @@
 import type { TileKind } from "./tiles.js";
-import type { PlayerView } from "./playerView.js";
+import type { PlayerView, WaitInfo } from "./playerView.js";
 import type { TileRef } from "./GameLog.js";
 
 /** A normal turn discard, optionally combined with declaring riichi on it - riichi is a
@@ -15,7 +15,7 @@ export interface DiscardDecisionRequest {
   riichiLegalTileIds: number[];
   /** 리치 가능한 각 버림패를 골랐을 때의 대기패 미리보기 (엔진의 기존 대기 계산). riichiLegalTileIds와 같은 패들만 담는다.
    *  내 손패에서만 계산되므로 숨은 정보를 더하지 않는다. */
-  riichiWaits: { tileId: number; waits: TileKind[] }[];
+  riichiWaits: { tileId: number; waits: WaitInfo[] }[];
   /** Seat-filtered snapshot for a UI/HumanController to render - no opponent concealed
    *  tile ever appears in it (see PlayerView). Bundled with every request rather than
    *  requiring a separate "peek at current state" call, since a hand in progress has no
