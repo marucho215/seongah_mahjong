@@ -4,3 +4,8 @@ dist/
 # T-STUDIO Mahjong Sound Pack: 약관상 2차 배포 금지라 원본을 커밋하지 않는다 (assets/audio/tstudio/README.md 참고)
 src/gui/public/assets/audio/tstudio/*.mp3
 src/gui/public/assets/audio/tstudio/*.ogg
+
+# 시뮬레이션/검증이 만드는 산출물 (이미 커밋된 옛 파일은 그대로 추적된다)
+/replays/
+/validation-failures/
+/phase*-validation.log

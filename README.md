@@ -1,137 +1,121 @@
-# Riichi Mahjong Simulation Engine
+# Seong-ah Mahjong Simulator
 
-Deterministic riichi mahjong simulation engine with Mahjong Soul-inspired sanma and yonma
-rulesets. Both formats support full games, including scoring, calls, riichi, kan, exhaustive
-draws, round progression, CharacterAI play, and JSON replay output. The yonma ruleset also
-includes the currently covered Mahjong Soul-style abortive draws.
+Deterministic riichi mahjong engine with Mahjong Soul-inspired **sanma (3-player)** and **yonma (4-player)**
+rulesets, CharacterAI opponents, and a playable browser GUI / terminal CLI for one human seat.
 
-Player-count, tile/wall layout, scoring totals, calls such as chi/kita, and round length are
-selected through `RuleConfig`. The implementation targets the repository's covered Mahjong
-Soul behavior; it does not claim complete parity with every live-service rule or option.
+The implementation targets the behavior covered by this repository's tests; it does not claim complete parity
+with every live-service rule or option. Player count, tile/wall layout, scoring totals, calls (chi/kita) and
+round length are selected through `RuleConfig`.
+
+Version 1.0.0. Developer-facing structure and status: [HANDOFF.md](HANDOFF.md).
+
+## What is supported
+
+| | Sanma | Yonma |
+|---|---|---|
+| AI-only full games (CharacterAI / simple AI) | yes | yes |
+| Human (1 seat) + AI in the browser GUI | yes | yes |
+| Human + AI in the terminal CLI (one hand per run) | yes | yes |
+| Replay JSON (schema v2) for AI-only games | yes | yes |
+| Replay JSON for human + AI games | yes | yes |
+
+Every choice a human can face has a decision path (GUI and CLI):
+discard and riichi, pon, chi (yonma only - you pick among the engine's legal sequences, or pass), daiminkan,
+ankan, kakan, kita (sanma), ron / pass (passing makes you furiten, as in the real rules), tsumo / decline, and
+nine-terminals abortive draw. AI seats always act automatically (including automatic tsumo/ron).
 
 ## Running
 
-Requires [Node.js](https://nodejs.org/) (v20+).
+Requires [Node.js](https://nodejs.org/) 20 or newer.
 
 ```bash
 npm install
-npm test
-npm run sim
 ```
 
-`npm run sim` runs the sanma CharacterAI comparative simulation. By default it runs each
-registered character solo (seat 0) against 2 neutral SimpleAI opponents. Options:
+### Play in the browser (GUI)
 
 ```bash
-npm run sim -- --games 100          # override the games-per-character count (default: 50)
-npm run sim -- --save-replays       # also save one JSON kifu per game to ./replays/
-npm run sim -- --games 100 --save-replays
-```
-
-### Human play
-
-Play a sanma game yourself (seat 0) against 2 CharacterAI opponents. You decide every
-discard/riichi, pon, chi (yonma), daiminkan, ankan, kakan, kita, and each ron / pass (passing a valid ron
-makes you furiten - temporary until your next draw, or for the rest of the hand in riichi).
-Tsumo is offered too (declare or skip; AI seats still auto-declare).
-
-**Browser GUI** (real mahjong tile art, click-to-discard):
-
-```bash
-npm run play:gui           # random seed
-npm run play:gui my-seed   # fixed seed, for a reproducible hand
-```
-
-Then open the printed `http://localhost:3000` URL in a browser.
-
-4-player (yonma) table: add `--mode yonma` (1 human + 3 CharacterAI, same GUI and session code):
-
-```bash
-npm run play:gui -- --mode yonma
-npm run play:gui -- my-seed --mode yonma
-```
-
-In yonma you also get chi choices: the engine lists every legal sequence and the GUI/CLI show them to pick from (or pass).
-
-**Terminal CLI** (text-based, same rules/decisions as the GUI):
-
-```bash
-npm run play                        # random seed, sanma
-npm run play my-seed                # fixed seed
-npm run play -- --mode yonma        # 4-player table (same engine/CLI, only the ruleset differs)
-```
-
-The GUI plays the whole game in one browser session ("다음 국 시작" between hands, final
-standings at the end); the CLI plays one hand per run. Both share the same decision engine,
-so anything legal in one is legal in the other.
-
-### Saving replays of human games
-
-Human+AI games can save the same replay JSON (schema v2) as the AI-only simulations - for the GUI, once the
-game ends (the whole game), for the CLI, the single hand it plays:
-
-```bash
-npm run play:gui -- --save-replays                 # sanma
+npm run play:gui                           # sanma, random seed
+npm run play:gui -- my-seed                # sanma, fixed seed
+npm run play:gui -- --mode yonma           # yonma
 npm run play:gui -- my-seed --mode yonma --save-replays
+```
+
+Open the printed `http://localhost:3000` (set `PORT` to change it). You sit at seat 0; the opponents are
+CharacterAI seats (2 in sanma, 3 in yonma). One process plays one whole game (all hands, then final standings).
+
+GUI features: one shared 4-position table for sanma and yonma, click-to-discard with riichi confirmation, action bar
+for every decision (chi options are drawn as tiles), the AI's discards/calls/riichi/wins replayed one at a time,
+a short "recent actions" list, riichi wait display with the number of copies you have not seen yet (public
+information only, never the real wall), furiten indicator, sound effects, result overlay, and session recovery on
+browser refresh/reconnect. Tile art: `src/gui/public/assets/mahjong/ATTRIBUTION.md`.
+
+### Play in the terminal (CLI)
+
+```bash
+npm run play                        # sanma, random seed
+npm run play my-seed                # fixed seed
+npm run play -- --mode yonma        # yonma
 npm run play -- --save-replays
 ```
 
-Files go to `replays/<label>_game0.json` (label = `human-<mode>-<seed>`, or `human-cli-<mode>-<seed>` for the CLI).
-Compared with an AI-only replay: `meta.seats[].kind` is `"human"` for the human seat (character identity stays separate),
-and an optional `humanDecisions` array records each choice the human made (`type`, `choice`, `handIndex`, and
-`atEventIndex`, the length of `events` when the decision was made). A browser refresh keeps recording; if the server
-process dies mid-game the unfinished replay is not recovered. There is no replay viewer yet.
+The CLI plays a single hand per run (no next-hand continuation); the GUI plays the whole game. Both use the same
+decision engine, so anything legal in one is legal in the other.
 
-### Future work
+### Sound effects
 
-- **CustomAI**: the `customAI` controller slot is reserved in `GameState` (`ControllerKind`) but not implemented -
-  constructing a game with it throws. User-authored AI, its editor/settings UI, a replay viewer, extra presentation
-  polish, and character voice/cut-ins are all future updates.
+The GUI plays physical (tile, riichi stick, shuffle) and UI sounds only - no spoken declarations. OwlishMedia UI
+sounds (CC0) are included; T-STUDIO's sound pack cannot be redistributed, so download it yourself and place the files
+as described in `src/gui/public/assets/audio/tstudio/README.md`. The game works without them (those sounds are just
+silent). Sources and licenses: `src/gui/public/assets/audio/README.md`.
 
-### 효과음
-
-GUI 효과음은 타패, 북빼기, 퐁, 깡, 리치봉, 셔플 같은 물리음과 버튼/결과창 UI 소리만 쓴다. 사람이 말하는 선언 음성은 재생에 연결하지 않는다.
-
-| 출처 | 라이선스 | 저장소 포함 |
-|---|---|---|
-| [T-STUDIO Mahjong Sound Pack](https://t-studio-tst.itch.io/free-sound-mahjong-sound-pack) | 상업 이용 가능, 2차 배포 금지 | **포함하지 않음** (`.gitignore`) |
-| [OwlishMedia Sound Effects Pack (OpenGameArt)](https://opengameart.org/content/sound-effects-pack) | CC0 | 사용한 3개 파일만 포함 |
-
-- T-STUDIO 파일은 직접 내려받아 `src/gui/public/assets/audio/tstudio/`에 배치해야 소리가 난다. 필요한 파일과 방법은 그 폴더의 `README.md`를 본다. 파일이 없어도 게임은 정상 동작한다.
-- 출처 기록: `src/gui/public/assets/audio/README.md`, `.../ui/ATTRIBUTION.md`
-
-### Direct 3-player CharacterAI battle
-
-Seat any 3 characterIds at the same table against each other instead:
+### AI-only simulations
 
 ```bash
-npm run sim -- --players seiyatosuke,kyletyler,seiyamouri --games 10
-npm run sim -- --players jegalmina,jegalnahui,byeonari --games 20 --save-replays
-```
-
-Seat order follows input order (seat 0/1/2). An unregistered characterId prints an error
-and exits. The same characterId may be listed more than once (each seat still gets its
-own independently seeded CharacterAI instance) - duplicates are allowed rather than
-rejected, since seat-level personality doesn't depend on the other seats' identities.
-
-Registered characterIds: `jegalmina`, `jegalnahui`, `seiyamouri`, `seiyakouri`,
-`kyletyler`, `seiyatosuke`, `toumesuashi`, `toumesuayo`, `byeonari`, `kangunsim`,
-`kimwooju`, `ryumint`, `inan`, `effieminos`, `hwayoung`, `mageuna`, `magnum`,
-`optima215`, `yuwen`, `josangmin`, `seiyahikudo`, `ryuheart` (legacy alias: `ryuhart`).
-
-### Direct 4-player CharacterAI battle
-
-Use the yonma ruleset by seating exactly 4 CharacterAI players. Seat order follows input
-order (seat 0/1/2/3), and `--seed` makes the game and decision log reproducible.
-
-```bash
-npm run sim:yonma -- --players jegalmina,toumesuayo,byeonari,seiyakouri --seed yonma-qa-001
+npm run sim                                     # sanma: each registered character solo vs 2 simple AIs
+npm run sim -- --games 100 --save-replays
+npm run sim -- --players seiyatosuke,kyletyler,seiyamouri --games 10   # any 3 characterIds at one table
 npm run sim:yonma -- --players jegalmina,toumesuayo,byeonari,seiyakouri --seed yonma-qa-001 --save-replays
+npm run validate -- --games 100 [--seed S] [--format sanma|yonma] [--save-failures]   # mass self-play invariant checks
 ```
 
-Saved sanma and yonma replays include the rule configuration, game events, final result,
-and CharacterAI decision diagnostics. Deterministic replay QA checks rule invariants without
-requiring whole-action-array snapshots. Each completed `hand_end` also carries an additive
-result snapshot containing the scoring interpretation actually used (including the selected
-winning tile), applied point deltas, draw/tenpai details, and dealer/honba/kyotaku progression.
-This makes seeded results auditable without rerunning the hand.
+Seat order follows the order of `--players`; the same characterId may appear more than once. Registered
+characterIds are listed in `src/ai/characterProfiles.ts`.
+
+## Replays
+
+`--save-replays` writes one JSON file per game to `replays/` (relative paths resolve against the project root, not the
+current directory): `<label>_game<index>.json`. Human games are named `human-<mode>-<seed>_game0.json`
+(`human-cli-<mode>-<seed>_game0.json` for the CLI).
+
+A record contains `meta` (`replaySchemaVersion: 2`, rules, game seed, per-seat `kind` and `characterId`), the engine's
+own `events` log (deals, draws, discards, calls, riichi, wins with auditable scoring and dora breakdown, draws,
+`game_end`), `aiDecisions` (CharacterAI debug entries), and `finalStandings`. Games with a human seat additionally get
+`meta.seats[].kind: "human"` and an optional `humanDecisions` array (what was asked, what was chosen, and where in
+`events` it happened). Schema v2 is additive over v1; readers should treat a missing version as 1.
+
+Replays are checked by the same invariant validators the tests use (`src/validation/`, `tests/helpers/replayQa.ts`).
+GUI games save once, when the game ends; if the server process dies mid-game the unfinished replay is not recovered
+(a browser refresh does not interrupt recording). There is no replay viewer yet.
+
+## Tests
+
+```bash
+npx tsc -p . --noEmit            # typecheck
+npm test                         # full suite (vitest run) - takes about 15 minutes
+npx vitest run tests/humanChi.test.ts     # a single file
+```
+
+Coverage areas: scoring and yaku, calls and kan, riichi/furiten, abortive and exhaustive draws, round progression,
+Mahjong Soul fidelity fixes (`tests/ff*.test.ts`), CharacterAI determinism, replay schema and invariants, human
+decision paths (ron, chi, tsumo, nine-terminals, riichi waits), the GUI session/server (including refresh recovery),
+and full human + AI games in both modes.
+
+## Known limitations and future work
+
+- **CustomAI** is not implemented. The `customAI` controller kind is only a reserved slot: creating a game with it
+  throws. User-authored AI and any editor/settings UI are future work.
+- No replay viewer / timeline / seek, no character voices or win cut-ins, no additional presentation options.
+- The GUI always seats the human at seat 0 with fixed CharacterAI opponents (no start screen or seat/opponent picker).
+- The CLI plays one hand per run.
+- Rank/room/account progression scoring is out of scope.

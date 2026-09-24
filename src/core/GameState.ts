@@ -90,10 +90,10 @@ export interface GameStateOptions {
    *  separately; false passes only the current action window. */
   kitaDecisionPolicy?: (seat: number, hand: Hand, extractedThisTurn: number) => boolean;
   /** Compatibility shorthand for `controllers: [...seat => "human"...]` - see `controllers`'
-   *  doc comment for the exact precedence. Kept for the Milestone 1 API surface; new callers
-   *  should prefer `controllers` directly. Milestone 1 scope regardless of how a human seat
-   *  is designated: ron stays auto-declared for every seat - only discard+riichi, pon,
-   *  daiminkan, ankan, kakan, and kita are ever asked of a human seat. */
+   *  doc comment for the exact precedence. Kept as a compatibility shorthand; new callers
+   *  should prefer `controllers` directly. A human seat is asked for every choice it can face
+   *  (see decisions.ts): discard+riichi, pon, chi, daiminkan, ankan, kakan, kita, ron, tsumo and
+   *  nine-terminals; every other seat decides automatically. */
   humanSeats?: number[];
   /** 표시 전용 관찰 콜백. 타패/울기/북빼기/리치/화료/유국이 로그에 기록되는 시점(론 판정 전 포함)에 사람 좌석의 PlayerView와 행동 좌석을 넘긴다.
    *  GUI가 AI 턴을 한 수씩 보여주는 데 쓰며, 게임 진행/로그/결과에는 영향이 없다. */
@@ -946,8 +946,7 @@ export class GameState {
     };
 
     /** Source of truth: GameState.controllers, not characterProfiles - a "human" seat with
-     *  a characterProfile still routes through the human decision path. Milestone 1 scope:
-     *  this never applies to ron. */
+     *  a characterProfile still routes through the human decision path. */
     const isHumanSeat = (player: number): boolean => this.controllers[player] === "human";
 
     /** Seat-filtered snapshot handed to a human decision request - see PlayerView. Never
@@ -977,8 +976,8 @@ export class GameState {
       if (humanSeat >= 0) this.frameObserver(buildViewFor(humanSeat), actor, this.log.length + pendingEvents);
     };
 
-    // --- Human decision points (Milestone 1: discard+riichi, pon, daiminkan, ankan, kakan,
-    // kita). Each wrapper below defers to the existing AI/SimpleAI function unchanged - byte
+    // --- Human decision points (discard+riichi, pon, chi, daiminkan, ankan, kakan, kita, tsumo;
+    // ron and nine-terminals are handled where they arise). Each wrapper below defers to the existing AI/SimpleAI function unchanged - byte
     // for byte the same call, same RNG consumption - whenever the seat isn't human-driven,
     // and only yields a DecisionRequest for an actual human seat. None of these ever run for
     // an all-AI game, so playHand() (the synchronous AI-only entry point) never sees a yield.
