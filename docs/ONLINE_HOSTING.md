@@ -125,6 +125,12 @@ Funnel은 켜 둔 채로 두어도 된다(서버가 다시 켜지면 같은 주�
   (설치 여부는 `Test-Path "C:\Program Files\Tailscale\tailscale.exe"`가 `True`인지로 확인한다).
 - **`Funnel is not enabled on your tailnet.`**: 함께 나온 `https://login.tailscale.com/f/funnel?...` 링크를 브라우저로 열고,
   같은 Tailscale 계정으로 허용한 뒤 명령을 다시 실행한다(처음 한 번만).
+- **HTTP ERROR 502**: Funnel까지는 닿았지만 게임 서버에 연결하지 못한 것이다. 서버 창(`npm run play:gui`)이 켜져 있는지,
+  노트북에서 `http://127.0.0.1:3000`이 열리는지 확인한다.
+- **휴대폰에 `dns_probe_finished_nxdomain`**: 휴대폰이 공개 등록 전에 조회한 "주소 없음" 결과를 기억하고 있는 것이다.
+  비행기 모드를 껐다 켜거나 브라우저 캐시를 지운 뒤 다시 연다. 공개 등록 여부는 휴대폰에서
+  `https://dns.google/query?name=<주소>&type=A`로 확인한다(100.으로 시작하지 않는 IP가 나오면 등록된 것이다). 노트북에서는
+  Tailscale이 `ts.net` 조회를 가로채므로 `nslookup`으로 확인할 수 없다.
 - **노트북에서는 `….ts.net`이 열리는데 휴대폰에서는 안 된다**: Tailscale이 켜진 기기는 Funnel이 꺼져 있어도 내부 경로로 열린다.
   `tailscale funnel status`에 `Funnel on`이 보이는지 확인하고, 휴대폰은 Tailscale 앱을 끄고 모바일 데이터로 시험한다.
 - **주소가 열리지 않는다**: `tailscale funnel status`로 Funnel이 켜져 있는지, 서버 창이 살아 있는지 확인한다.
