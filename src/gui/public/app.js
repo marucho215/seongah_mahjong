@@ -1655,6 +1655,28 @@ function renderModeRows(isHub) {
   return list;
 }
 
+/* 온라인 입장(초대 코드) 서버에서만 닉네임이 있다. 로컬 모드 서버는 /api/me가 없으므로(404) 아무것도 표시하지 않는다. */
+let onlineNickname = null;
+
+function renderNicknameLine() {
+  const line = el("p", "setup-nickname");
+  line.append(`닉네임: ${onlineNickname} · `);
+  const change = el("a", "setup-replay-link", { href: "/join.html" });
+  change.textContent = "바꾸기";
+  line.appendChild(change);
+  return line;
+}
+
+fetch("/api/me")
+  .then((res) => (res.ok ? res.json() : null))
+  .then((me) => {
+    if (!me) return;
+    onlineNickname = me.nickname;
+    const header = document.querySelector("#setup-screen .setup-header");
+    if (header && !header.querySelector(".setup-nickname")) header.appendChild(renderNicknameLine());
+  })
+  .catch(() => {});
+
 function renderSetup() {
   // 허브(모드 선택 전)와 설정 화면은 같은 화면이다. 허브에서는 대국 방식만 고를 수 있고, 나머지 설정은 모드를 고른 뒤에 나온다.
   const isHub = setupState.screen === "hub";
@@ -1676,6 +1698,7 @@ function renderSetup() {
   const replayLink = el("a", "setup-replay-link", { href: "/replay.html", target: "_blank", rel: "noopener" });
   replayLink.textContent = "저장된 리플레이 보기";
   header.append(h1, lead, replayLink);
+  if (onlineNickname !== null) header.appendChild(renderNicknameLine());
   side.appendChild(header);
 
   const modeChildren = [renderModeRows(isHub)];
@@ -2077,3 +2100,11 @@ function handleMessageBody(msg) {
 
 const events = new EventSource("/events");
 events.onmessage = (ev) => handleMessage(JSON.parse(ev.data));
+// 입장 세션이 없으면(온라인 서버에서 쿠키가 없거나 무효) 이벤트 연결이 401로 끊긴다: 입장 화면으로 보낸다.
+events.onerror = () => {
+  fetch("/api/me")
+    .then((res) => {
+      if (res.status === 401) location.href = "/join.html";
+    })
+    .catch(() => {});
+};

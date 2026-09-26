@@ -29,6 +29,7 @@ import {
   isCustomAiCharacterId,
 } from "../customai/customAiSchema.js";
 import type { CharacterProfile } from "../ai/characterProfile.js";
+import { AccessError, AccessGate } from "./accessGate.js";
 
 export const PUBLIC_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "public");
 
@@ -45,7 +46,12 @@ const MIME_TYPES: Record<string, string> = {
 
 /** The frontend files that change constantly during development are never cached, so a normal
  *  reload always shows the current UI. Tile SVGs and other static assets are left cacheable. */
-const NO_STORE_FILES = new Set(["/index.html", "/app.js", "/audioManager.js", "/style.css", "/replay.html", "/replay.js"]);
+const NO_STORE_FILES = new Set(["/index.html", "/app.js", "/audioManager.js", "/style.css", "/replay.html", "/replay.js", "/join.html", "/join.js"]);
+
+/** 입장 게이트가 켜져 있을 때 입장 전에도 열리는 경로 (입장 화면과 그 스타일). */
+const JOIN_PUBLIC_PATHS = new Set(["/join.html", "/join.js", "/style.css"]);
+/** 입장 전이면 입장 화면으로 보내는 페이지 (그 밖의 경로는 401). */
+const GATED_PAGES = new Set(["/", "/index.html", "/replay.html"]);
 
 /** 리플레이 뷰어가 여는 파일 이름: 폴더 밖을 가리킬 수 없는 단순한 이름만 허용한다. */
 const REPLAY_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*\.json$/;
@@ -275,6 +281,9 @@ export interface GuiLobbyOptions {
   customAiDir?: string;
   onReplaySaved?: (path: string) => void;
   onGameStarted?: (config: StartedGameConfig) => void;
+  /** 온라인 입장 게이트. 지정하면 초대 코드와 닉네임으로 입장한 브라우저만 로비/대국/API를 쓸 수 있다 (accessGate.ts).
+   *  생략하면 지금까지처럼 누구나 쓰는 로컬 모드다. */
+  access?: AccessGate;
 }
 
 export interface GuiLobbyServerHandle {
@@ -557,8 +566,44 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   }
 
 
+  const access = lobby?.access ?? null;
+
+  /** 입장 게이트: 입장 화면/입장 요청은 통과시키고, 입장하지 않은 요청은 페이지면 입장 화면으로 보내고 나머지는 401로 막는다.
+   *  요청을 여기서 끝냈으면 true. */
+  function handleAccess(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse, pathname: string): boolean {
+    if (!access) return false;
+    if (req.method === "POST" && pathname === "/join") {
+      readBody(req, (body) => {
+        try {
+          const { token, user } = access.join(req, JSON.parse(body || "{}"));
+          res
+            .writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "Set-Cookie": AccessGate.cookieHeader(req, token) })
+            .end(JSON.stringify({ nickname: user.nickname }));
+        } catch (err) {
+          const status = err instanceof AccessError ? err.status : 400;
+          res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8" }).end(err instanceof AccessError ? err.message : "입장 요청이 올바르지 않습니다");
+        }
+      });
+      return true;
+    }
+    const user = access.userOf(req);
+    if (req.method === "GET" && pathname === "/api/me") {
+      if (user) res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }).end(JSON.stringify({ nickname: user.nickname }));
+      else res.writeHead(401, { "Content-Type": "text/plain; charset=utf-8" }).end("입장이 필요합니다");
+      return true;
+    }
+    if (user || (req.method === "GET" && JOIN_PUBLIC_PATHS.has(pathname))) return false;
+    if (req.method === "GET" && GATED_PAGES.has(pathname)) {
+      res.writeHead(302, { Location: "/join.html", "Cache-Control": "no-store" }).end();
+      return true;
+    }
+    res.writeHead(401, { "Content-Type": "text/plain; charset=utf-8" }).end("입장이 필요합니다");
+    return true;
+  }
+
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
+    if (handleAccess(req, res, url.pathname)) return;
 
     if (req.method === "GET" && url.pathname === "/events") {
       res.writeHead(200, {

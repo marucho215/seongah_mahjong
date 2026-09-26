@@ -82,6 +82,18 @@ path, so it is recorded in the replay like any other human choice, your current 
 seen yet (public information only, never the real wall), furiten indicator, sound effects, result overlay, and session recovery on
 browser refresh/reconnect. Tile art: `src/gui/public/assets/mahjong/ATTRIBUTION.md`.
 
+#### Invite-code entry (in development for 1.2)
+
+`npm run play:gui -- --invite-code <code>` (or the `SEONGAH_INVITE_CODE` environment variable) turns on an entry
+gate: every page first asks for the invite code and a nickname (12 characters max), and only browsers that entered
+can use the lobby, games, replays and CustomAI. There are no accounts or passwords; the server keeps a session cookie
+per browser (stored as a hash in `server-data/sessions.json`, so entries survive a restart), and entering again from
+the same browser only changes the nickname. Wrong invite codes are rate-limited per client. Without an invite code the
+server works exactly as before (local mode).
+
+This is only the first step of online play: every entered user still shares the one lobby/game of the server until
+per-user sessions land (see `HANDOFF.md` §10), so do not share the address with other players yet.
+
 ### Play in the terminal (CLI)
 
 ```bash
