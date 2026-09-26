@@ -1,199 +1,204 @@
-# Seong-ah Mahjong Simulator
+# 성아 마작 시뮬레이터 (Seong-ah Mahjong Simulator)
 
-Deterministic riichi mahjong engine with Mahjong Soul-inspired **sanma (3-player)** and **yonma (4-player)**
-rulesets, CharacterAI opponents, and a playable browser GUI / terminal CLI for one human seat.
+작혼(Mahjong Soul)을 참고한 **산마(3인)** 와 **4마(4인)** 규칙의 결정론적 리치 마작 엔진이다. CharacterAI 상대와 함께,
+사람 한 명이 둘 수 있는 브라우저 GUI와 터미널 CLI를 제공한다.
 
-The implementation targets the behavior covered by this repository's tests; it does not claim complete parity
-with every live-service rule or option. Player count, tile/wall layout, scoring totals, calls (chi/kita) and
-round length are selected through `RuleConfig`.
+구현 범위는 이 저장소의 테스트가 다루는 동작이며, 실제 서비스의 모든 규칙과 옵션을 똑같이 재현한다고 주장하지는 않는다.
+인원 수, 패/패산 구성, 점수 합계, 울기(치/북), 국 길이는 `RuleConfig`로 정한다.
 
-Version 1.1.0 ([release notes](RELEASE_NOTES.md)). Developer-facing structure and status: [HANDOFF.md](HANDOFF.md).
+버전 1.1.0 ([릴리즈 노트](RELEASE_NOTES.md)). 개발자용 구조와 현재 상태: [HANDOFF.md](HANDOFF.md).
 
-## What is supported
+## 지원 기능
 
-| | Sanma | Yonma |
+| | 산마 | 4마 |
 |---|---|---|
-| AI-only full games (CharacterAI / simple AI) | yes | yes |
-| Human (1 seat) + AI in the browser GUI | yes | yes |
-| Human + AI in the terminal CLI (one hand per run) | yes | yes |
-| Replay JSON (schema v2) for AI-only games | yes | yes |
-| Replay JSON for human + AI games | yes | yes |
-| GUI lobby (mode choice, opponents, CustomAI, seed, replay saving) | yes | yes |
-| Replay viewer (re-plays a saved game with the current engine) | yes | yes |
-| CustomAI opponents (user-set CharacterAI parameters) | yes | yes |
+| AI끼리 한 게임 전체 (CharacterAI / 단순 AI) | O | O |
+| 브라우저 GUI에서 사람(1석) + AI | O | O |
+| 터미널 CLI에서 사람 + AI (실행 한 번에 한 국) | O | O |
+| AI끼리 둔 대국의 리플레이 JSON (schema v2) | O | O |
+| 사람 + AI 대국의 리플레이 JSON | O | O |
+| GUI 로비 (대국 방식, 상대, CustomAI, 시드, 리플레이 저장) | O | O |
+| 리플레이 뷰어 (저장된 대국을 현재 엔진으로 다시 진행) | O | O |
+| CustomAI 상대 (사용자가 정한 CharacterAI 파라미터) | O | O |
 
-Every choice a human can face has a decision path (GUI and CLI):
-discard and riichi, pon, chi (yonma only - you pick among the engine's legal sequences, or pass), daiminkan,
-ankan, kakan, kita (sanma), ron / pass (passing makes you furiten, as in the real rules), tsumo / decline, and
-nine-terminals abortive draw. AI seats always act automatically (including automatic tsumo/ron).
+사람이 마주칠 수 있는 모든 선택에 결정 경로가 있다(GUI와 CLI 모두): 타패와 리치, 퐁, 치(4마만 - 엔진이 준 합법 조합 중에서
+고르거나 넘긴다), 대명깡, 암깡, 가깡, 북 빼기(산마), 론 / 넘기기(넘기면 실제 규칙처럼 후리텐이 된다), 쯔모 / 거절,
+구종구패 유국. AI 좌석은 항상 자동으로 행동한다(쯔모/론 포함).
 
-## Running
+## 실행
 
-Requires [Node.js](https://nodejs.org/) 20 or newer.
+[Node.js](https://nodejs.org/) 20 이상이 필요하다.
 
 ```bash
 npm install
 ```
 
-### Play in the browser (GUI)
+### 브라우저에서 두기 (GUI)
 
 ```bash
-npm run play:gui                                   # start the GUI server, then open the lobby in a browser
-npm run play:gui -- my-seed --save-replays         # same, with the seed / replay-saving options pre-filled
+npm run play:gui                                   # GUI 서버를 켠 뒤 브라우저에서 로비를 연다
+npm run play:gui -- my-seed --save-replays         # 같음. 시드와 리플레이 저장 옵션을 미리 채운다
 ```
 
-#### Entering the lobby and starting a game
+#### 로비에 들어가서 대국 시작하기
 
-1. Run `npm run play:gui` and open the printed `http://localhost:3000` (set `PORT` to change the port).
-2. The page opens on the game lobby. Under **"대국 방식"**, click **산마** (3 players) or **4마** (4 players). Each row
-   shows the player count, starting score and whether chi / kita exist. Picking a mode never starts a game by itself.
-   The character list on the right can be browsed but not assigned until a mode is picked.
-3. The same screen then shows the settings for that mode (the settings screen is shared by both modes; only the number
-   of seats differs):
-   - **좌석**: click a seat (하가 / 대면 / 상가), then click a character card to seat it. The same character can sit in
-     only one seat. "무작위로 채우기" fills the seats randomly.
-   - **CustomAI**: create, edit, duplicate or delete your own AIs; saved CustomAIs appear at the end of the character
-     list and can be seated like any other character.
-   - **옵션**: seed (leave empty for a random one) and "게임이 끝나면 리플레이 저장".
-   - **"대국 방식 바꾸기"** goes back to step 2 to pick the other mode.
-4. Click **"대국 시작"**. You sit at seat 0 and the game runs all hands. During a game, **"대국 그만두기"** (top right)
-   ends it after a confirmation and returns to the settings of that mode; an abandoned game is not saved as a replay.
-5. After the last hand, **"최종 결과 보기"** shows the final standings (placement, score and pt from the engine, end
-   reason, and the seed actually used). From there:
-   - **"같은 설정으로 다시"**: same mode and opponents, new seed.
-   - **"같은 시드로 다시"**: the exact same game again.
-   - **"설정 바꾸기"**: back to the settings of the mode you last played, with the last choices pre-filled; "대국 방식
-     바꾸기" from there returns to the mode choice.
-   No server restart is needed between games.
+1. `npm run play:gui`를 실행하고 출력된 `http://localhost:3000`을 연다(포트를 바꾸려면 `PORT`).
+2. 로비가 열린다. **"대국 방식"** 에서 **산마**(3인) 또는 **4마**(4인)를 누른다. 각 줄에는 인원 수, 시작 점수, 치/북 빼기
+   유무가 나온다. 대국 방식을 고르는 것만으로는 대국이 시작되지 않는다. 오른쪽 캐릭터 목록은 둘러볼 수는 있지만, 대국 방식을
+   고르기 전에는 좌석에 앉힐 수 없다.
+3. 같은 화면에 그 모드의 설정이 나온다(설정 화면은 두 모드가 같고 좌석 수만 다르다).
+   - **좌석**: 좌석(하가 / 대면 / 상가)을 누르고 캐릭터 카드를 눌러 앉힌다. 같은 캐릭터는 한 좌석에만 앉을 수 있다.
+     "무작위로 채우기"는 좌석을 무작위로 채운다.
+   - **CustomAI**: 내 AI를 만들기/편집/복제/삭제한다. 저장한 CustomAI는 캐릭터 목록 끝에 나오고 다른 캐릭터처럼 앉힐 수 있다.
+   - **옵션**: 시드(비우면 무작위)와 "게임이 끝나면 리플레이 저장".
+   - **"대국 방식 바꾸기"** 를 누르면 2번으로 돌아가 다른 모드를 고를 수 있다.
+4. **"대국 시작"** 을 누른다. 나는 seat 0에 앉고 게임이 모든 국을 진행한다. 대국 중에는 오른쪽 위의 **"대국 그만두기"** 로
+   확인 후 대국을 끝내고 그 모드의 설정 화면으로 돌아갈 수 있다. 그만둔 대국은 리플레이로 저장하지 않는다.
+5. 마지막 국이 끝나면 **"최종 결과 보기"** 에서 최종 결과(엔진이 계산한 순위·점수·pt, 종료 사유, 실제 사용한 시드)를 본다.
+   여기서:
+   - **"같은 설정으로 다시"**: 같은 모드와 상대, 새 시드.
+   - **"같은 시드로 다시"**: 완전히 같은 대국을 다시.
+   - **"설정 바꾸기"**: 마지막으로 둔 모드의 설정 화면으로, 마지막 선택이 채워진 채로 돌아간다. 거기서 "대국 방식 바꾸기"를
+     누르면 대국 방식 선택으로 돌아간다.
+   대국 사이에 서버를 다시 켤 필요는 없다.
 
-The lobby screen state lives on the server, so a refresh or a second tab shows the same screen. If a game is already in
-progress on the server, opening the page (or refreshing) resumes that game instead of showing the lobby; the lobby comes
-back once that game ends and you choose "설정 바꾸기". Command-line arguments only pre-fill the settings screen (seed,
-`--save-replays`); the mode is always chosen in the lobby (`--mode` is still accepted but does not skip that choice).
-The lobby also links to the replay viewer ("저장된 리플레이 보기").
+로비 화면 상태는 서버가 들고 있으므로, 새로고침하거나 탭을 하나 더 열어도 같은 화면이 나온다. 서버에 이미 진행 중인 대국이
+있으면 페이지를 열거나 새로고침할 때 로비 대신 그 대국으로 돌아간다. 그 대국이 끝나고 "설정 바꾸기"를 고르면 로비가 다시
+나온다. 명령줄 인자는 설정 화면의 초기값(시드, `--save-replays`)만 채운다. 대국 방식은 항상 로비에서 고른다(`--mode`는 받기는
+하지만 대국 방식 선택을 건너뛰지 않는다). 로비에는 리플레이 뷰어 링크("저장된 리플레이 보기")도 있다.
 
-GUI features: one shared 4-position table for sanma and yonma, click-to-discard with riichi confirmation, action bar
-for every decision (chi options are drawn as tiles), the AI's discards/calls/riichi/wins replayed one at a time,
-a short "recent actions" list, an AI playback speed setting (slow / normal / fast / instant - it only changes how
-fast the already-decided AI turns are shown, never the game itself),
-optional auto-play toggles (all off by default): auto tsumogiri (discard the tile just drawn, no riichi), auto-pass on
-chi/pon/open kan offers, and auto-win on ron/tsumo - each only answers that exact decision through the normal response
-path, so it is recorded in the replay like any other human choice, your current shanten, your waits whenever you are tenpai (riichi or not) with the number of copies you have not
-seen yet (public information only, never the real wall), furiten indicator, sound effects, result overlay, and session recovery on
-browser refresh/reconnect. Tile art: `src/gui/public/assets/mahjong/ATTRIBUTION.md`.
+GUI 기능:
+- 산마와 4마가 같이 쓰는 4방향 작탁 하나.
+- 패를 눌러 타패(리치는 확인창), 모든 결정에 대한 행동 버튼(치 조합은 패 그림으로 보여 준다).
+- AI의 타패/울기/리치/화료를 한 수씩 재생하고, 최근 행동을 짧은 목록으로 보여 준다.
+- AI 진행 속도 설정(느림 / 보통 / 빠름 / 즉시). 이미 결정된 AI 턴을 보여 주는 속도만 바꾸고 게임 자체는 바꾸지 않는다.
+- 자동 플레이 옵션(기본은 모두 꺼짐): 자동 쯔모기리(방금 뽑은 패를 버림, 리치 없음), 치/퐁/대명깡 제안 자동 넘기기,
+  론/쯔모 자동 화료. 각 옵션은 그 결정 하나에만 일반 응답 경로로 답하므로, 다른 사람 선택과 똑같이 리플레이에 기록된다.
+- 현재 샹텐, 텐파이일 때(리치 여부와 관계없이) 대기패와 아직 보지 못한 장수(공개 정보만 사용, 실제 패산은 보지 않음),
+  후리텐 표시.
+- 효과음, 결과 화면, 브라우저 새로고침/재접속 때 세션 복구.
+- 패 그림 출처: `src/gui/public/assets/mahjong/ATTRIBUTION.md`.
 
-#### Invite-code entry (in development for 1.2)
+#### 초대 코드 입장 (1.2 개발 중)
 
-`npm run play:gui -- --invite-code <code>` (or the `SEONGAH_INVITE_CODE` environment variable) turns on an entry
-gate: every page first asks for the invite code and a nickname (12 characters max), and only browsers that entered
-can use the lobby, games, replays and CustomAI. There are no accounts or passwords; the server keeps a session cookie
-per browser (stored as a hash in `server-data/sessions.json`, so entries survive a restart), and entering again from
-the same browser only changes the nickname. Wrong invite codes are rate-limited per client. Without an invite code the
-server works exactly as before (local mode).
+`npm run play:gui -- --invite-code <코드>`(또는 환경 변수 `SEONGAH_INVITE_CODE`)로 켜면 입장 게이트가 생긴다. 모든 페이지가
+먼저 초대 코드와 닉네임(12자 이하)을 묻고, 입장한 브라우저만 로비, 대국, 리플레이, CustomAI를 쓸 수 있다. 계정이나 비밀번호는
+없다. 서버는 브라우저마다 세션 쿠키를 주고(`server-data/sessions.json`에 해시로 저장하므로 서버를 다시 켜도 유지된다), 같은
+브라우저로 다시 입장하면 닉네임만 바뀐다. 초대 코드를 틀린 시도는 접속지별로 횟수를 제한한다. 초대 코드 없이 켜면 서버는
+지금까지와 똑같이 동작한다(로컬 모드).
 
-Each entered user has their own lobby, game, event stream, AI speed setting, CustomAIs and saved replays (several tabs
-of the same browser share them). Per-user data lives in `server-data/users/<user id>/custom-ai` and `.../replays`; the
-local-mode `custom-ai/` and `replays/` folders are not used by an invite-code server. Games and replay reproduction run
-on engine worker threads, so one user's AI turns or replay do not pause the others.
+입장한 사람마다 로비, 대국, 이벤트 스트림, AI 속도 설정, CustomAI, 저장된 리플레이를 따로 가진다(같은 브라우저의 여러 탭은
+같은 것을 본다). 사용자별 데이터는 `server-data/users/<사용자 id>/custom-ai`와 `.../replays`에 있고, 로컬 모드의 `custom-ai/`와
+`replays/` 폴더는 초대 코드 서버에서 쓰지 않는다. 대국과 리플레이 재현은 엔진 worker 스레드에서 돌아가므로, 한 사람의 AI 턴이나
+리플레이 때문에 다른 사람이 멈추지 않는다.
 
-An invite-code server also limits resources: at most 8 open games on the server (`SEONGAH_MAX_GAMES`), a game with no
-request from its player for 30 minutes is cleared (not saved as a replay; the lobby shows a notice), 20 CustomAIs and the
-latest 50 replays per user, 5 open tabs per user, and a per-user request rate limit. The replay viewer has a
-"파일 내려받기" link to download the original replay file (useful for bug reports). Online play is still in development
-(see `HANDOFF.md` §10).
+초대 코드 서버는 자원도 제한한다.
+- 서버 전체 동시 대국 최대 8판(`SEONGAH_MAX_GAMES`).
+- 30분 동안 요청이 없는 대국은 정리한다(리플레이로 저장하지 않고, 로비에 안내가 나온다).
+- 한 사람당 CustomAI 20개, 리플레이는 최근 50개, 동시에 여는 탭 5개, 요청 빈도 제한.
 
-To host online from a Windows laptop for free (Tailscale Funnel, step by step, in Korean), see
-[docs/ONLINE_HOSTING.md](docs/ONLINE_HOSTING.md). Server environment variables: `PORT`, `HOST` (e.g. `127.0.0.1` to accept
-only local/tunnel connections), `SEONGAH_INVITE_CODE`, `SEONGAH_MAX_GAMES`, `SEONGAH_ENGINE_WORKERS`. The event stream
-sends a keep-alive comment every 25 seconds so tunnels and proxies do not drop idle connections.
+리플레이 뷰어에는 원본 리플레이 파일을 받는 "파일 내려받기" 링크가 있다(버그 제보에 쓴다). 온라인 플레이는 아직 개발 중이다
+(`HANDOFF.md` §10 참고).
 
-### Play in the terminal (CLI)
+Windows 노트북에서 무료로 온라인 호스팅하는 방법(Tailscale Funnel, 단계별 안내)은
+[docs/ONLINE_HOSTING.md](docs/ONLINE_HOSTING.md)를 본다.
+- 서버 환경 변수: `PORT`, `HOST`(예: `127.0.0.1`이면 로컬/터널 연결만 받음), `SEONGAH_INVITE_CODE`, `SEONGAH_MAX_GAMES`,
+  `SEONGAH_ENGINE_WORKERS`.
+- 이벤트 스트림은 25초마다 연결 유지 주석을 보내서, 터널이나 프록시가 조용한 연결을 끊지 않게 한다.
+
+### 터미널에서 두기 (CLI)
 
 ```bash
-npm run play                        # sanma, random seed
-npm run play my-seed                # fixed seed
-npm run play -- --mode yonma        # yonma
+npm run play                        # 산마, 무작위 시드
+npm run play my-seed                # 시드 지정
+npm run play -- --mode yonma        # 4마
 npm run play -- --save-replays
 ```
 
-The CLI plays a single hand per run (no next-hand continuation); the GUI plays the whole game. Both use the same
-decision engine, so anything legal in one is legal in the other.
+CLI는 실행 한 번에 한 국만 둔다(다음 국으로 이어지지 않는다). GUI는 게임 전체를 둔다. 둘 다 같은 결정 엔진을 쓰므로, 한쪽에서
+합법인 선택은 다른 쪽에서도 합법이다.
 
-### Sound effects
+### 효과음
 
-The GUI plays physical (tile, riichi stick, shuffle) and UI sounds only - no spoken declarations. OwlishMedia UI
-sounds (CC0) are included; T-STUDIO's sound pack cannot be redistributed, so download it yourself and place the files
-as described in `src/gui/public/assets/audio/tstudio/README.md`. The game works without them (those sounds are just
-silent). Sources and licenses: `src/gui/public/assets/audio/README.md`.
+GUI는 물리적인 소리(패, 리치봉, 셔플)와 UI 소리만 낸다. 음성 선언은 없다. OwlishMedia UI 소리(CC0)는 포함되어 있다.
+T-STUDIO 사운드 팩은 재배포할 수 없으므로 직접 받아 `src/gui/public/assets/audio/tstudio/README.md`의 안내대로 넣는다. 없어도
+게임은 되고, 그 소리만 나지 않는다. 출처와 라이선스: `src/gui/public/assets/audio/README.md`.
 
-### AI-only simulations
+### AI끼리 시뮬레이션
 
 ```bash
-npm run sim                                     # sanma: each registered character solo vs 2 simple AIs
+npm run sim                                     # 산마: 등록된 캐릭터 각각이 단순 AI 2명과 대국
 npm run sim -- --games 100 --save-replays
-npm run sim -- --players seiyatosuke,kyletyler,seiyamouri --games 10   # any 3 characterIds at one table
+npm run sim -- --players seiyatosuke,kyletyler,seiyamouri --games 10   # characterId 3개를 한 작탁에
 npm run sim:yonma -- --players jegalmina,toumesuayo,byeonari,seiyakouri --seed yonma-qa-001 --save-replays
-npm run validate -- --games 100 [--seed S] [--format sanma|yonma] [--save-failures]   # mass self-play invariant checks
+npm run validate -- --games 100 [--seed S] [--format sanma|yonma] [--save-failures]   # 대량 자체 대국 불변식 검사
 ```
 
-Seat order follows the order of `--players`; the same characterId may appear more than once. Registered
-characterIds are listed in `src/ai/characterProfiles.ts`.
+좌석 순서는 `--players`에 적은 순서를 따르고, 같은 characterId를 여러 번 적어도 된다. 등록된 characterId 목록은
+`src/ai/characterProfiles.ts`에 있다.
 
-## Replays
+## 리플레이
 
-`--save-replays` writes one JSON file per game to `replays/` (relative paths resolve against the project root, not the
-current directory): `<label>_game<index>.json`. Human games are named `human-<mode>-<seed>_game0.json`
-(`human-cli-<mode>-<seed>_game0.json` for the CLI).
+`--save-replays`는 대국 하나당 JSON 파일 하나를 `replays/`에 쓴다(상대 경로는 현재 폴더가 아니라 프로젝트 루트 기준):
+`<label>_game<index>.json`. 사람이 둔 대국은 `human-<mode>-<seed>_game0.json`(CLI는 `human-cli-<mode>-<seed>_game0.json`)이다.
 
-A record contains `meta` (`replaySchemaVersion: 2`, rules, game seed, per-seat `kind` and `characterId`), the engine's
-own `events` log (deals, draws, discards, calls, riichi, wins with auditable scoring and dora breakdown, draws,
-`game_end`), `aiDecisions` (CharacterAI debug entries), and `finalStandings`. Games with a human seat additionally get
-`meta.seats[].kind: "human"` and an optional `humanDecisions` array (what was asked, what was chosen, and where in
-`events` it happened). Schema v2 is additive over v1; readers should treat a missing version as 1.
+기록에 들어 있는 것:
+- `meta`: `replaySchemaVersion: 2`, 규칙, 게임 시드, 좌석별 `kind`와 `characterId`.
+- `events`: 엔진 자체 로그. 배패, 쯔모, 타패, 울기, 리치, 화료(검증 가능한 점수 계산과 도라 내역), 유국, `game_end`.
+- `aiDecisions`: CharacterAI 디버그 항목.
+- `finalStandings`: 최종 순위.
+- 사람 좌석이 있는 대국: `meta.seats[].kind: "human"`, 그리고 선택 필드 `humanDecisions` 배열(무엇을 물었고, 무엇을 골랐고,
+  `events`의 어디에서 일어났는지).
 
-Replays are checked by the same invariant validators the tests use (`src/validation/`, `tests/helpers/replayQa.ts`).
-GUI games save once, when the game ends; if the server process dies mid-game the unfinished replay is not recovered
-(a browser refresh does not interrupt recording). The GUI server also serves a replay viewer at `http://localhost:3000/replay.html` (linked from the start screen). It lists
-the files in `replays/` and re-plays the chosen game with the current engine from the recorded seed, rules, seats and human
-decisions, checking every event against the file in order. If anything differs, the viewer says the replay cannot be
-reproduced exactly by this engine version and shows nothing further. Otherwise you can move by hand or by move, jump to
-wins/draws, see every seat's hand, melds, kita and river at that moment, and see the CharacterAI decision entries that were
-logged right before each move. Replay files are only read, never modified.
+schema v2는 v1에 필드를 더한 것뿐이며, 버전이 없으면 1로 읽으면 된다.
 
-## Tests
+리플레이는 테스트가 쓰는 것과 같은 불변식 검사기(`src/validation/`, `tests/helpers/replayQa.ts`)로 검사한다. GUI 대국은 게임이
+끝날 때 한 번 저장한다. 게임 도중 서버 프로세스가 죽으면 끝나지 않은 리플레이는 복구하지 않는다(브라우저 새로고침은 기록을
+끊지 않는다).
+
+GUI 서버는 리플레이 뷰어도 제공한다: `http://localhost:3000/replay.html`(시작 화면에서 링크).
+- `replays/`의 파일을 나열하고, 고른 대국을 기록된 시드, 규칙, 좌석, 사람 결정으로 현재 엔진에서 다시 진행하면서 모든
+  이벤트를 파일과 순서대로 비교한다.
+- 하나라도 다르면 "현재 엔진 버전으로 정확히 재현할 수 없는 리플레이"라고만 알리고 더 보여 주지 않는다.
+- 같으면 국/수순 단위로 옮겨 다니고, 화료·유국 지점으로 건너뛰고, 그 순간 모든 좌석의 손패·멘츠·북·강을 보고, 각 수 직전에
+  기록된 CharacterAI 판단 항목을 볼 수 있다.
+- 리플레이 파일은 읽기만 하고 고치지 않는다.
+
+## 테스트
 
 ```bash
-npx tsc -p . --noEmit            # typecheck
-npm test                         # full suite (vitest run) - takes about 8 minutes
-npx vitest run tests/humanChi.test.ts     # a single file
-npm run test:e2e                 # GUI smoke test in a headless browser (not part of npm test)
+npx tsc -p . --noEmit            # 타입 검사
+npm test                         # 전체 테스트 (vitest run) - 약 8분
+npx vitest run tests/humanChi.test.ts     # 파일 하나만
+npm run test:e2e                 # 헤드리스 브라우저 GUI 스모크 테스트 (npm test에 포함되지 않음)
 ```
 
-The GUI smoke test (`e2e/guiSmoke.e2e.ts`) only checks the core screen flow: lobby → mode → settings → start →
-abandon, and game end (including a refresh) → "설정 바꾸기" → back to the mode choice. It needs a Chromium build for
-Playwright once: `npx playwright install chromium`.
+GUI 스모크 테스트(`e2e/guiSmoke.e2e.ts`)는 핵심 화면 흐름만 확인한다. 로비 → 대국 방식 → 설정 → 시작 → 그만두기, 그리고
+게임 종료(새로고침 포함) → "설정 바꾸기" → 대국 방식 선택으로 돌아가기. Playwright용 Chromium이 한 번 필요하다:
+`npx playwright install chromium`.
 
-Coverage areas: scoring and yaku, calls and kan, riichi/furiten, abortive and exhaustive draws, round progression,
-Mahjong Soul fidelity fixes (`tests/ff*.test.ts`), CharacterAI determinism, replay schema and invariants, human
-decision paths (ron, chi, tsumo, nine-terminals, riichi waits), the GUI session/server (including refresh recovery),
-and full human + AI games in both modes.
+테스트가 다루는 영역:
+- 점수와 역, 울기와 깡, 리치/후리텐, 도중 유국과 황패 유국, 국 진행.
+- 작혼 규칙 충실도 수정(`tests/ff*.test.ts`), CharacterAI 결정론, 리플레이 형식과 불변식.
+- 사람 결정 경로(론, 치, 쯔모, 구종구패, 리치 대기), GUI 세션/서버(새로고침 복구 포함).
+- 두 모드에서 사람 + AI 게임 전체.
 
-## Known limitations and future work
+## 알려진 제한과 이후 과제
 
-- **CustomAI** (1st version): the start screen can create, edit, duplicate and delete CustomAIs and seat them as
-  opponents. A CustomAI is only a user-chosen set of the 15 common CharacterAI parameters (Korean-labelled 0-100 sliders)
-  run by the existing CharacterAI; character-specific mechanics and import/export are not included. Files live in
-  `custom-ai/` (one JSON per AI, named by an internal id). Games with a CustomAI store the exact profile used in that
-  seat's replay metadata, so later edits or deletions never change how an old replay reproduces.
-- No character voices or win cut-ins, no additional presentation options. Replays recorded by an older engine version
-  usually cannot be reproduced by the viewer (it reports this instead of guessing).
-- Opening a long replay in the viewer re-plays the whole game, which takes a few seconds. `npm run play:gui` runs games
-  and replay reproduction on engine worker threads (`SEONGAH_ENGINE_WORKERS`, default CPU count - 1, 1 to 4), so this no
-  longer pauses games in progress.
-- A refresh restores the current decision, hand-end and game-end screens; an AI-turn animation that was playing is not
-  replayed.
-- The GUI always seats the human at seat 0 (opponents are chosen on the start screen; the human's seat is not).
-- Character portraits are not included yet. The start screen is text-only by design; `CHARACTER_PORTRAITS` in
-  `src/gui/characterRoster.ts` is the optional slot for them.
-- The CLI plays one hand per run.
-- Rank/room/account progression scoring is out of scope.
+- **CustomAI**(1차): 시작 화면에서 CustomAI를 만들기/편집/복제/삭제하고 상대로 앉힐 수 있다.
+  - CustomAI는 CharacterAI 공통 파라미터 15개를 사용자가 정한 값(한국어 이름이 붙은 0~100 슬라이더)일 뿐이며, 기존
+    CharacterAI가 그대로 판단한다.
+  - 캐릭터 전용 메커니즘과 가져오기/내보내기는 포함하지 않는다.
+  - 파일은 `custom-ai/`에 AI 하나당 JSON 하나(내부 id가 파일 이름)로 저장된다.
+  - CustomAI가 앉은 대국은 그 좌석에 실제로 쓴 프로필을 리플레이 메타데이터에 저장하므로, 나중에 고치거나 지워도 옛 리플레이는
+    똑같이 재현된다.
+- 캐릭터 음성과 화료 컷인, 추가 연출 옵션은 없다. 예전 엔진 버전으로 기록한 리플레이는 뷰어에서 대개 재현할 수 없다(추측하지
+  않고 그렇다고 알린다).
+- 긴 리플레이를 뷰어에서 열면 게임 전체를 다시 진행하므로 몇 초 걸린다. `npm run play:gui`는 대국과 리플레이 재현을 엔진 worker
+  스레드에서 돌리므로(`SEONGAH_ENGINE_WORKERS`, 기본은 CPU 수 - 1, 1~4개) 진행 중인 대국은 멈추지 않는다.
+- 새로고침하면 현재 결정, 국 종료, 게임 종료 화면은 복구하지만, 재생 중이던 AI 턴 장면은 다시 재생하지 않는다.
+- GUI에서 사람은 항상 seat 0에 앉는다(상대는 시작 화면에서 고르지만, 사람 좌석은 고를 수 없다).
+- 캐릭터 초상화는 아직 없다. 시작 화면은 의도적으로 텍스트만 쓰며, `src/gui/characterRoster.ts`의 `CHARACTER_PORTRAITS`가
+  초상화를 넣을 선택적 자리다.
+- CLI는 실행 한 번에 한 국만 둔다.
+- 단위/방/계정 진행 점수 계산은 범위 밖이다.
