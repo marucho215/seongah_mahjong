@@ -41,15 +41,15 @@ async function startLobby(options: GuiLobbyOptions = {}) {
 }
 
 describe("시작 화면 캐릭터 목록 (characterRoster)", () => {
-  it("등록된 모든 캐릭터를 순서대로 담고, 모두 플레이 경향 문구와 태그 2~4개를 가진다", () => {
+  it("등록된 모든 캐릭터를 순서대로 담고, 모두 한 줄 설명과 태그 0~4개를 가진다 (평가/서열 표현 없음)", () => {
     const roster = buildCharacterRoster();
     expect(roster.map((c) => c.characterId)).toEqual(Object.keys(CHARACTER_PROFILES));
     expect(Object.keys(CHARACTER_PRESENTATION).sort()).toEqual(Object.keys(CHARACTER_PROFILES).sort());
     for (const entry of roster) {
       expect(entry.summary.length, entry.characterId).toBeGreaterThan(0);
-      expect(entry.tags.length, entry.characterId).toBeGreaterThanOrEqual(2);
       expect(entry.tags.length, entry.characterId).toBeLessThanOrEqual(4);
       expect(new Set(entry.tags).size).toBe(entry.tags.length);
+      for (const tag of entry.tags) expect(tag, entry.characterId).not.toMatch(/강함|약함|숙련|최상급|실력/);
     }
   });
 

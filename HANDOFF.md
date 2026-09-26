@@ -72,11 +72,11 @@
   `chi`, `nine_terminals`)
 - `src/gui/gameSetup.ts`: `--mode`/`--save-replays` 인자 해석과 게임 생성 (GUI 서버와 CLI 공용). 산마/4마는 여기서 규칙과
   좌석 구성만 다르다. 시작 화면이 보내는 구성(`parseGuiGameConfig`: 모드, 상대 characterId, 시드, 리플레이 저장)도 여기서 검증한다.
-- `src/gui/characterRoster.ts`: 시작 화면용 캐릭터 목록. `CharacterProfile`에서는 이름만 읽고, 화면 전용 정보(플레이 경향 한 줄과
-  태그 2~4개 `CHARACTER_PRESENTATION`, 선택 필드 `CHARACTER_PORTRAITS`)는 여기 둔다. 내부 튜닝 수치와 archetype 식별자는
-  클라이언트로 보내지 않는다. 문구는 AI 로직과 AI끼리 둔 대국에서 관찰된 경향이 함께 뒷받침하는 내용만 적었으므로,
-  CharacterAI 수치를 바꾸면 문구도 다시 확인한다. 초상화는 아직 없고, 시작 화면은 텍스트만으로 완성된
-  형태다(임시 아바타나 빈 이미지 영역을 만들지 않는다). 초상화가 생기면 여기에 등록하고 그때 카드 레이아웃을 확장한다.
+- `src/gui/characterRoster.ts`: 시작 화면용 캐릭터 목록. `CharacterProfile`에서는 이름만 읽고, 화면 전용 정보(확정된 한 줄 설명과
+  태그 0~4개 `CHARACTER_PRESENTATION`, 선택 필드 `CHARACTER_PORTRAITS`)는 여기 둔다. 한 줄 설명은 확정 문구로 이 파일이 source of
+  truth다. 태그는 CharacterAI에 구현된 행동 로직을 근거로 하고, 평가/서열 표현은 쓰지 않는다. 내부 튜닝 수치와 archetype
+  식별자는 클라이언트로 보내지 않는다. 초상화는 아직 없고, 시작 화면은 텍스트만으로 완성된 형태다(임시 아바타나 빈 이미지
+  영역을 만들지 않는다). 초상화가 생기면 여기에 등록하고 그때 카드 레이아웃을 확장한다.
 - `src/gui/guiSession.ts`: 여러 국을 한 `GameState`로 잇는 세션(`decision|hand_end|game_end`), 응답 사전 검증
 - `src/gui/createGuiServer.ts`, `src/gui/server.ts`: HTTP + SSE 서버. `/events`(상태 스트림), `POST /respond`, `POST /continue`.
   접속 시 현재 요청을 그대로 다시 보내므로 새로고침 복구가 된다. 장면 재생 중에는 응답을 받지 않는다.
