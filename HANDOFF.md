@@ -234,8 +234,12 @@
 
 단계:
 1. 입장: 초대 코드 + 닉네임, 세션 토큰 쿠키, 미입장 요청 차단. **완료** - `src/gui/accessGate.ts`, `join.html`/`join.js`,
-   `--invite-code`, 세션은 `server-data/sessions.json`(토큰 해시만), `tests/guiAccess.test.ts`. 아직 모든 사용자가 대국 하나를 공유한다.
-2. 세션 분리: 로비/대국/SSE를 사용자별로. 대국 구조는 "좌석마다 연결된 사용자"로 잡는다(사람끼리 대전 대비).
+   `--invite-code`, 세션은 `server-data/sessions.json`(토큰 해시만), `tests/guiAccess.test.ts`.
+2. 세션 분리: 로비/대국/SSE를 사용자별로. 대국 구조는 "좌석마다 연결된 사용자"로 잡는다(사람끼리 대전 대비). **완료** -
+   `createGuiServer.ts`의 `Room`(사용자별 로비 화면, 마지막 설정, SSE 연결, AI 속도, 앉은 대국)과 `Table`(GameHost +
+   `seatUsers`). 대국 메시지는 사람 좌석 사용자에게만 가고, 응답은 요청받은 좌석의 사용자만 보낼 수 있다. 로컬 모드는
+   사용자 `local` 하나. 로비 상태는 메모리에만 있다(서버 재시작 시 허브부터). `tests/guiRooms.test.ts`.
+   남은 공용 자원: CustomAI 저장소와 리플레이 폴더(5단계). 같은 시드로 두 사용자가 리플레이를 저장하면 파일 이름이 겹친다(5단계에서 해결).
 3. AI 계산 worker 풀: 대국 진행과 리플레이 재현을 메인 스레드에서 분리.
 4. 자원 관리: 동시 대국 수 제한, 방치된 대국 정리, 요청 빈도 제한.
 5. 사용자별 저장: 리플레이/CustomAI, 버그 제보용 리플레이 다운로드.

@@ -91,8 +91,9 @@ per browser (stored as a hash in `server-data/sessions.json`, so entries survive
 the same browser only changes the nickname. Wrong invite codes are rate-limited per client. Without an invite code the
 server works exactly as before (local mode).
 
-This is only the first step of online play: every entered user still shares the one lobby/game of the server until
-per-user sessions land (see `HANDOFF.md` §10), so do not share the address with other players yet.
+Each entered user has their own lobby, game, event stream and AI speed setting (several tabs of the same browser share
+them). Online play is still in development (see `HANDOFF.md` §10): CustomAI and saved replays are still shared by all
+users, and a long AI computation or replay reproduction for one user can briefly pause the others.
 
 ### Play in the terminal (CLI)
 

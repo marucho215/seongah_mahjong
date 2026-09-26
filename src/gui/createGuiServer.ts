@@ -280,7 +280,7 @@ export interface GuiLobbyOptions {
   /** CustomAI 저장 폴더 (기본 "custom-ai", 프로젝트 루트 기준) */
   customAiDir?: string;
   onReplaySaved?: (path: string) => void;
-  onGameStarted?: (config: StartedGameConfig) => void;
+  onGameStarted?: (config: StartedGameConfig, userId: string) => void;
   /** 온라인 입장 게이트. 지정하면 초대 코드와 닉네임으로 입장한 브라우저만 로비/대국/API를 쓸 수 있다 (accessGate.ts).
    *  생략하면 지금까지처럼 누구나 쓰는 로컬 모드다. */
   access?: AccessGate;
@@ -288,8 +288,8 @@ export interface GuiLobbyOptions {
 
 export interface GuiLobbyServerHandle {
   server: Server;
-  /** 진행 중인 게임의 세션 (시작 화면에서는 null) */
-  getSession(): GuiSession | null;
+  /** 사용자(기본: 로컬 모드의 유일한 사용자)가 앉아 있는 게임의 세션 (로비에 있으면 null) */
+  getSession(userId?: string): GuiSession | null;
 }
 
 /** Builds (but does not start listening) an http.Server driving `game` via one GuiSession -
@@ -305,14 +305,35 @@ export function createGuiLobbyServer(options: GuiLobbyOptions = {}): GuiLobbySer
   return buildServer(null, options);
 }
 
+/** 입장 게이트가 없는 서버(로컬 모드)의 유일한 사용자 id. */
+export const LOCAL_USER_ID = "local";
+
+type LobbySetup = { mode: GuiGameMode; opponents: Record<GuiGameMode, string[]>; seed: string; saveReplays: boolean };
+
+/** 한 사용자의 로비 (1.2 2단계). 로컬 모드에서는 서버에 하나(LOCAL_USER_ID)뿐이고, 입장 게이트가 있으면 입장한 사용자마다
+ *  하나씩 생긴다. 같은 사용자의 새로고침/다른 탭은 같은 로비를 본다. 서로 다른 사용자의 로비와 대국은 섞이지 않는다. */
+interface Room {
+  userId: string;
+  sseClients: Set<import("node:http").ServerResponse>;
+  /** 로비 화면: 처음에는 모드를 고르는 허브, 모드를 고르면 그 모드의 대국 설정. */
+  lobbyScreen: "hub" | "setup";
+  /** 시작 화면에 채워 둘 값: 처음에는 CLI 기본값, 한 판을 한 뒤에는 마지막으로 고른 구성 */
+  lastSetup: LobbySetup;
+  /** AI 진행 속도 (사용자 설정) */
+  frameDelayMs: number;
+  /** 이 사용자가 앉아 있는 대국. 없으면 로비. */
+  table: Table | null;
+}
+
+/** 대국 하나. 사람 좌석마다 그 좌석을 가진 사용자가 연결된다 (seatUsers[seat], AI 좌석은 null).
+ *  대국 메시지는 사람 좌석의 사용자들에게만 가고, 결정 응답은 그 결정을 요청받은 좌석의 사용자만 보낼 수 있다.
+ *  1.2에서는 사람 좌석이 하나(seat 0 = 대국을 시작한 사용자)뿐이다. 사람끼리 대전은 이 구조 위에 좌석을 늘려 얹는다. */
+interface Table {
+  host: GameHost;
+  seatUsers: (string | null)[];
+}
+
 function buildServer(initial: { game: GameState; options: GuiServerOptions } | null, lobby: GuiLobbyOptions | null): GuiLobbyServerHandle {
-  const sseClients = new Set<import("node:http").ServerResponse>();
-  const broadcast = (payload: string): void => {
-    for (const res of sseClients) res.write(payload);
-  };
-  let frameDelayMs = (initial ? initial.options.frameDelayMs : lobby?.frameDelayMs) ?? DEFAULT_FRAME_DELAY_MS;
-  const currentFrameDelayMs = (): number => frameDelayMs;
-  let host: GameHost | null = initial ? createGameHost(initial.game, initial.options, broadcast, null, currentFrameDelayMs) : null;
 
   // 리플레이 뷰어: 이 서버가 리플레이를 저장하는 폴더를 그대로 읽는다 (기본 "replays", 프로젝트 루트 기준).
   const replayDir = resolveReplayDir((initial ? initial.options.replay?.dir : lobby?.replayDir) ?? "replays");
@@ -377,22 +398,61 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     return getCharacterProfile(id);
   }
   const defaults = lobby?.defaults ?? {};
-  /** 시작 화면에 채워 둘 값: 처음에는 CLI 기본값, 한 판을 한 뒤에는 마지막으로 고른 구성 */
-  let lastSetup = {
-    mode: defaults.mode ?? "sanma",
-    opponents: {
-      sanma: [...(defaults.opponents?.sanma ?? DEFAULT_OPPONENTS.sanma)],
-      yonma: [...(defaults.opponents?.yonma ?? DEFAULT_OPPONENTS.yonma)],
-    } as Record<GuiGameMode, string[]>,
-    seed: defaults.seed ?? "",
-    saveReplays: defaults.saveReplays ?? false,
+  const initialFrameDelayMs = (initial ? initial.options.frameDelayMs : lobby?.frameDelayMs) ?? DEFAULT_FRAME_DELAY_MS;
+
+  const rooms = new Map<string, Room>();
+  function roomOf(userId: string): Room {
+    let room = rooms.get(userId);
+    if (!room) {
+      room = {
+        userId,
+        sseClients: new Set(),
+        lobbyScreen: "hub",
+        lastSetup: {
+          mode: defaults.mode ?? "sanma",
+          opponents: {
+            sanma: [...(defaults.opponents?.sanma ?? DEFAULT_OPPONENTS.sanma)],
+            yonma: [...(defaults.opponents?.yonma ?? DEFAULT_OPPONENTS.yonma)],
+          },
+          seed: defaults.seed ?? "",
+          saveReplays: defaults.saveReplays ?? false,
+        },
+        frameDelayMs: initialFrameDelayMs,
+        table: null,
+      };
+      rooms.set(userId, room);
+    }
+    return room;
+  }
+  const sendToRoom = (room: Room, payload: string): void => {
+    for (const res of room.sseClients) res.write(payload);
   };
 
-  /** 로비 화면: 처음에는 모드를 고르는 허브, 모드를 고르면 그 모드의 대국 설정. 새로고침/다른 탭도 같은 화면을 보도록 서버가 들고 있다.
-   *  설정 화면은 모드와 무관하게 하나이며, 어떤 모드인지는 lastSetup.mode(데이터)로만 다르다. */
-  let lobbyScreen: "hub" | "setup" = "hub";
+  /** 대국을 만들고 사람 좌석(seat 0)에 이 사용자를 앉힌다. 메시지는 사람 좌석의 사용자 로비로만 간다. */
+  function openTable(room: Room, game: GameState, options: GuiServerOptions, startedConfig: StartedGameConfig | null): Table {
+    const seatUsers: (string | null)[] = game.controllers.map((c, seat) => (c === "human" && seat === 0 ? room.userId : null));
+    const deliver = (payload: string): void => {
+      for (const userId of new Set(seatUsers)) if (userId !== null) sendToRoom(roomOf(userId), payload);
+    };
+    // 재생 속도는 대국을 시작한 사용자의 설정을 장면마다 읽는다.
+    const table: Table = { host: createGameHost(game, options, deliver, startedConfig, () => room.frameDelayMs), seatUsers };
+    room.table = table;
+    return table;
+  }
 
-  function setupMessage(): string {
+  /** 대국 응답: 지금 결정을 요청받은 좌석의 사용자만 보낼 수 있다. */
+  function respondAt(room: Room, response: DecisionResponse): void {
+    const table = room.table;
+    if (!table) throw new Error("GuiServer: 진행 중인 게임이 없습니다");
+    const request = table.host.session.getCurrentRequest();
+    if (request && table.seatUsers[request.seat] !== room.userId) throw new Error("GuiServer: 이 결정은 다른 좌석의 차례입니다");
+    table.host.respond(response);
+  }
+
+  if (initial) openTable(roomOf(LOCAL_USER_ID), initial.game, initial.options, null);
+
+  function setupMessage(room: Room): string {
+    const { lastSetup, lobbyScreen } = room;
     const roster = currentRoster();
     // 마지막 구성에 이제 없는 상대(삭제된 CustomAI 등)가 있으면 그 좌석만 기본 상대 중 남는 캐릭터로 바꿔 보여준다 (화면 초기값일 뿐).
     const known = new Set(roster.map((r) => r.characterId));
@@ -425,17 +485,23 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     });
   }
 
-  function connectMessage(): string {
-    return host ? host.connectMessage() : setupMessage();
+  function connectMessage(room: Room): string {
+    return room.table ? room.table.host.connectMessage() : setupMessage(room);
   }
 
-  function startGame(config: GuiGameConfig): void {
+  /** 이 사용자가 진행 중인(끝나지 않았거나 장면 재생 중인) 대국에 앉아 있는지 */
+  function inActiveGame(room: Room): boolean {
+    const host = room.table?.host;
+    return host !== undefined && (host.isPlaying() || host.session.getPhase() !== "game_end");
+  }
+
+  function startGame(room: Room, config: GuiGameConfig): void {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
-    if (host && (host.isPlaying() || host.session.getPhase() !== "game_end")) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
+    if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
     const seed = config.seed ?? `gui-${Date.now()}`;
-    lastSetup = {
+    room.lastSetup = {
       mode: config.mode,
-      opponents: { ...lastSetup.opponents, [config.mode]: [...config.opponents] },
+      opponents: { ...room.lastSetup.opponents, [config.mode]: [...config.opponents] },
       seed: config.seed ?? "",
       saveReplays: config.saveReplays,
     };
@@ -452,46 +518,47 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
         : {}),
     };
     const started: StartedGameConfig = { ...config, opponents: [...config.opponents], seed };
-    host = createGameHost(game, options, broadcast, started, currentFrameDelayMs);
-    lobby.onGameStarted?.(started);
-    broadcast(`data: ${host.connectMessage()}\n\n`);
+    const table = openTable(room, game, options, started);
+    lobby.onGameStarted?.(started, room.userId);
+    sendToRoom(room, `data: ${table.host.connectMessage()}\n\n`);
   }
 
-  function returnToSetup(): void {
+  function returnToSetup(room: Room): void {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
-    if (host && (host.isPlaying() || host.session.getPhase() !== "game_end")) throw new Error("GuiServer: 게임이 끝난 뒤에만 시작 화면으로 돌아갈 수 있습니다");
-    host = null;
-    lobbyScreen = "setup"; // 마지막으로 사용한 모드(lastSetup.mode)의 설정 화면으로 돌아간다
-    broadcast(`data: ${setupMessage()}\n\n`);
+    if (inActiveGame(room)) throw new Error("GuiServer: 게임이 끝난 뒤에만 시작 화면으로 돌아갈 수 있습니다");
+    room.table = null;
+    room.lobbyScreen = "setup"; // 마지막으로 사용한 모드(lastSetup.mode)의 설정 화면으로 돌아간다
+    sendToRoom(room, `data: ${setupMessage(room)}\n\n`);
   }
 
   /** 진행 중인 대국을 그만두고 그 모드의 설정 화면(로비)으로 돌아간다. 리플레이는 저장하지 않는다(저장은 게임 종료 때만 한다).
    *  게임이 이미 끝났다면 "설정 바꾸기"(/setup)를 쓴다. */
-  function abandonGame(): void {
+  function abandonGame(room: Room): void {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
+    const host = room.table?.host;
     if (!host) throw new Error("GuiServer: 진행 중인 대국이 없습니다");
     if (host.session.getPhase() === "game_end") throw new Error("GuiServer: 이미 끝난 대국입니다");
     host.dispose();
-    host = null;
-    lobbyScreen = "setup";
-    broadcast(`data: ${setupMessage()}\n\n`);
+    room.table = null;
+    room.lobbyScreen = "setup";
+    sendToRoom(room, `data: ${setupMessage(room)}\n\n`);
   }
 
   /** 로비 안에서 화면을 옮긴다: 허브로 가거나, 모드를 골라 그 모드의 설정 화면으로 간다. 대국 중에는 할 수 없다. */
-  function moveLobby(input: unknown): void {
+  function moveLobby(room: Room, input: unknown): void {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
-    if (host && (host.isPlaying() || host.session.getPhase() !== "game_end")) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
+    if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
     const raw = (typeof input === "object" && input !== null ? input : {}) as { screen?: unknown; mode?: unknown };
     if (raw.screen === "hub") {
-      lobbyScreen = "hub";
+      room.lobbyScreen = "hub";
     } else if (raw.screen === "setup") {
-      lastSetup = { ...lastSetup, mode: parseGuiMode(typeof raw.mode === "string" ? raw.mode : String(raw.mode)) };
-      lobbyScreen = "setup";
+      room.lastSetup = { ...room.lastSetup, mode: parseGuiMode(typeof raw.mode === "string" ? raw.mode : String(raw.mode)) };
+      room.lobbyScreen = "setup";
     } else {
       throw new Error('screen은 "hub" 또는 "setup"이어야 합니다');
     }
-    host = null;
-    broadcast(`data: ${setupMessage()}\n\n`);
+    room.table = null;
+    sendToRoom(room, `data: ${setupMessage(room)}\n\n`);
   }
 
   /** CustomAI 편집 화면용 목록: 스키마(표시 이름/설명/범위)와 저장된 CustomAI(검증 실패 파일은 이유만). */
@@ -511,9 +578,9 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     });
   }
 
-  /** CustomAI가 바뀌면 시작 화면이 떠 있는 클라이언트에 새 목록을 보낸다. */
+  /** CustomAI가 바뀌면 시작 화면이 떠 있는 로비들에 새 목록을 보낸다. (CustomAI 저장소는 아직 서버 공용이다 - 5단계에서 사용자별로 나눈다) */
   function refreshSetupRoster(): void {
-    if (!host) broadcast(`data: ${setupMessage()}\n\n`);
+    for (const room of rooms.values()) if (!room.table) sendToRoom(room, `data: ${setupMessage(room)}\n\n`);
   }
 
   function handleCustomAi(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse, pathname: string): void {
@@ -601,9 +668,34 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     return true;
   }
 
+  function serveStatic(pathname: string, res: import("node:http").ServerResponse): void {
+    const relative = pathname === "/" ? "/index.html" : pathname;
+    const filePath = join(PUBLIC_DIR, relative);
+    if (!filePath.startsWith(PUBLIC_DIR)) {
+      res.writeHead(403).end("Forbidden");
+      return;
+    }
+    readFile(filePath)
+      .then((data) => {
+        const contentType = MIME_TYPES[extname(filePath)] ?? "application/octet-stream";
+        const headers: Record<string, string> = { "Content-Type": contentType };
+        if (NO_STORE_FILES.has(relative)) headers["Cache-Control"] = "no-store";
+        res.writeHead(200, headers).end(data);
+      })
+      .catch(() => res.writeHead(404).end("Not found"));
+  }
+
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (handleAccess(req, res, url.pathname)) return;
+    // 입장 게이트가 있으면 handleAccess를 통과한 요청은 입장한 사용자의 것이거나, 입장 전에도 열리는 정적 파일(입장 화면)이다.
+    // 로컬 모드는 로비가 하나다.
+    const userId = access ? (access.userOf(req)?.userId ?? null) : LOCAL_USER_ID;
+    if (userId === null) {
+      serveStatic(url.pathname, res);
+      return;
+    }
+    const room = roomOf(userId);
 
     if (req.method === "GET" && url.pathname === "/events") {
       res.writeHead(200, {
@@ -611,32 +703,29 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
       });
-      res.write(`data: ${connectMessage()}\n\n`);
-      sseClients.add(res);
-      req.on("close", () => sseClients.delete(res));
+      res.write(`data: ${connectMessage(room)}\n\n`);
+      room.sseClients.add(res);
+      req.on("close", () => room.sseClients.delete(res));
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/respond") {
       readBody(req, (body) =>
-        reply(res, () => {
-          if (!host) throw new Error("GuiServer: 진행 중인 게임이 없습니다");
-          host.respond(JSON.parse(body) as DecisionResponse);
-        })
+        reply(res, () => respondAt(room, JSON.parse(body) as DecisionResponse))
       );
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/continue") {
       reply(res, () => {
-        if (!host) throw new Error("GuiServer: 진행 중인 게임이 없습니다");
-        host.continueToNextHand();
+        if (!room.table) throw new Error("GuiServer: 진행 중인 게임이 없습니다");
+        room.table.host.continueToNextHand();
       });
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/start") {
-      readBody(req, (body) => reply(res, () => startGame(parseGuiGameConfig(JSON.parse(body), resolveOpponentProfile))));
+      readBody(req, (body) => reply(res, () => startGame(room, parseGuiGameConfig(JSON.parse(body), resolveOpponentProfile))));
       return;
     }
 
@@ -664,47 +753,34 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       readBody(req, (body) =>
         reply(res, () => {
           const { speed } = JSON.parse(body) as { speed?: unknown };
-          frameDelayMs = PLAYBACK_FRAME_DELAY_MS[parsePlaybackSpeed(speed)];
+          room.frameDelayMs = PLAYBACK_FRAME_DELAY_MS[parsePlaybackSpeed(speed)];
         })
       );
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/abandon") {
-      reply(res, abandonGame);
+      reply(res, () => abandonGame(room));
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/lobby") {
-      readBody(req, (body) => reply(res, () => moveLobby(JSON.parse(body || "{}"))));
+      readBody(req, (body) => reply(res, () => moveLobby(room, JSON.parse(body || "{}"))));
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/setup") {
-      reply(res, returnToSetup);
+      reply(res, () => returnToSetup(room));
       return;
     }
 
     if (req.method === "GET") {
-      const relative = url.pathname === "/" ? "/index.html" : url.pathname;
-      const filePath = join(PUBLIC_DIR, relative);
-      if (!filePath.startsWith(PUBLIC_DIR)) {
-        res.writeHead(403).end("Forbidden");
-        return;
-      }
-      readFile(filePath)
-        .then((data) => {
-          const contentType = MIME_TYPES[extname(filePath)] ?? "application/octet-stream";
-          const headers: Record<string, string> = { "Content-Type": contentType };
-          if (NO_STORE_FILES.has(relative)) headers["Cache-Control"] = "no-store";
-          res.writeHead(200, headers).end(data);
-        })
-        .catch(() => res.writeHead(404).end("Not found"));
+      serveStatic(url.pathname, res);
       return;
     }
 
     res.writeHead(405).end("Method not allowed");
   });
 
-  return { server, getSession: () => host?.session ?? null };
+  return { server, getSession: (userId = LOCAL_USER_ID) => rooms.get(userId)?.table?.host.session ?? null };
 }
