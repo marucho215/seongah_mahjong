@@ -1441,17 +1441,28 @@ function opponentSeatLabel(index, playerCount) {
 }
 
 function initSetupState(msg) {
-  const keepUi = setupState ? { activeSlot: 0, sort: setupState.sort } : { activeSlot: 0, sort: "registered" };
+  const prev = setupState;
+  const known = new Set(msg.roster.map((c) => c.characterId));
+  // 목록만 새로 온 경우(CustomAI 추가/수정/삭제)에는 지금 고른 구성을 유지하고, 사라진 상대만 서버 초기값으로 바꾼다.
+  const keepOpponents = (mode) => {
+    if (!prev) return [...msg.defaults.opponents[mode]];
+    const mine = prev.opponents[mode].map((id) => (known.has(id) ? id : null));
+    const spare = msg.defaults.opponents[mode].filter((id) => !mine.includes(id));
+    return mine.map((id) => id ?? spare.shift());
+  };
   setupState = {
     roster: msg.roster,
     playerCounts: msg.playerCounts,
-    mode: msg.defaults.mode,
-    opponents: { sanma: [...msg.defaults.opponents.sanma], yonma: [...msg.defaults.opponents.yonma] },
-    seed: msg.defaults.seed,
-    saveReplays: msg.defaults.saveReplays,
+    mode: prev ? prev.mode : msg.defaults.mode,
+    opponents: { sanma: keepOpponents("sanma"), yonma: keepOpponents("yonma") },
+    seed: prev ? prev.seed : msg.defaults.seed,
+    saveReplays: prev ? prev.saveReplays : msg.defaults.saveReplays,
     pending: false,
     error: "",
-    ...keepUi,
+    activeSlot: prev ? prev.activeSlot : 0,
+    sort: prev ? prev.sort : "registered",
+    customAi: prev ? prev.customAi : { schema: null, entries: [], error: "" },
+    editor: prev ? prev.editor : null,
   };
 }
 
@@ -1552,6 +1563,11 @@ function renderCharacterCard(entry) {
   const name = el("span", "card-name");
   name.textContent = entry.displayName;
   head.appendChild(name);
+  if (entry.custom) {
+    const badge = el("span", "card-custom");
+    badge.textContent = "CustomAI";
+    head.appendChild(badge);
+  }
   if (seatIndex >= 0) {
     const tag = el("span", "card-seat");
     tag.textContent = opponentSeatLabel(seatIndex, n);
@@ -1614,6 +1630,7 @@ function renderSetup() {
     renderSetup();
   });
   side.appendChild(setupSection("좌석", renderSetupSeats(), randomBtn));
+  side.appendChild(renderCustomAiSection());
 
   const seedLabel = el("label", "setup-field");
   const seedText = el("span", "field-label");
@@ -1673,6 +1690,193 @@ function renderSetup() {
   layout.append(side, rosterPane);
   root.appendChild(layout);
   grid.scrollTop = scrollTop;
+  if (setupState.editor) root.appendChild(renderCustomAiEditor());
+}
+
+// --- CustomAI: 사용자가 만든 파라미터 세트를 기존 CharacterAI에 넘기는 기능. 편집 항목/설명/범위는 서버 스키마(/api/custom-ai)를
+// 그대로 쓰고, 이 화면은 값을 보정하거나 계산하지 않는다. 설명 문장이나 태그를 자동으로 만들지 않는다. ---
+
+async function loadCustomAi() {
+  try {
+    const res = await fetch("/api/custom-ai");
+    if (!res.ok) throw new Error(await res.text());
+    const body = await res.json();
+    if (!setupState) return;
+    setupState.customAi = { schema: body.schema, entries: body.entries, error: "" };
+  } catch (err) {
+    if (!setupState) return;
+    setupState.customAi.error = `CustomAI 목록을 불러오지 못했습니다: ${err instanceof Error ? err.message : String(err)}`;
+  }
+  renderSetup();
+}
+
+async function customAiRequest(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function renderCustomAiSection() {
+  const ca = setupState.customAi;
+  const list = el("ul", "custom-ai-list");
+  for (const e of ca.entries) {
+    const li = el("li", "custom-ai-item" + (e.ok ? "" : " is-invalid"));
+    if (!e.ok) {
+      li.textContent = `불러올 수 없는 파일 ${e.file}: ${e.reason}`;
+      list.appendChild(li);
+      continue;
+    }
+    const name = el("span", "custom-ai-name");
+    name.textContent = e.name;
+    const actions = el("span", "custom-ai-actions");
+    const mk = (label, fn) => {
+      const b = el("button", "setup-link-button", { type: "button" });
+      b.textContent = label;
+      b.addEventListener("click", fn);
+      actions.appendChild(b);
+    };
+    mk("편집", () => openCustomAiEditor(e));
+    mk("복제", async () => {
+      try {
+        await customAiRequest("POST", `/api/custom-ai/${e.id}/duplicate`);
+        await loadCustomAi();
+      } catch (err) {
+        ca.error = String(err instanceof Error ? err.message : err);
+        renderSetup();
+      }
+    });
+    mk("삭제", async () => {
+      if (!window.confirm(`"${e.name}"을(를) 삭제할까요? 지난 리플레이는 저장된 값으로 계속 재현됩니다.`)) return;
+      try {
+        await customAiRequest("DELETE", `/api/custom-ai/${e.id}`);
+        await loadCustomAi();
+      } catch (err) {
+        ca.error = String(err instanceof Error ? err.message : err);
+        renderSetup();
+      }
+    });
+    li.append(name, actions);
+    for (const n of e.notices) {
+      const note = el("div", "custom-ai-notice");
+      note.textContent = n;
+      li.appendChild(note);
+    }
+    list.appendChild(li);
+  }
+  const create = el("button", "setup-link-button", { type: "button" });
+  create.textContent = "새 CustomAI 만들기";
+  create.disabled = !ca.schema;
+  create.addEventListener("click", () => openCustomAiEditor(null));
+  const children = [list, create];
+  if (ca.entries.length === 0) {
+    const empty = el("p", "setup-lead");
+    empty.textContent = "직접 성향을 정한 AI를 만들어 상대로 앉힐 수 있습니다.";
+    children.unshift(empty);
+  }
+  if (ca.error) {
+    const err = el("p", "setup-error", { role: "alert" });
+    err.textContent = ca.error;
+    children.push(err);
+  }
+  return setupSection("CustomAI", ...children);
+}
+
+function openCustomAiEditor(entry) {
+  const schema = setupState.customAi.schema;
+  if (!schema) return;
+  const style = entry ? { ...entry.style } : Object.fromEntries(schema.fields.map((f) => [f.key, f.initial]));
+  setupState.editor = { id: entry ? entry.id : null, name: entry ? entry.name : "", style, error: "", pending: false };
+  renderSetup();
+}
+
+function renderCustomAiEditor() {
+  const schema = setupState.customAi.schema;
+  const ed = setupState.editor;
+  const overlay = el("div", "custom-ai-overlay");
+  const panel = el("div", "custom-ai-editor", { role: "dialog", "aria-label": "CustomAI 편집" });
+  const h = el("h2");
+  h.textContent = ed.id ? "CustomAI 편집" : "새 CustomAI";
+  panel.appendChild(h);
+
+  const nameLabel = el("label", "setup-field");
+  const nameText = el("span", "field-label");
+  nameText.textContent = "이름";
+  const nameInput = el("input", "setup-input", { type: "text", maxlength: String(schema.nameMax), placeholder: "표시할 이름" });
+  nameInput.value = ed.name;
+  nameInput.addEventListener("input", () => (ed.name = nameInput.value));
+  nameLabel.append(nameText, nameInput);
+  panel.appendChild(nameLabel);
+
+  const groups = [
+    ["style", "플레이 성향"],
+    ["quality", "판단 품질"],
+  ];
+  for (const [group, title] of groups) {
+    const box = el("section", "custom-ai-group");
+    const gh = el("h3");
+    gh.textContent = title;
+    box.appendChild(gh);
+    for (const f of schema.fields.filter((x) => x.group === group)) {
+      const row = el("div", "custom-ai-field");
+      const top = el("div", "custom-ai-field-top");
+      const label = el("label", "custom-ai-field-label", { for: `ca-${f.key}` });
+      label.textContent = f.label;
+      const value = el("span", "custom-ai-field-value");
+      value.textContent = String(ed.style[f.key]);
+      top.append(label, value);
+      const slider = el("input", "custom-ai-slider", { type: "range", id: `ca-${f.key}`, min: String(schema.min), max: String(schema.max), step: "1" });
+      slider.value = String(ed.style[f.key]);
+      slider.addEventListener("input", () => {
+        ed.style[f.key] = Number(slider.value);
+        value.textContent = slider.value;
+      });
+      const desc = el("p", "custom-ai-field-desc");
+      desc.textContent = f.description;
+      row.append(top, slider, desc);
+      box.appendChild(row);
+    }
+    panel.appendChild(box);
+  }
+
+  if (ed.error) {
+    const err = el("p", "setup-error", { role: "alert" });
+    err.textContent = ed.error;
+    panel.appendChild(err);
+  }
+  const actions = el("div", "custom-ai-editor-actions");
+  const save = el("button", "setup-start", { type: "button" });
+  save.textContent = ed.pending ? "저장하는 중..." : "저장";
+  save.disabled = ed.pending;
+  save.addEventListener("click", async () => {
+    ed.pending = true;
+    ed.error = "";
+    renderSetup();
+    try {
+      const body = { name: ed.name, style: ed.style };
+      if (ed.id) await customAiRequest("PUT", `/api/custom-ai/${ed.id}`, body);
+      else await customAiRequest("POST", "/api/custom-ai", body);
+      setupState.editor = null;
+      await loadCustomAi();
+    } catch (err) {
+      ed.pending = false;
+      ed.error = String(err instanceof Error ? err.message : err);
+      renderSetup();
+    }
+  });
+  const cancel = el("button", "secondary-button", { type: "button" });
+  cancel.textContent = "취소";
+  cancel.addEventListener("click", () => {
+    setupState.editor = null;
+    renderSetup();
+  });
+  actions.append(save, cancel);
+  panel.appendChild(actions);
+  overlay.appendChild(panel);
+  return overlay;
 }
 
 async function startGameFromSetup() {
@@ -1707,13 +1911,14 @@ function showSetup(msg) {
   clearRecentFeed();
   AudioManager.reset(); // 다음 게임의 효과음 seq는 1부터 다시 시작한다
   renderSetup();
+  loadCustomAi();
 }
 
 function hideSetup() {
   if (!document.body.classList.contains("is-setup")) return;
   document.body.classList.remove("is-setup");
   document.getElementById("setup-screen").classList.add("hidden");
-  if (setupState) setupState.pending = false;
+  setupState = null; // 대국이 끝나고 시작 화면으로 돌아오면 서버의 마지막 구성을 초기값으로 쓴다
 }
 
 const FEED_TEXT = { discard: "타패", chi: "치", pon: "퐁", kan: "깡", kita: "북 빼기", riichi: "리치", ron: "론", tsumo: "쯔모" };

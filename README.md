@@ -125,8 +125,11 @@ and full human + AI games in both modes.
 
 ## Known limitations and future work
 
-- **CustomAI** is not implemented. The `customAI` controller kind is only a reserved slot: creating a game with it
-  throws. User-authored AI and any editor/settings UI are future work.
+- **CustomAI** (1st version): the start screen can create, edit, duplicate and delete CustomAIs and seat them as
+  opponents. A CustomAI is only a user-chosen set of the 15 common CharacterAI parameters (Korean-labelled 0-100 sliders)
+  run by the existing CharacterAI; character-specific mechanics and import/export are not included. Files live in
+  `custom-ai/` (one JSON per AI, named by an internal id). Games with a CustomAI store the exact profile used in that
+  seat's replay metadata, so later edits or deletions never change how an old replay reproduces.
 - No character voices or win cut-ins, no additional presentation options. Replays recorded by an older engine version
   usually cannot be reproduced by the viewer (it reports this instead of guessing).
 - The GUI always seats the human at seat 0 (opponents are chosen on the start screen; the human's seat is not).

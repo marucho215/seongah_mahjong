@@ -61,8 +61,9 @@ import { collectVisibleTileKinds } from "../ai/visibleTiles.js";
 
 /**
  * Who decides this seat's actions - independent of `characterProfiles` (which is identity:
- * "who/what this seat is", not "who controls it"). "customAI" is reserved for a future
- * pluggable AI and is rejected at construction time today - it is not implemented yet.
+ * "who/what this seat is", not "who controls it"). "customAI" runs the existing CharacterAI
+ * with a user-authored profile (src/customai/) - same decision logic as "characterAI", kept as
+ * a separate kind so replays can tell the seats apart; it also requires a characterProfile.
  */
 export type ControllerKind = "simpleAI" | "characterAI" | "human" | "customAI";
 
@@ -235,9 +236,13 @@ export class GameState {
       if (humanSeatSet.has(i)) return "human";
       return this.characterProfiles[i] ? "characterAI" : "simpleAI";
     });
-    if (this.controllers.some((c) => c === "customAI")) {
-      throw new Error('GameState: controller kind "customAI" is not implemented yet');
-    }
+    // customAI = 사용자가 만든 성향 값 세트를 기존 CharacterAI 엔진으로 돌리는 좌석 (src/customai/). 판단 로직은 characterAI와
+    // 같고 좌석 종류만 구분한다(리플레이 meta.seats의 kind). 그래서 characterAI처럼 프로필이 반드시 있어야 한다.
+    this.controllers.forEach((c, i) => {
+      if (c === "customAI" && !this.characterProfiles[i]) {
+        throw new Error(`GameState: seat ${i} has controller "customAI" but no characterProfile was provided`);
+      }
+    });
     this.scores = allSeats(opts.rules.playerCount).map(() => opts.rules.startingScore);
   }
 
@@ -829,10 +834,11 @@ export class GameState {
     // ("simpleAI", or "human" with no profile) keeps using the plain SimpleAI functions
     // exactly as before.
     const ais: (CharacterAI | null)[] = seats.map((p) => {
-      if (this.controllers[p] !== "characterAI") return null;
+      const controller = this.controllers[p];
+      if (controller !== "characterAI" && controller !== "customAI") return null;
       const profile = this.characterProfiles[p];
       if (!profile) {
-        throw new Error(`GameState: seat ${p} has controller "characterAI" but no characterProfile was provided`);
+        throw new Error(`GameState: seat ${p} has controller "${controller}" but no characterProfile was provided`);
       }
       return new CharacterAI(profile, `${wallSeed}::ai${p}`);
     });

@@ -3,6 +3,8 @@
 import { GameState } from "../core/GameState.js";
 import { DEFAULT_SANMA_RULES, MAJSOUL_YONMA_RULES } from "../rules/RuleConfig.js";
 import { getCharacterProfile } from "../ai/characterProfiles.js";
+import type { CharacterProfile } from "../ai/characterProfile.js";
+import { isCustomAiCharacterId } from "../customai/customAiSchema.js";
 
 export type GuiGameMode = "sanma" | "yonma";
 
@@ -45,7 +47,7 @@ const MAX_SEED_LENGTH = 100;
 
 /** 클라이언트가 보낸 구성을 검증하고 정규화한다 (legacy characterId는 정식 id로 바꾼다).
  *  한 판에 같은 캐릭터가 두 번 앉을 수는 없다 - 이름표로 구분할 수 없기 때문이다. */
-export function parseGuiGameConfig(input: unknown): GuiGameConfig {
+export function parseGuiGameConfig(input: unknown, resolveProfile: (id: string) => CharacterProfile = getCharacterProfile): GuiGameConfig {
   if (typeof input !== "object" || input === null) throw new Error("대국 설정이 비어 있습니다");
   const raw = input as Record<string, unknown>;
   const mode = parseGuiMode(typeof raw.mode === "string" ? raw.mode : String(raw.mode));
@@ -54,7 +56,7 @@ export function parseGuiGameConfig(input: unknown): GuiGameConfig {
   if (raw.opponents.length !== expected) throw new Error(`상대는 ${expected}명이어야 합니다`);
   const opponents = raw.opponents.map((id) => {
     if (typeof id !== "string") throw new Error("상대 characterId는 문자열이어야 합니다");
-    return getCharacterProfile(id).characterId;
+    return resolveProfile(id).characterId;
   });
   if (new Set(opponents).size !== opponents.length) throw new Error("같은 캐릭터를 두 좌석에 앉힐 수 없습니다");
   let seed: string | undefined;
@@ -69,12 +71,17 @@ export function parseGuiGameConfig(input: unknown): GuiGameConfig {
 }
 
 export function createGuiGame(mode: GuiGameMode, seed: string, opponents: readonly string[] = DEFAULT_OPPONENTS[mode]): GameState {
-  if (opponents.length !== playerCountOf(mode) - 1) throw new Error(`${mode}: 상대는 ${playerCountOf(mode) - 1}명이어야 합니다`);
-  const profiles = opponents.map((id) => getCharacterProfile(id));
+  return createGuiGameWithProfiles(mode, seed, opponents.map((id) => getCharacterProfile(id)));
+}
+
+/** 상대 프로필을 직접 받아 판을 만든다. CustomAI 프로필(characterId가 "custom:"으로 시작)은 customAI 좌석이 되고,
+ *  판단은 기존 CharacterAI가 그 프로필로 한다. 등록 캐릭터는 지금까지처럼 characterAI 좌석이다. */
+export function createGuiGameWithProfiles(mode: GuiGameMode, seed: string, profiles: readonly CharacterProfile[]): GameState {
+  if (profiles.length !== playerCountOf(mode) - 1) throw new Error(`${mode}: 상대는 ${playerCountOf(mode) - 1}명이어야 합니다`);
   return new GameState({
     rules: mode === "yonma" ? MAJSOUL_YONMA_RULES : DEFAULT_SANMA_RULES,
     seed,
     characterProfiles: [null, ...profiles],
-    controllers: ["human", ...profiles.map(() => undefined)],
+    controllers: ["human", ...profiles.map((p) => (isCustomAiCharacterId(p.characterId) ? ("customAI" as const) : undefined))],
   });
 }

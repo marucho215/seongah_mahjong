@@ -14,7 +14,20 @@ import { reproduceReplay, type ReplayReproduction } from "../replay/replayReprod
 import { getCharacterProfile } from "../ai/characterProfiles.js";
 import { buildCharacterRoster } from "./characterRoster.js";
 import { DEFAULT_PLAYBACK_SPEED, PLAYBACK_FRAME_DELAY_MS, parsePlaybackSpeed } from "./playbackSpeed.js";
-import { DEFAULT_OPPONENTS, createGuiGame, parseGuiGameConfig, playerCountOf, type GuiGameConfig, type GuiGameMode } from "./gameSetup.js";
+import { DEFAULT_OPPONENTS, createGuiGameWithProfiles, parseGuiGameConfig, playerCountOf, type GuiGameConfig, type GuiGameMode } from "./gameSetup.js";
+import { CustomAiStore } from "../customai/customAiStore.js";
+import {
+  CUSTOM_AI_CHARACTER_PREFIX,
+  CUSTOM_AI_FIELDS,
+  CUSTOM_AI_NAME_MAX,
+  SLIDER_MAX,
+  SLIDER_MIN,
+  customAiCharacterId,
+  customAiNotices,
+  customAiToProfile,
+  isCustomAiCharacterId,
+} from "../customai/customAiSchema.js";
+import type { CharacterProfile } from "../ai/characterProfile.js";
 
 export const PUBLIC_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "public");
 
@@ -233,6 +246,8 @@ export interface GuiLobbyOptions {
   /** 시작 화면 초기값 (CLI 인자에서 온다). opponents를 생략하면 모드별 기본 상대. */
   defaults?: { mode?: GuiGameMode; seed?: string; saveReplays?: boolean; opponents?: Partial<Record<GuiGameMode, string[]>> };
   replayDir?: string;
+  /** CustomAI 저장 폴더 (기본 "custom-ai", 프로젝트 루트 기준) */
+  customAiDir?: string;
   onReplaySaved?: (path: string) => void;
   onGameStarted?: (config: StartedGameConfig) => void;
 }
@@ -308,7 +323,25 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     return body;
   }
 
-  const roster = lobby ? buildCharacterRoster() : [];
+  const officialRoster = lobby ? buildCharacterRoster() : [];
+  const customAiStore = lobby ? new CustomAiStore(lobby.customAiDir ?? "custom-ai") : null;
+
+  /** 시작 화면 목록: 등록 캐릭터 + 검증을 통과한 CustomAI (CustomAI에는 설명/태그를 자동으로 만들지 않는다). */
+  function currentRoster() {
+    const customs = (customAiStore?.list() ?? []).flatMap((e) =>
+      e.ok ? [{ characterId: customAiCharacterId(e.definition.id), displayName: e.definition.name, summary: "", tags: [] as string[], custom: true }] : []
+    );
+    return [...officialRoster, ...customs];
+  }
+
+  /** 대국 상대 id -> 프로필. CustomAI는 게임을 시작하는 순간 파일에서 읽어 검증한 값이 그 대국의 스냅샷이 된다. */
+  function resolveOpponentProfile(id: string): CharacterProfile {
+    if (isCustomAiCharacterId(id)) {
+      if (!customAiStore) throw new Error("이 서버에서는 CustomAI를 쓸 수 없습니다");
+      return customAiToProfile(customAiStore.get(id.slice(CUSTOM_AI_CHARACTER_PREFIX.length)));
+    }
+    return getCharacterProfile(id);
+  }
   const defaults = lobby?.defaults ?? {};
   /** 시작 화면에 채워 둘 값: 처음에는 CLI 기본값, 한 판을 한 뒤에는 마지막으로 고른 구성 */
   let lastSetup = {
@@ -322,11 +355,20 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   };
 
   function setupMessage(): string {
+    const roster = currentRoster();
+    // 마지막 구성에 이제 없는 상대(삭제된 CustomAI 등)가 있으면 그 좌석만 기본 상대 중 남는 캐릭터로 바꿔 보여준다 (화면 초기값일 뿐).
+    const known = new Set(roster.map((r) => r.characterId));
+    const defaults = { ...lastSetup, opponents: { ...lastSetup.opponents } };
+    for (const mode of ["sanma", "yonma"] as const) {
+      const picked = defaults.opponents[mode].map((id) => (known.has(id) ? id : null));
+      const spare = [...DEFAULT_OPPONENTS[mode], ...officialRoster.map((r) => r.characterId)].filter((id) => !picked.includes(id));
+      defaults.opponents[mode] = picked.map((id) => id ?? spare.shift()!);
+    }
     return JSON.stringify({
       type: "setup",
       roster,
       playerCounts: { sanma: playerCountOf("sanma"), yonma: playerCountOf("yonma") },
-      defaults: lastSetup,
+      defaults,
     });
   }
 
@@ -344,7 +386,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       seed: config.seed ?? "",
       saveReplays: config.saveReplays,
     };
-    const game = createGuiGame(config.mode, seed, config.opponents);
+    const game = createGuiGameWithProfiles(config.mode, seed, config.opponents.map(resolveOpponentProfile));
     const options: GuiServerOptions = {
       ...(config.saveReplays
         ? {
@@ -367,6 +409,62 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     if (host && (host.isPlaying() || host.session.getPhase() !== "game_end")) throw new Error("GuiServer: 게임이 끝난 뒤에만 시작 화면으로 돌아갈 수 있습니다");
     host = null;
     broadcast(`data: ${setupMessage()}\n\n`);
+  }
+
+  /** CustomAI 편집 화면용 목록: 스키마(표시 이름/설명/범위)와 저장된 CustomAI(검증 실패 파일은 이유만). */
+  function customAiListBody(): string {
+    return JSON.stringify({
+      schema: {
+        nameMax: CUSTOM_AI_NAME_MAX,
+        min: SLIDER_MIN,
+        max: SLIDER_MAX,
+        fields: CUSTOM_AI_FIELDS.map((f) => ({ key: f.key, group: f.group, label: f.label, description: f.description, initial: f.initial })),
+      },
+      entries: (customAiStore?.list() ?? []).map((e) =>
+        e.ok
+          ? { ok: true, id: e.definition.id, characterId: customAiCharacterId(e.definition.id), name: e.definition.name, style: e.definition.style, notices: customAiNotices(e.definition.style) }
+          : { ok: false, file: e.file, reason: e.reason }
+      ),
+    });
+  }
+
+  /** CustomAI가 바뀌면 시작 화면이 떠 있는 클라이언트에 새 목록을 보낸다. */
+  function refreshSetupRoster(): void {
+    if (!host) broadcast(`data: ${setupMessage()}\n\n`);
+  }
+
+  function handleCustomAi(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse, pathname: string): void {
+    const json = (status: number, body: string) => res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }).end(body);
+    const error = (err: unknown) => res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" }).end(String(err instanceof Error ? err.message : err));
+    if (!customAiStore) {
+      res.writeHead(404).end("Not found");
+      return;
+    }
+    const store = customAiStore;
+    const rest = pathname.slice("/api/custom-ai".length).split("/").filter(Boolean); // [] | [id] | [id, "duplicate"]
+    if (req.method === "GET" && rest.length === 0) {
+      json(200, customAiListBody());
+      return;
+    }
+    readBody(req, (body) => {
+      try {
+        let result: unknown;
+        if (req.method === "POST" && rest.length === 0) result = store.create(JSON.parse(body));
+        else if (req.method === "PUT" && rest.length === 1) result = store.update(rest[0]!, JSON.parse(body));
+        else if (req.method === "POST" && rest.length === 2 && rest[1] === "duplicate") result = store.duplicate(rest[0]!);
+        else if (req.method === "DELETE" && rest.length === 1) {
+          store.delete(rest[0]!);
+          result = { deleted: rest[0] };
+        } else {
+          res.writeHead(405).end("Method not allowed");
+          return;
+        }
+        refreshSetupRoster();
+        json(200, JSON.stringify(result));
+      } catch (err) {
+        error(err);
+      }
+    });
   }
 
   function readBody(req: import("node:http").IncomingMessage, onBody: (body: string) => void): void {
@@ -419,7 +517,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     }
 
     if (req.method === "POST" && url.pathname === "/start") {
-      readBody(req, (body) => reply(res, () => startGame(parseGuiGameConfig(JSON.parse(body)))));
+      readBody(req, (body) => reply(res, () => startGame(parseGuiGameConfig(JSON.parse(body), resolveOpponentProfile))));
       return;
     }
 
@@ -435,6 +533,11 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       replayBody(name)
         .then((body) => res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }).end(body))
         .catch((err) => res.writeHead(REPLAY_FILE_NAME.test(name) ? 404 : 400, { "Content-Type": "text/plain" }).end(String(err instanceof Error ? err.message : err)));
+      return;
+    }
+
+    if (url.pathname === "/api/custom-ai" || url.pathname.startsWith("/api/custom-ai/")) {
+      handleCustomAi(req, res, url.pathname);
       return;
     }
 

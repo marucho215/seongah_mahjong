@@ -114,7 +114,7 @@ describe("Milestone 1: human-controlled seat plays a full hand via the interacti
     expect(gs.controllers).toEqual(["characterAI", "simpleAI", "simpleAI"]);
   });
 
-  it("rejects the reserved \"customAI\" controller kind at construction time (not implemented yet)", () => {
+  it("rejects a \"customAI\" seat without a characterProfile at construction time (customAI runs CharacterAI with a user profile)", () => {
     expect(
       () => new GameState({ rules: DEFAULT_SANMA_RULES, seed: "human-play-customai", controllers: ["customAI", undefined, undefined] })
     ).toThrow(/customAI/);

@@ -14,6 +14,7 @@ import type { AiDecisionEntry, GameEvent, MeldSnapshot, TileRef } from "../core/
 import type { DecisionRequest, DecisionResponse } from "../core/decisions.js";
 import type { HumanDecisionEntry } from "../core/humanDecisionLog.js";
 import { getCharacterProfile } from "../ai/characterProfiles.js";
+import { isUsableProfileSnapshot } from "../customai/customAiSchema.js";
 import { GuiSession } from "../gui/guiSession.js";
 import { tileToRef } from "../yaku/doraBreakdown.js";
 import { meldToSnapshot } from "../yaku/winSnapshot.js";
@@ -132,9 +133,15 @@ function reproduceOrThrow(record: GameReplayRecord): ReplayReproduction & { ok: 
     throw new ReproductionMismatch("리플레이에 시드/규칙/좌석 정보가 없습니다", null);
   }
   const seats = meta.seats;
-  if (seats.some((s) => s.kind === "customAI")) throw new ReproductionMismatch("customAI 좌석은 재현할 수 없습니다", null);
   const controllers: ControllerKind[] = seats.map((s) => s.kind);
-  const characterProfiles = seats.map((s) => (s.characterId ? getCharacterProfile(s.characterId) : null));
+  // customAI 좌석은 리플레이에 저장된 프로필 스냅샷만 쓴다 (custom-ai/ 파일은 읽지 않는다).
+  const characterProfiles = seats.map((s) => {
+    if (s.kind === "customAI") {
+      if (!isUsableProfileSnapshot(s.customProfile)) throw new ReproductionMismatch(`좌석 ${s.seat}의 CustomAI 프로필 스냅샷이 없거나 올바르지 않습니다`, null);
+      return s.customProfile;
+    }
+    return s.characterId ? getCharacterProfile(s.characterId) : null;
+  });
   const game = new GameState({ rules: meta.rules, seed: meta.gameSeed, characterProfiles, controllers });
 
   const steps: ReplayStep[] = [];

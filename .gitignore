@@ -9,3 +9,6 @@ src/gui/public/assets/audio/tstudio/*.ogg
 /replays/
 /validation-failures/
 /phase*-validation.log
+
+# 사용자가 GUI에서 만든 CustomAI (로컬 데이터)
+/custom-ai/

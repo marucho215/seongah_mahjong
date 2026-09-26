@@ -9,6 +9,7 @@ import type { GameState, FinalStanding } from "../core/GameState.js";
 import type { GameEvent, AiDecisionEntry } from "../core/GameLog.js";
 import type { HumanDecisionEntry } from "../core/humanDecisionLog.js";
 import type { RuleConfig } from "../rules/RuleConfig.js";
+import type { CharacterProfile } from "../ai/characterProfile.js";
 
 /** This file lives at <project root>/src/sim/replayRecorder.ts, so two levels up from
  *  its own location is always the project root - regardless of the process's current
@@ -29,13 +30,23 @@ export interface ReplaySeatInfo {
   /** 이 좌석을 누가 조종했는가 (GameState.controllers). 캐릭터 정체성(characterId)과는 별개다. */
   kind: "characterAI" | "simpleAI" | "human" | "customAI";
   characterId?: string;
+  /** customAI 좌석에만 있는 선택 필드 (Schema v2에 추가된 선택 필드, 다른 좌석/기존 리플레이에는 없다): 그 대국에서 실제로 쓴
+   *  CharacterAI 프로필 전체의 스냅샷. 리플레이 재현은 custom-ai/ 파일이 아니라 이 값만 쓰므로, 이후 CustomAI를 고치거나
+   *  지워도 지난 대국은 같게 재현된다. */
+  customProfile?: CharacterProfile;
 }
 
 /** GameState의 controllers/characterProfiles에서 리플레이용 좌석 정보를 만든다 (사람 대국용). */
 export function replaySeatsFromGame(gs: GameState): ReplaySeatInfo[] {
   return gs.controllers.map((kind, seat) => {
-    const characterId = gs.characterProfiles[seat]?.characterId;
-    return { seat, kind, ...(characterId ? { characterId } : {}) };
+    const profile = gs.characterProfiles[seat];
+    const characterId = profile?.characterId;
+    return {
+      seat,
+      kind,
+      ...(characterId ? { characterId } : {}),
+      ...(kind === "customAI" && profile ? { customProfile: structuredClone(profile) } : {}),
+    };
   });
 }
 

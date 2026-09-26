@@ -68,6 +68,21 @@
 - `src/core/GameLog.ts`: replay event와 auditable `hand_end.result` schema
 - `src/validation/`: replay/event invariant 검증(테스트와 `npm run validate`가 공유), `tests/helpers/replayQa.ts`는 재수출
 
+### CustomAI
+
+- 사용자가 정한 파라미터 세트를 기존 CharacterAI에 넘기는 기능이다. 판단 로직은 characterAI와 같고, 좌석 종류만 `customAI`로
+  구분한다(`GameState`는 customAI 좌석에도 프로필을 요구하고 같은 CharacterAI 인스턴스를 만든다 - `tests/customAi.test.ts`가
+  같은 프로필이면 두 좌석 종류의 로그/AI 판단이 같음을 고정).
+- `src/customai/customAiSchema.ts`: 저장 형식(`formatVersion: 1`, 내부 id `c-<12 hex>`, 표시 이름, `style` 15개 0~100 정수)과
+  항목별 한국어 이름/설명/초기값/내부값 변환(`toInternal`). 안전 범위는 CharacterAI 코드 기준: 성향·접기 기준·실력·변동성·실수율
+  0~1, 후보 허용 폭 0.05~0.25(코드의 0.05 하한, 실수로 넓힌 범위가 샹텐 한 단계를 넘지 않는 상한). 초기값은 성향 50, 품질 계열은
+  등록 캐릭터 중앙값에 가까운 값이며 고정값이 아니다. 보정/정규화 없음, 충돌 조합은 안내(`customAiNotices`)만.
+- `src/customai/customAiStore.ts`: `custom-ai/<id>.json` 저장소(생성/수정/복제/삭제, 쓰기/읽기 모두 같은 검증, 잘못된 파일은
+  목록에 이유만). 서버 API `/api/custom-ai`(GET 목록+스키마, POST 생성, PUT 수정, POST `<id>/duplicate`, DELETE). 대국 상대 id는
+  `custom:<id>`이며 게임 시작 순간의 프로필이 그 대국의 스냅샷이다.
+- 리플레이: customAI 좌석의 `meta.seats[].customProfile`에만 실제 사용한 프로필 전체를 저장하고(Schema v2의 선택 필드), 재현은 이
+  스냅샷만 쓴다(`custom-ai/`를 읽지 않음). CustomAI가 없는 리플레이의 바이트는 그대로다(`tests/replayParity.test.ts`).
+
 ### 리플레이 뷰어
 
 - `src/replay/replayReproduction.ts`: 리플레이의 시드/규칙/좌석/사람 결정으로 현재 엔진에서 대국을 다시 진행하며(재시뮬레이션),
@@ -179,8 +194,8 @@
 
 ## 9. 알려진 제한
 
-- **CustomAI는 미구현**: `ControllerKind`의 `"customAI"`는 예약 슬롯일 뿐이고, 이 값으로 `GameState`를 만들면 생성자가
-  throw한다 (`GameState: controller kind "customAI" is not implemented yet`).
+- **CustomAI는 1차 범위만**: 공통 파라미터 15개만 편집한다. 캐릭터 전용 특수 메커니즘(글리치/애착/힘 빼기 등)은 없고(향후 특수
+  기믹 시스템으로 별도 확장), 가져오기/내보내기도 없다.
 - 리플레이 뷰어는 현재 엔진으로 정확히 재현되는 기록만 보여준다 (엔진 규칙/AI가 바뀌기 전의 옛 기록은 대개 재현 불가로 표시).
   GUI는 게임이 끝날 때 한 번만 replay를 저장하며, 서버가 게임 도중 죽으면 복구하지 않는다.
 - GUI는 사람을 seat 0에 앉힌다. 상대는 시작 화면에서 고르며 기본값은 산마: 제갈 미나·제갈 나희, 4마: +변아리. 사람 좌석 선택은 없다.
@@ -191,7 +206,7 @@
 
 ## 10. 1.0 이후 후보 (우선순위 없음)
 
-CustomAI 구현과 설정/편집 UI, 캐릭터 보이스와 화료 컷인, 캐릭터 초상화, 사람 좌석
+CustomAI 특수 기믹 시스템과 가져오기/내보내기, 캐릭터 보이스와 화료 컷인, 캐릭터 초상화, 사람 좌석
 선택, 추가 presentation 옵션과 UI polish, 추가 효과음, 새로운 마작 룰, 5000판급 장기 자체 대국 검증(Phase C 기준선 참고),
 대국 통계(화료/방총/리치 횟수), 리치 입력 UX(확인창 대신 리치 버튼 - 7단계에서 제외, 실제 플레이 후 검토). 캐릭터 성향을 실측으로 확인할 때는 전체 국 대비 비율 대신 조건부 지표(예: 리치 가능 상태가
 된 횟수 중 실제 리치 비율)를 쓸 것 - 울기가 많은 캐릭터는 멘젠 상태가 일찍 깨져 단순 리치 비율이 의향을 반영하지 않는다.

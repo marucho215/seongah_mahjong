@@ -1272,3 +1272,73 @@ body.replay-page {
 }
 
 .setup-replay-link { font-size: 13px; color: rgba(240, 240, 240, 0.66); }
+
+/* --- CustomAI (시작 화면) --- */
+
+.card-custom {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--setup-line);
+  color: var(--setup-muted);
+}
+.custom-ai-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.custom-ai-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--setup-line);
+  background: var(--setup-panel);
+  font-size: 14px;
+}
+.custom-ai-item.is-invalid { font-size: 12px; color: #ff8a80; }
+.custom-ai-name { font-weight: 600; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.custom-ai-actions { display: flex; gap: 10px; }
+.custom-ai-notice { flex-basis: 100%; font-size: 12px; color: var(--setup-muted); }
+
+.custom-ai-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.55);
+}
+.custom-ai-editor {
+  width: min(640px, 100%);
+  padding: 22px 24px;
+  border-radius: 12px;
+  background: var(--setup-bg);
+  border: 1px solid var(--setup-line);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.custom-ai-editor h2 { margin: 0; font-size: 20px; }
+.custom-ai-group h3 { margin: 0 0 8px; font-size: 13px; color: var(--setup-muted); font-weight: 600; letter-spacing: 0.04em; }
+.custom-ai-field { padding: 8px 0; border-top: 1px solid var(--setup-line); }
+.custom-ai-field-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.custom-ai-field-label { font-size: 14px; font-weight: 600; }
+.custom-ai-field-value { font-variant-numeric: tabular-nums; font-size: 14px; min-width: 3ch; text-align: right; }
+.custom-ai-slider { width: 100%; margin: 6px 0 2px; accent-color: var(--setup-accent); }
+.custom-ai-field-desc { margin: 0; font-size: 12px; line-height: 1.45; color: var(--setup-muted); }
+.custom-ai-editor-actions { display: flex; gap: 8px; }
+.custom-ai-editor-actions .setup-start { margin-top: 0; flex: 1; }
+.custom-ai-editor .secondary-button {
+  font: inherit;
+  font-size: 15px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
