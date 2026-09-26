@@ -651,6 +651,7 @@ function showActionError(text) {
 async function sendResponse(response) {
   if (awaitingServer) return;
   awaitingServer = true;
+  pendingRequest = null;
   try {
     const res = await fetch("/respond", {
       method: "POST",
@@ -1356,6 +1357,58 @@ function mountSpeedControl() {
 
 mountSpeedControl();
 
+// --- 자동 플레이 옵션 (기본 모두 꺼짐, 새로고침하면 다시 꺼짐). 켜진 옵션에 해당하는 결정만 기존 /respond 경로로
+// 대신 응답하므로 사람 결정 기록(리플레이 humanDecisions)에 그대로 남는다. 판단은 하지 않고, 정해진 응답만 보낸다:
+//   자동 화료   - 론/쯔모 요청에 선언
+//   울기 패스   - 치/퐁/대명깡 요청에 패스 (자기 차례의 암깡/가깡/북 빼기는 제외)
+//   자동 쯔모기리 - 엔진이 알려준 이번 차례 쯔모패(drawnTileId)가 있는 타패 요청에서만 그 패를 버림, 리치 선언 없음
+//                  (리치 후의 쯔모기리는 엔진이 요청 없이 처리하므로 여기로 오지 않는다) ---
+
+const autoPlay = { tsumogiri: false, passCalls: false, autoWin: false };
+const AUTO_LABEL = { tsumogiri: "자동 쯔모기리", passCalls: "울기 자동 패스", autoWin: "자동 화료" };
+let pendingRequest = null;
+
+function autoResponseFor(request) {
+  if (autoPlay.autoWin && (request.type === "ron" || request.type === "tsumo")) {
+    return { key: "autoWin", response: { type: request.type, declare: true } };
+  }
+  if (autoPlay.passCalls) {
+    if (request.type === "chi") return { key: "passCalls", response: { type: "chi", optionId: null } };
+    if (request.type === "call_pon" || request.type === "call_daiminkan") return { key: "passCalls", response: { type: request.type, declare: false } };
+  }
+  if (autoPlay.tsumogiri && request.type === "discard" && request.drawnTileId !== undefined && request.legalTileIds.includes(request.drawnTileId)) {
+    return { key: "tsumogiri", response: { type: "discard", tileId: request.drawnTileId, declareRiichi: false } };
+  }
+  return null;
+}
+
+/** 지금 떠 있는 요청에 켜진 자동 옵션이 해당하면 응답을 보낸다. 해당하지 않으면 아무것도 하지 않는다. */
+function maybeAutoRespond() {
+  if (!pendingRequest || awaitingServer) return;
+  const auto = autoResponseFor(pendingRequest);
+  if (!auto) return;
+  clearActionBar();
+  const label = el("span", "section-label");
+  label.textContent = `${AUTO_LABEL[auto.key]} 처리 중...`;
+  document.getElementById("action-bar").appendChild(label);
+  pendingRequest = null;
+  sendResponse(auto.response);
+}
+
+function mountAutoPlayControls() {
+  for (const btn of document.querySelectorAll("#audio-controls .auto-toggle")) {
+    const key = btn.dataset.auto;
+    btn.addEventListener("click", () => {
+      autoPlay[key] = !autoPlay[key];
+      btn.setAttribute("aria-pressed", String(autoPlay[key]));
+      btn.classList.toggle("is-on", autoPlay[key]);
+      if (autoPlay[key]) maybeAutoRespond(); // 켜는 순간 떠 있는 요청에도 적용
+    });
+  }
+}
+
+mountAutoPlayControls();
+
 function handleMessage(msg) {
   handleMessageBody(msg);
   // 접속 직후 메시지의 cueBase 이하는 과거 신호라 재생하지 않는다.
@@ -1698,6 +1751,7 @@ function handleMessageBody(msg) {
     return;
   }
   hideSetup();
+  pendingRequest = null; // decision 메시지면 아래에서 다시 채운다
   currentCharacterNames = msg.characterNames ?? [];
   if (msg.type === "hand_end" || msg.type === "game_end") clearRecentFeed();
   if (msg.type === "watch") {
@@ -1726,6 +1780,7 @@ function handleMessageBody(msg) {
   }
   document.getElementById("hand-end-overlay").classList.add("hidden");
   const request = msg.request;
+  pendingRequest = request;
   lastKnownMySeat = request.view.seat;
   if (request.type === "discard") renderDiscardRequest(request);
   else if (request.type === "ron") renderRonRequest(request);
@@ -1734,6 +1789,7 @@ function handleMessageBody(msg) {
   else if (request.type === "tsumo") renderTsumoRequest(request);
   else renderCallRequest(request);
   placeActionBar();
+  maybeAutoRespond();
 }
 
 const events = new EventSource("/events");

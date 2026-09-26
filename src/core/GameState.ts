@@ -1136,7 +1136,8 @@ export class GameState {
       human: boolean,
       score: number,
       wallRemainingLive: number,
-      forbiddenDiscardKinds: readonly TileKind[] = []
+      forbiddenDiscardKinds: readonly TileKind[] = [],
+      drawnTileId?: number
     ): Generator<DecisionRequest, { discardId: number; declaringRiichi: boolean }, DecisionResponse> {
       if (!human) {
         const discardId = chooseDiscardFor(player, hand, forbiddenDiscardKinds);
@@ -1155,6 +1156,7 @@ export class GameState {
         legalTileIds,
         riichiLegalTileIds,
         riichiWaits: riichiWaitsFor(hand, riichiLegalTileIds, view),
+        ...(drawnTileId !== undefined ? { drawnTileId } : {}),
         view,
       } satisfies DiscardDecisionRequest) as DiscardDecisionResponse;
       if (!legalTileIds.includes(response.tileId)) {
@@ -1619,7 +1621,9 @@ export class GameState {
           hand,
           isHumanSeat(current),
           this.scores[current]!,
-          wall.remainingLiveCount()
+          wall.remainingLiveCount(),
+          [],
+          latestDrawnTile.id
         );
         discardId = decision.discardId;
         declaringRiichi = decision.declaringRiichi;

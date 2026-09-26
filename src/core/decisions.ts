@@ -16,6 +16,9 @@ export interface DiscardDecisionRequest {
   /** 리치 가능한 각 버림패를 골랐을 때의 대기패 미리보기 (엔진의 기존 대기 계산). riichiLegalTileIds와 같은 패들만 담는다.
    *  내 손패에서만 계산되므로 숨은 정보를 더하지 않는다. */
   riichiWaits: { tileId: number; waits: WaitInfo[] }[];
+  /** 이번 차례에 뽑은 패의 id (쯔모/영상패 뒤의 타패일 때만). 퐁/치/대명깡 직후의 타패처럼 뽑은 패가 없으면 없다.
+   *  엔진이 쯔모기리 판정에 쓰는 것과 같은 패이며, GUI 자동 쯔모기리가 이 값만 쓴다 (GUI가 손패 순서로 추측하지 않는다). */
+  drawnTileId?: number;
   /** Seat-filtered snapshot for a UI/HumanController to render - no opponent concealed
    *  tile ever appears in it (see PlayerView). Bundled with every request rather than
    *  requiring a separate "peek at current state" call, since a hand in progress has no
