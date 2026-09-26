@@ -881,6 +881,170 @@ function nextHandLine(result) {
   return line;
 }
 
+// --- 화료 결과 상세: hand_end.result의 엔진 값(스냅샷, 도라 내역, 판/부/점수)을 그대로 표시한다. 새로 계산하지 않는다. ---
+
+/** 엔진 basePoints(score.ts)에 붙는 등급 이름. 판수로 추정하지 않고 엔진이 정한 기본점 값에만 대응한다. */
+const LIMIT_NAME_BY_BASE = { 2000: "만관", 3000: "하네만", 4000: "배만", 6000: "삼배만" };
+
+function limitNameOf(win) {
+  if (win.yakumanUnits > 0) return win.yakumanUnits === 1 ? "역만" : `${win.yakumanUnits}배 역만`;
+  return LIMIT_NAME_BY_BASE[win.basePoints] ?? null;
+}
+
+/** 도라 출처별 판수 (doraBreakdown.sources의 matchedTileIds 수). 표도라와 깡도라는 "도라"로 합친다. */
+const DORA_SOURCE_LABEL = { omote: "도라", kan: "도라", aka: "아카도라", ura: "우라도라", kita: "북도라" };
+const DORA_SOURCE_ORDER = ["도라", "아카도라", "우라도라", "북도라"];
+
+function doraLines(breakdown) {
+  const han = {};
+  for (const src of breakdown.sources) {
+    const label = DORA_SOURCE_LABEL[src.type];
+    if (!label) continue;
+    han[label] = (han[label] ?? 0) + src.matchedTileIds.length;
+  }
+  return DORA_SOURCE_ORDER.filter((label) => han[label] > 0).map((label) => ({ name: label, han: han[label] }));
+}
+
+/** 역 목록. 도라 내역이 있으면 "Dora" 한 줄을 출처별 줄로 나눈다 (합계는 엔진 기록상 같다). */
+function renderWinYakuList(win) {
+  if (!win.doraBreakdown) return renderYakuList(win.yaku);
+  const rows = [];
+  for (const hit of win.yaku) {
+    if (hit.name === "Dora") rows.push(...doraLines(win.doraBreakdown).map((d) => ({ label: d.name, han: d.han })));
+    else rows.push({ label: translateYaku(hit.name), han: hit.han });
+  }
+  const list = el("ul", "yaku-list");
+  for (const row of rows) {
+    const li = el("li");
+    const name = el("span");
+    name.textContent = row.label;
+    const han = el("span");
+    han.textContent = `${row.han}판`;
+    li.append(name, han);
+    list.appendChild(li);
+  }
+  return list;
+}
+
+/** 화료 순간의 손패: 손패(정렬) · 화료패(떼어서) · 멘츠 · 북. 쯔모면 스냅샷 손패에 화료패가 들어 있으므로 id로 뺀다. */
+function renderWinningHand(win, playerCount) {
+  const snap = win.snapshot;
+  const row = el("div", "win-hand");
+  const concealed = snap.concealedTiles.filter((t) => t.id !== snap.winningTile.id).sort(compareTilesForDisplay);
+  const tiles = el("div", "win-hand-tiles");
+  for (const t of concealed) tiles.appendChild(tileImg(t, { small: true }));
+  const winTile = el("div", "win-hand-agari");
+  winTile.appendChild(tileImg(snap.winningTile, { small: true }));
+  row.append(tiles, winTile);
+  for (const m of snap.melds) row.appendChild(renderMeldGroup(m, win.winnerSeat, playerCount));
+  if (snap.kitaTiles.length > 0) {
+    const kita = el("div", "win-hand-kita");
+    const label = el("span", "meld-label");
+    label.textContent = "북";
+    kita.appendChild(label);
+    for (const t of snap.kitaTiles) kita.appendChild(tileImg(t, { small: true }));
+    row.appendChild(kita);
+  }
+  return row;
+}
+
+/** 도라 표시패 줄 (표도라+깡도라, 우라도라). 도라 내역이 없는 옛 기록이면 null. */
+function renderDoraIndicators(win) {
+  if (!win.doraBreakdown) return null;
+  const groups = [
+    ["도라 표시패", win.doraBreakdown.sources.filter((s) => s.type === "omote" || s.type === "kan")],
+    ["우라도라 표시패", win.doraBreakdown.sources.filter((s) => s.type === "ura")],
+  ];
+  const wrap = el("div", "win-dora");
+  for (const [label, sources] of groups) {
+    if (sources.length === 0) continue;
+    const line = el("div", "win-dora-line");
+    const text = el("span", "section-label");
+    text.textContent = label;
+    line.appendChild(text);
+    for (const s of sources) line.appendChild(tileImg(s.indicator, { small: true }));
+    wrap.appendChild(line);
+  }
+  return wrap.childElementCount > 0 ? wrap : null;
+}
+
+/** 한 화료의 표시 구획들 (위에서 아래로 읽는 순서). */
+function renderWinDetail(win, mySeat, playerCount) {
+  const sections = [];
+
+  const headline = el("div", "result-headline win-headline");
+  const who = el("span", "win-who");
+  who.textContent = displayNameForSeat(win.winnerSeat, mySeat);
+  headline.appendChild(who);
+  if (win.isDealer) {
+    const dealer = el("span", "win-dealer");
+    dealer.textContent = "친";
+    headline.appendChild(dealer);
+  }
+  const how = el("span", "win-method");
+  how.textContent = win.method === "ron" && win.loserSeat !== null
+    ? ` · ${methodLabel(win.method)} (${displayNameForSeat(win.loserSeat, mySeat)} 방총)`
+    : ` · ${methodLabel(win.method)}`;
+  headline.appendChild(how);
+  sections.push(headline);
+
+  if (win.snapshot) {
+    sections.push(renderWinningHand(win, playerCount));
+  } else {
+    // 스냅샷이 없는 옛 기록: 화료패 한 장만 보여준다 (빨간 5 구분 없음)
+    const tileRow = el("div", "tile-row small win-tile-row");
+    tileRow.appendChild(tileImg(win.winningTile, { small: true }));
+    sections.push(tileRow);
+  }
+
+  const dora = renderDoraIndicators(win);
+  if (dora) sections.push(dora);
+
+  sections.push(renderWinYakuList(win));
+
+  const score = el("div", "win-score");
+  const limit = limitNameOf(win);
+  const parts = [];
+  if (win.yakumanUnits === 0) parts.push(limit ? `${win.han}판` : `${win.han}판 ${win.fu}부`);
+  if (limit) parts.push(limit);
+  const detail = el("span", "win-score-detail");
+  detail.textContent = parts.join(" · ");
+  const points = el("span", "win-score-points");
+  points.textContent = `${formatPoints(win.totalPoints)}점`;
+  score.append(detail, points);
+  sections.push(score);
+
+  return sections;
+}
+
+/** 본장/공탁 줄 (있을 때만). 값은 hand_end.result의 엔진 기록 그대로다. */
+function renderHonbaKyotaku(result, mySeat) {
+  const parts = [];
+  if (result.honbaBefore > 0) parts.push(`${result.honbaBefore}본장`);
+  if (result.kyotakuAwarded > 0 && result.kyotakuRecipient !== null) {
+    parts.push(`공탁 ${formatPoints(result.kyotakuAwarded)}점 → ${displayNameForSeat(result.kyotakuRecipient, mySeat)}`);
+  }
+  if (parts.length === 0) return null;
+  const line = el("div", "win-extras");
+  line.textContent = parts.join(" · ");
+  return line;
+}
+
+/** 결과 패널의 구획을 위에서부터 짧은 간격으로 차례로 보여준다 (전체 1초 이내). 패널을 누르면 바로 전부 보인다.
+ *  이후에 끼워 넣는 버튼(다음 국 시작 등)은 대상이 아니라 처음부터 보인다. */
+const REVEAL_STEP_MS = 80;
+const REVEAL_MAX_ITEMS = 10;
+
+function startResultReveal(panel) {
+  panel.classList.remove("reveal-done");
+  panel.classList.add("revealing");
+  [...panel.children].forEach((child, i) => {
+    child.classList.add("reveal");
+    child.style.setProperty("--reveal-delay", `${Math.min(i, REVEAL_MAX_ITEMS) * REVEAL_STEP_MS}ms`);
+  });
+  panel.onclick = () => panel.classList.add("reveal-done");
+}
+
 /** `isFinalHand`: true when this hand ended the game - suppresses the "다음: 동X국" line,
  *  since the game-end flow shows the final-result step (renderFinalResultStep) next instead. */
 function renderHandEndPanel(handEndEvent, mySeat, isFinalHand) {
@@ -904,31 +1068,12 @@ function renderHandEndPanel(handEndEvent, mySeat, isFinalHand) {
     h2.textContent = "화료!";
     panel.appendChild(h2);
 
+    const playerCount = result.scoresAfterSettlement.length;
     for (const win of result.winners) {
-      const headline = el("div", "result-headline");
-      const winnerName = displayNameForSeat(win.winnerSeat, mySeat);
-      const methodText = win.method === "ron" && win.loserSeat !== null
-        ? `${methodLabel(win.method)} (${displayNameForSeat(win.loserSeat, mySeat)} 방총)`
-        : methodLabel(win.method);
-      headline.textContent = `${winnerName} · ${methodText}`;
-      panel.appendChild(headline);
-
-      // Prefer the Schema v2 snapshot's winningTile (carries `red`) when present; the base
-      // AuditableWinResult.winningTile has no red-five flag, so a plain win still renders
-      // correctly, just without the red-five distinction on this one tile.
-      const winningTileRef = win.snapshot ? win.snapshot.winningTile : win.winningTile;
-      const tileRow = el("div", "tile-row small win-tile-row");
-      tileRow.appendChild(tileImg(winningTileRef, { small: true }));
-      panel.appendChild(tileRow);
-
-      const scoreLine = el("div", "result-headline");
-      scoreLine.textContent = win.yakumanUnits > 0
-        ? (win.yakumanUnits === 1 ? "역만" : `역만 x${win.yakumanUnits}`) + ` · ${formatPoints(win.totalPoints)}점`
-        : `${win.han}판 ${win.fu}부 · ${formatPoints(win.totalPoints)}점`;
-      panel.appendChild(scoreLine);
-
-      panel.appendChild(renderYakuList(win.yaku));
+      for (const section of renderWinDetail(win, mySeat, playerCount)) panel.appendChild(section);
     }
+    const extras = renderHonbaKyotaku(result, mySeat);
+    if (extras) panel.appendChild(extras);
 
     panel.appendChild(renderScoreChanges(result.scoresBeforeSettlement, result.scoresAfterSettlement, mySeat));
     const next = isFinalHand ? null : nextHandLine(result);
@@ -977,6 +1122,7 @@ function renderHandEndPanel(handEndEvent, mySeat, isFinalHand) {
   toggle.addEventListener("click", () => json.classList.toggle("hidden"));
   panel.appendChild(toggle);
   panel.appendChild(json);
+  startResultReveal(panel);
 }
 
 async function postContinue() {

@@ -699,6 +699,65 @@ body {
   font-weight: 600;
 }
 
+/* --- 화료 결과 상세 --- */
+
+.overlay-panel .win-headline { display: flex; align-items: baseline; gap: 6px; font-size: 17px; opacity: 1; }
+.overlay-panel .win-who { font-weight: 700; }
+.overlay-panel .win-dealer {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: #ffd54a;
+  color: #1b1b1b;
+}
+
+.win-hand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+.win-hand-tiles, .win-hand-kita { display: flex; align-items: flex-end; gap: 1px; }
+.win-hand-agari { display: flex; }
+.win-hand-agari .tile-img { box-shadow: 0 0 0 2px #ffd54a; border-radius: 3px; }
+
+.win-dora { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.win-dora-line { display: flex; align-items: center; gap: 3px; }
+.win-dora-line .section-label { width: 7.5em; font-size: 12px; opacity: 0.75; }
+
+.win-score {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 6px 0 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+.win-score-detail { font-size: 15px; }
+.win-score-points { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.win-extras { font-size: 13px; opacity: 0.8; margin: 4px 0 8px; }
+
+/* 결과 구획을 위에서부터 짧게 차례로 보여준다. 패널을 누르면(.reveal-done) 즉시 전부 보인다. */
+@keyframes result-reveal {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.overlay-panel.revealing .reveal {
+  opacity: 0;
+  animation: result-reveal 160ms ease-out forwards;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+.overlay-panel.revealing.reveal-done .reveal {
+  animation: none;
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .overlay-panel.revealing .reveal { animation: none; opacity: 1; }
+}
+
 /* --- 게임 종료: 최종 결과 --- */
 
 .overlay-panel .final-meta { margin-bottom: 14px; }
