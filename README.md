@@ -18,6 +18,9 @@ Version 1.0.0. Developer-facing structure and status: [HANDOFF.md](HANDOFF.md).
 | Human + AI in the terminal CLI (one hand per run) | yes | yes |
 | Replay JSON (schema v2) for AI-only games | yes | yes |
 | Replay JSON for human + AI games | yes | yes |
+| GUI lobby (mode choice, opponents, CustomAI, seed, replay saving) | yes | yes |
+| Replay viewer (re-plays a saved game with the current engine) | yes | yes |
+| CustomAI opponents (user-set CharacterAI parameters) | yes | yes |
 
 Every choice a human can face has a decision path (GUI and CLI):
 discard and riichi, pon, chi (yonma only - you pick among the engine's legal sequences, or pass), daiminkan,
@@ -53,7 +56,8 @@ npm run play:gui -- my-seed --save-replays         # same, with the seed / repla
      list and can be seated like any other character.
    - **옵션**: seed (leave empty for a random one) and "게임이 끝나면 리플레이 저장".
    - **"대국 방식 바꾸기"** goes back to step 2 to pick the other mode.
-4. Click **"대국 시작"**. You sit at seat 0 and the game runs all hands.
+4. Click **"대국 시작"**. You sit at seat 0 and the game runs all hands. During a game, **"대국 그만두기"** (top right)
+   ends it after a confirmation and returns to the settings of that mode; an abandoned game is not saved as a replay.
 5. After the last hand, **"최종 결과 보기"** shows the final standings (placement, score and pt from the engine, end
    reason, and the seed actually used). From there:
    - **"같은 설정으로 다시"**: same mode and opponents, new seed.
@@ -135,9 +139,14 @@ logged right before each move. Replay files are only read, never modified.
 
 ```bash
 npx tsc -p . --noEmit            # typecheck
-npm test                         # full suite (vitest run) - takes about 15 minutes
+npm test                         # full suite (vitest run) - takes about 8 minutes
 npx vitest run tests/humanChi.test.ts     # a single file
+npm run test:e2e                 # GUI smoke test in a headless browser (not part of npm test)
 ```
+
+The GUI smoke test (`e2e/guiSmoke.e2e.ts`) only checks the core screen flow: lobby → mode → settings → start →
+abandon, and game end (including a refresh) → "설정 바꾸기" → back to the mode choice. It needs a Chromium build for
+Playwright once: `npx playwright install chromium`.
 
 Coverage areas: scoring and yaku, calls and kan, riichi/furiten, abortive and exhaustive draws, round progression,
 Mahjong Soul fidelity fixes (`tests/ff*.test.ts`), CharacterAI determinism, replay schema and invariants, human
@@ -153,6 +162,10 @@ and full human + AI games in both modes.
   seat's replay metadata, so later edits or deletions never change how an old replay reproduces.
 - No character voices or win cut-ins, no additional presentation options. Replays recorded by an older engine version
   usually cannot be reproduced by the viewer (it reports this instead of guessing).
+- Opening a long replay in the viewer re-plays the whole game on the GUI server, which pauses that server (including a
+  game in progress) for a few seconds.
+- A refresh restores the current decision, hand-end and game-end screens; an AI-turn animation that was playing is not
+  replayed.
 - The GUI always seats the human at seat 0 (opponents are chosen on the start screen; the human's seat is not).
 - Character portraits are not included yet. The start screen is text-only by design; `CHARACTER_PORTRAITS` in
   `src/gui/characterRoster.ts` is the optional slot for them.

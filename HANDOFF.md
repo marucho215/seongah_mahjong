@@ -10,8 +10,11 @@
 - **사람 1명 + AI 플레이**: GUI(`npm run play:gui [-- --mode yonma]`)와 CLI(`npm run play [-- --mode yonma]`).
   사람이 고를 수 있는 모든 선택이 human decision 경로를 가진다: discard/riichi, pon, chi(4마), daiminkan, ankan, kakan,
   kita, ron/pass, tsumo/decline, 구종구패.
-- **Replay**: AI-only와 사람+AI 모두 같은 schema v2 (`humanDecisions`는 선택 필드). GUI는 `--save-replays`로 게임
-  종료 시 저장.
+- **Replay**: AI-only와 사람+AI 모두 같은 schema v2 (`humanDecisions`, CustomAI 좌석의 `customProfile`은 선택 필드).
+  GUI는 설정 화면의 "리플레이 저장"(또는 `--save-replays`)으로 게임 종료 시 저장하며, 중단한 대국은 저장하지 않는다.
+- **GUI 흐름 (1.1)**: 로비(대국 방식 선택 → 같은 화면의 좌석/CustomAI/시드/리플레이 설정) → 대국(AI 진행 속도, 자동 쯔모기리/
+  울기 패스/자동 화료, 샹텐·텐파이 대기 표시, 대국 그만두기) → 국 결과(손패/도라 내역/판·부·등급/점수 이동) → 최종 결과(엔진 순위,
+  같은 설정/같은 시드로 다시, 설정 바꾸기). 리플레이 뷰어(`/replay.html`), CustomAI 편집기. 변경 내역은 `RELEASE_NOTES.md`.
 - 마지막 전체 회귀: 72 files / 694 tests 통과, `tsc -p . --noEmit` clean (숫자는 계속 변하므로 새 기준은 새 실행으로
   확인할 것). 전체 스위트는 약 15~17분 걸린다.
 - 체크포인트 태그: `human-play-*` 중간 태그들과 `human-play-complete-v1`, 최종 `v1.0.0`.
@@ -136,7 +139,12 @@
   영상패, 북 대체 패, 퐁 멜드 순서를 고정)와 `tests/helpers/yonmaHuman.ts`.
 - GUI/세션: `guiSession.test.ts`, `guiServer.test.ts`(HTTP/SSE, 재접속, 장면 재생), `audioCues.test.ts`,
   `yonmaHumanGame.test.ts`(4마 한 게임 완주).
-- Replay: `replaySchemaV2.test.ts`, `phaseD-yonma-replay-qa.test.ts`, `humanReplay.test.ts`(산마/4마 사람 대국 저장과 검증기 통과).
+- Replay: `replaySchemaV2.test.ts`, `phaseD-yonma-replay-qa.test.ts`, `humanReplay.test.ts`(산마/4마 사람 대국 저장과 검증기 통과),
+  `replayParity.test.ts`(리플레이 바이트 고정 해시), `replayReproduction.test.ts`, `replayViewerServer.test.ts`.
+- 1.1 GUI: `guiLobby.test.ts`(로비/허브/시작/종료/다시 하기/그만두기), `handStatus.test.ts`, `discardDrawnTile.test.ts`,
+  `doubleRonResult.test.ts`, `customAi.test.ts`, `customAiServer.test.ts`.
+- GUI 스모크: `npm run test:e2e`(`e2e/guiSmoke.e2e.ts`, Playwright, `npm test`와 분리). 화면 흐름만 보며, 처음 한 번
+  `npx playwright install chromium`이 필요하다.
 - 사람 대국 테스트는 CharacterAI 게임을 여러 번 돌려 느리다. 새 시나리오는 seed 탐색 대신 고정 시드/fixture를 쓸 것.
 
 ## 5. 작업 원칙
@@ -200,24 +208,32 @@
 - **CustomAI는 1차 범위만**: 공통 파라미터 15개만 편집한다. 캐릭터 전용 특수 메커니즘(글리치/애착/힘 빼기 등)은 없고(향후 특수
   기믹 시스템으로 별도 확장), 가져오기/내보내기도 없다.
 - 리플레이 뷰어는 현재 엔진으로 정확히 재현되는 기록만 보여준다 (엔진 규칙/AI가 바뀌기 전의 옛 기록은 대개 재현 불가로 표시).
-  GUI는 게임이 끝날 때 한 번만 replay를 저장하며, 서버가 게임 도중 죽으면 복구하지 않는다.
+  GUI는 게임이 끝날 때 한 번만 replay를 저장하며(그만둔 대국은 저장하지 않음), 서버가 게임 도중 죽으면 복구하지 않는다.
+- 리플레이 뷰어의 재현은 GUI 서버에서 동기적으로 돌아서, 긴 리플레이를 여는 동안 같은 서버(진행 중인 대국 포함)가 몇 초 멈춘다
+  (1.1에서는 그대로 둠, 워커 스레드 도입은 1.2 후보).
+- 새로고침은 현재 결정/국 종료/게임 종료 화면을 복구한다(종료 화면은 마지막 장면의 view로 작탁을 다시 그림). 재생 중이던 AI 턴
+  장면은 다시 재생하지 않는다.
 - GUI는 사람을 seat 0에 앉힌다. 상대는 시작 화면에서 고르며 기본값은 산마: 제갈 미나·제갈 나희, 4마: +변아리. 사람 좌석 선택은 없다.
 - CLI는 한 국만 진행한다.
-- 전체 회귀가 약 15~17분이라, 작업 중에는 관련 파일만 돌리고 안정된 시점에만 전체를 돌린다.
+- 전체 회귀가 약 8분이라, 작업 중에는 관련 파일만 돌리고 묶음 작업이 끝난 뒤 push 직전에만 전체를 돌린다.
 - 루트의 `*-full-regression.log`, `validation-phaseC-partial-baseline.md`는 과거 검증 기록이다. 새 기준 로그는 덮어쓰지 말고
   새 이름으로 남길 것.
 
-## 10. 1.0 이후 후보 (우선순위 없음)
+## 10. 1.2 이후 후보 (우선순위 없음)
 
-CustomAI 특수 기믹 시스템과 가져오기/내보내기, 캐릭터 보이스와 화료 컷인, 캐릭터 초상화, 사람 좌석
-선택, 추가 presentation 옵션과 UI polish, 추가 효과음, 새로운 마작 룰, 5000판급 장기 자체 대국 검증(Phase C 기준선 참고),
-대국 통계(화료/방총/리치 횟수), 리치 입력 UX(확인창 대신 리치 버튼 - 7단계에서 제외, 실제 플레이 후 검토). 캐릭터 성향을 실측으로 확인할 때는 전체 국 대비 비율 대신 조건부 지표(예: 리치 가능 상태가
-된 횟수 중 실제 리치 비율)를 쓸 것 - 울기가 많은 캐릭터는 멘젠 상태가 일찍 깨져 단순 리치 비율이 의향을 반영하지 않는다.
+- 리플레이 재현을 워커 스레드로 옮기기(뷰어가 대국 서버를 멈추지 않게), 게임 종료 화면에서 저장된 리플레이로 바로 가는 링크.
+- 리치 입력 UX(확인창 대신 리치 버튼), 대국 통계(화료/방총/리치 횟수).
+- 유효패(현재 손/타패 후보별), 울은 손의 타패별 텐파이 미리보기, 위험패 조언(현물 등) - 각각 별도 기능으로 설계.
+- CustomAI 특수 기믹 시스템과 가져오기/내보내기. 리플레이 형식 개선(치 구성 패, 적5, AI 판단과 이벤트의 직접 연결 - §3 리플레이 뷰어).
+- 캐릭터 보이스와 화료 컷인, 캐릭터 초상화, 사람 좌석 선택, CLI의 상대/CustomAI 선택과 여러 국 진행.
+- 추가 presentation 옵션과 UI polish, 추가 효과음, 새로운 마작 룰, 5000판급 장기 자체 대국 검증(Phase C 기준선 참고).
+- 캐릭터 성향을 실측으로 확인할 때는 전체 국 대비 비율 대신 조건부 지표(예: 리치 가능 상태가 된 횟수 중 실제 리치 비율)를 쓸 것 -
+  울기가 많은 캐릭터는 멘젠 상태가 일찍 깨져 단순 리치 비율이 의향을 반영하지 않는다.
 
 ## 11. 다음 작업자 체크리스트
 
 1. 이 문서, `README.md`, 관련 finding/기능 전용 테스트를 먼저 읽는다.
-2. `git status`/`git log`로 현재 상태를 확인한다 (1.0 시점에 추적 파일은 clean).
+2. `git status`/`git log`로 현재 상태를 확인한다 (릴리즈 시점에 추적 파일은 clean).
 3. 요청 범위를 한 기능으로 제한하고, 사람이 없는 게임의 동작이 바뀌지 않는지(parity) 확인한다.
 4. pure fixture를 먼저 추가하고 관련 테스트 → `tsc --noEmit` → 안정된 시점에 전체 회귀 순으로 진행한다.
 5. 사용자의 명시적 요청 전에는 commit/push하지 않는다.
