@@ -1055,25 +1055,16 @@ function handleMessage(msg) {
 }
 
 // --- 시작 화면 (대국 설정): 모드, 상대 좌석, 시드를 고른다. 캐릭터 정보는 서버의 roster를 그대로 쓴다.
-// 카드는 이름 · 성향 · 수치만으로 완성된 형태다. roster 항목의 portrait는 선택 필드로, 아직 어느
+// 카드는 이름 · 성향 · 숙련도 · 성향 문구만으로 완성된 형태다. roster 항목의 portrait는 선택 필드로, 아직 어느
 // 캐릭터에도 없으며 이 화면은 그 필드를 읽지 않는다 (초상화가 제공되면 카드 레이아웃을 그때 확장한다).
 
-const TRAIT_LABELS = [
-  ["skill", "실력"],
-  ["aggression", "공격"],
-  ["defense", "수비"],
-  ["riichiBias", "리치"],
-  ["callBias", "울기"],
-  ["valueGreed", "타점"],
-  ["riskTolerance", "위험 감수"],
-];
+const SKILL_LEVEL_KO = { high: "높음", mid: "보통", low: "낮음" };
+const SKILL_LEVEL_RANK = { high: 0, mid: 1, low: 2 };
 
 const SORT_OPTIONS = [
   ["registered", "등록순"],
   ["name", "이름순"],
-  ["skill", "실력 높은 순"],
-  ["aggression", "공격 높은 순"],
-  ["defense", "수비 높은 순"],
+  ["skill", "숙련도 높은 순"],
 ];
 
 const MODE_OPTIONS = [
@@ -1137,12 +1128,8 @@ function sortedRoster() {
   const list = [...setupState.roster];
   const key = setupState.sort;
   if (key === "name") list.sort((a, b) => a.displayName.localeCompare(b.displayName, "ko"));
-  else if (key !== "registered") list.sort((a, b) => b.traits[key] - a.traits[key]);
+  else if (key === "skill") list.sort((a, b) => SKILL_LEVEL_RANK[a.skillLevel] - SKILL_LEVEL_RANK[b.skillLevel]);
   return list;
-}
-
-function traitValueText(v) {
-  return String(Math.round(v * 100));
 }
 
 function renderSetupModeGroup() {
@@ -1216,23 +1203,21 @@ function renderCharacterCard(entry) {
   const arch = el("div", "card-archetype");
   arch.textContent = entry.archetypeLabel;
 
-  const traits = el("dl", "card-traits");
-  for (const [key, label] of TRAIT_LABELS) {
-    const value = entry.traits[key];
-    const dt = el("dt");
-    dt.textContent = label;
-    const dd = el("dd");
-    const meter = el("span", "trait-meter", { "aria-hidden": "true" });
-    const fill = el("span", "trait-fill");
-    fill.style.width = `${Math.round(value * 100)}%`;
-    meter.appendChild(fill);
-    const num = el("span", "trait-value");
-    num.textContent = traitValueText(value);
-    dd.append(meter, num);
-    traits.append(dt, dd);
+  const skill = el("div", "card-skill");
+  const skillLabel = el("span", "card-skill-label");
+  skillLabel.textContent = "숙련도";
+  const skillValue = el("span", "card-skill-value");
+  skillValue.textContent = SKILL_LEVEL_KO[entry.skillLevel] ?? entry.skillLevel;
+  skill.append(skillLabel, skillValue);
+
+  const tendencies = el("ul", "card-tendencies");
+  for (const text of entry.tendencies) {
+    const li = el("li");
+    li.textContent = text;
+    tendencies.appendChild(li);
   }
 
-  card.append(head, arch, traits);
+  card.append(head, arch, skill, tendencies);
   card.setAttribute("aria-label", `${entry.displayName}, ${entry.archetypeLabel}`);
   card.addEventListener("click", () => {
     assignToActiveSlot(entry.characterId);
@@ -1262,7 +1247,7 @@ function renderSetup() {
   const h1 = el("h1");
   h1.textContent = "새 대국";
   const lead = el("p", "setup-lead");
-  lead.textContent = "좌석을 고른 뒤 목록에서 캐릭터를 눌러 앉힙니다.";
+  lead.textContent = "좌석을 고르고 캐릭터를 눌러 앉힙니다. 같은 캐릭터는 한 좌석에만 앉을 수 있습니다.";
   header.append(h1, lead);
   side.appendChild(header);
 

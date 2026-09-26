@@ -1,7 +1,7 @@
 import { describe, expect, it, afterEach } from "vitest";
 import type { AddressInfo } from "node:net";
 import { CHARACTER_PROFILES } from "../src/ai/characterProfiles.js";
-import { ARCHETYPE_LABELS, buildCharacterRoster, ROSTER_TRAIT_KEYS } from "../src/gui/characterRoster.js";
+import { ARCHETYPE_LABELS, BALANCED_TENDENCY, MAX_TENDENCIES, buildCharacterRoster, tendenciesOf } from "../src/gui/characterRoster.js";
 import { createGuiLobbyServer, type GuiLobbyOptions } from "../src/gui/createGuiServer.js";
 import { DEFAULT_OPPONENTS, createGuiGame, parseGuiGameConfig } from "../src/gui/gameSetup.js";
 import { defaultResponse } from "./helpers/yonmaHuman.js";
@@ -47,9 +47,24 @@ describe("시작 화면 캐릭터 목록 (characterRoster)", () => {
     for (const entry of roster) {
       expect(ARCHETYPE_LABELS[entry.archetype], entry.characterId).toBeDefined();
       expect(entry.archetypeLabel).toBe(ARCHETYPE_LABELS[entry.archetype]);
-      expect(Object.keys(entry.traits)).toEqual([...ROSTER_TRAIT_KEYS]);
-      for (const key of ROSTER_TRAIT_KEYS) expect(entry.traits[key]).toBe(CHARACTER_PROFILES[entry.characterId]![key]);
+      expect(["high", "mid", "low"]).toContain(entry.skillLevel);
+      expect(entry.tendencies.length).toBeGreaterThan(0);
+      expect(entry.tendencies.length).toBeLessThanOrEqual(MAX_TENDENCIES);
     }
+  });
+
+  it("내부 AI 파라미터 수치는 목록에 싣지 않는다 (문구와 숙련도 구간만)", () => {
+    for (const entry of buildCharacterRoster()) {
+      expect(Object.keys(entry).sort()).toEqual(["archetype", "archetypeLabel", "characterId", "displayName", "skillLevel", "tendencies"]);
+    }
+  });
+
+  it("성향 문구는 문턱값을 크게 넘는 순이며, 해당이 없으면 균형형이다", () => {
+    const base = CHARACTER_PROFILES.jegalmina!;
+    const neutral = { ...base, aggression: 0.5, defense: 0.5, callBias: 0.4, riichiBias: 0.5, damaBias: 0.4, valueGreed: 0.5, entropy: 0.3 };
+    expect(tendenciesOf(neutral)).toEqual([BALANCED_TENDENCY]);
+    expect(tendenciesOf({ ...neutral, callBias: 0.9, aggression: 0.7 })).toEqual(["울기를 자주 사용함", "공격적인 편"]);
+    expect(tendenciesOf({ ...neutral, callBias: 0.9, aggression: 0.95, defense: 0.1, entropy: 0.9 })).toHaveLength(MAX_TENDENCIES);
   });
 
   it("초상화는 선택 필드다: 등록되지 않은 캐릭터에는 portrait 키 자체가 없다", () => {

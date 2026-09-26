@@ -40,28 +40,73 @@ export const ARCHETYPE_LABELS: Record<string, string> = {
   rough_shape_fast_completer: "거친 형태 속공형",
 };
 
-/** 카드에 보여주는 성향 수치 (0~1). 순서가 곧 화면 순서다. */
-export const ROSTER_TRAIT_KEYS = ["skill", "aggression", "defense", "riichiBias", "callBias", "valueGreed", "riskTolerance"] as const;
-export type RosterTraitKey = (typeof ROSTER_TRAIT_KEYS)[number];
+/** 숙련도 구간 (skill 기준). 카드에는 이 구간 이름만 보여준다. */
+export type SkillLevel = "high" | "mid" | "low";
+
+export function skillLevelOf(profile: CharacterProfile): SkillLevel {
+  if (profile.skill >= 0.8) return "high";
+  if (profile.skill >= 0.6) return "mid";
+  return "low";
+}
+
+/** 상대를 고를 때 참고할 성향 문구. 내부 파라미터를 그대로 공개하지 않고, 눈에 띄게 높거나 낮은 몇 가지만
+ *  문장으로 바꾼다. 문턱값은 표시용 기준일 뿐 AI 동작과 무관하다 (수치 자체는 클라이언트로 보내지 않는다). */
+interface TendencyRule {
+  key: "aggression" | "defense" | "callBias" | "riichiBias" | "damaBias" | "valueGreed" | "entropy";
+  when: "high" | "low";
+  threshold: number;
+  text: string;
+}
+
+export const TENDENCY_RULES: readonly TendencyRule[] = [
+  { key: "aggression", when: "high", threshold: 0.64, text: "공격적인 편" },
+  { key: "defense", when: "high", threshold: 0.7, text: "수비를 중시함" },
+  { key: "defense", when: "low", threshold: 0.35, text: "수비보다 전진" },
+  { key: "callBias", when: "high", threshold: 0.55, text: "울기를 자주 사용함" },
+  { key: "callBias", when: "low", threshold: 0.22, text: "울기를 거의 하지 않음" },
+  { key: "riichiBias", when: "high", threshold: 0.64, text: "리치를 적극적으로 사용함" },
+  { key: "damaBias", when: "high", threshold: 0.66, text: "다마텐을 선호함" },
+  { key: "valueGreed", when: "high", threshold: 0.7, text: "고타점을 노림" },
+  { key: "valueGreed", when: "low", threshold: 0.31, text: "속도를 우선함" },
+  { key: "entropy", when: "high", threshold: 0.55, text: "변칙적인 선택이 잦음" },
+  { key: "entropy", when: "low", threshold: 0.13, text: "선택이 일관됨" },
+];
+
+export const MAX_TENDENCIES = 3;
+export const BALANCED_TENDENCY = "치우침 없는 균형형";
+
+/** 문턱값을 가장 크게 넘는 순으로 최대 MAX_TENDENCIES개. 해당이 없으면 균형형. */
+export function tendenciesOf(profile: CharacterProfile): string[] {
+  const matched = TENDENCY_RULES.map((r) => ({
+    margin: r.when === "high" ? profile[r.key] - r.threshold : r.threshold - profile[r.key],
+    text: r.text,
+  }))
+    .filter((m) => m.margin >= 0)
+    .sort((a, b) => b.margin - a.margin)
+    .slice(0, MAX_TENDENCIES)
+    .map((m) => m.text);
+  return matched.length > 0 ? matched : [BALANCED_TENDENCY];
+}
 
 export interface RosterEntry {
   characterId: string;
   displayName: string;
   archetype: string;
   archetypeLabel: string;
-  traits: Record<RosterTraitKey, number>;
+  skillLevel: SkillLevel;
+  tendencies: string[];
   portrait?: CharacterPortrait;
 }
 
 export function rosterEntryOf(profile: CharacterProfile): RosterEntry {
-  const traits = Object.fromEntries(ROSTER_TRAIT_KEYS.map((k) => [k, profile[k]])) as Record<RosterTraitKey, number>;
   const portrait = CHARACTER_PORTRAITS[profile.characterId];
   return {
     characterId: profile.characterId,
     displayName: profile.displayName,
     archetype: profile.archetype,
     archetypeLabel: ARCHETYPE_LABELS[profile.archetype] ?? profile.archetype,
-    traits,
+    skillLevel: skillLevelOf(profile),
+    tendencies: tendenciesOf(profile),
     ...(portrait ? { portrait } : {}),
   };
 }

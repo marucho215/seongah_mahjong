@@ -73,7 +73,8 @@
 - `src/gui/gameSetup.ts`: `--mode`/`--save-replays` 인자 해석과 게임 생성 (GUI 서버와 CLI 공용). 산마/4마는 여기서 규칙과
   좌석 구성만 다르다. 시작 화면이 보내는 구성(`parseGuiGameConfig`: 모드, 상대 characterId, 시드, 리플레이 저장)도 여기서 검증한다.
 - `src/gui/characterRoster.ts`: 시작 화면용 캐릭터 목록. `CharacterProfile`은 읽기만 하고, 화면 전용 정보(archetype 한국어 표기
-  `ARCHETYPE_LABELS`, 선택 필드 `CHARACTER_PORTRAITS`)는 여기 둔다. 초상화는 아직 없고, 시작 화면은 텍스트/수치만으로 완성된
+  `ARCHETYPE_LABELS`, 숙련도 구간, 성향 문구 `TENDENCY_RULES`, 선택 필드 `CHARACTER_PORTRAITS`)는 여기 둔다. 내부 파라미터
+  수치는 클라이언트로 보내지 않는다(문턱값을 넘는 성향만 최대 3개 문구로). 초상화는 아직 없고, 시작 화면은 텍스트/수치만으로 완성된
   형태다(임시 아바타나 빈 이미지 영역을 만들지 않는다). 초상화가 생기면 여기에 등록하고 그때 카드 레이아웃을 확장한다.
 - `src/gui/guiSession.ts`: 여러 국을 한 `GameState`로 잇는 세션(`decision|hand_end|game_end`), 응답 사전 검증
 - `src/gui/createGuiServer.ts`, `src/gui/server.ts`: HTTP + SSE 서버. `/events`(상태 스트림), `POST /respond`, `POST /continue`.
