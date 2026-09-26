@@ -14,8 +14,9 @@ import { reproduceReplay, type ReplayReproduction } from "../replay/replayReprod
 import { getCharacterProfile } from "../ai/characterProfiles.js";
 import { buildCharacterRoster } from "./characterRoster.js";
 import { DEFAULT_PLAYBACK_SPEED, PLAYBACK_FRAME_DELAY_MS, parsePlaybackSpeed } from "./playbackSpeed.js";
-import { DEFAULT_OPPONENTS, createGuiGameWithProfiles, parseGuiGameConfig, playerCountOf, type GuiGameConfig, type GuiGameMode } from "./gameSetup.js";
+import { DEFAULT_OPPONENTS, createGuiGameWithProfiles, parseGuiGameConfig, parseGuiMode, playerCountOf, type GuiGameConfig, type GuiGameMode } from "./gameSetup.js";
 import { CustomAiStore } from "../customai/customAiStore.js";
+import { DEFAULT_SANMA_RULES, MAJSOUL_YONMA_RULES } from "../rules/RuleConfig.js";
 import {
   CUSTOM_AI_CHARACTER_PREFIX,
   CUSTOM_AI_FIELDS,
@@ -354,6 +355,10 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     saveReplays: defaults.saveReplays ?? false,
   };
 
+  /** 로비 화면: 처음에는 모드를 고르는 허브, 모드를 고르면 그 모드의 대국 설정. 새로고침/다른 탭도 같은 화면을 보도록 서버가 들고 있다.
+   *  설정 화면은 모드와 무관하게 하나이며, 어떤 모드인지는 lastSetup.mode(데이터)로만 다르다. */
+  let lobbyScreen: "hub" | "setup" = "hub";
+
   function setupMessage(): string {
     const roster = currentRoster();
     // 마지막 구성에 이제 없는 상대(삭제된 CustomAI 등)가 있으면 그 좌석만 기본 상대 중 남는 캐릭터로 바꿔 보여준다 (화면 초기값일 뿐).
@@ -366,8 +371,23 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     }
     return JSON.stringify({
       type: "setup",
+      screen: lobbyScreen,
+      mode: lastSetup.mode,
       roster,
       playerCounts: { sanma: playerCountOf("sanma"), yonma: playerCountOf("yonma") },
+      // 허브 카드에 보여줄 모드 차이: 규칙 설정(RuleConfig)에서 그대로 가져온다 (GUI가 규칙을 따로 적지 않는다).
+      modes: (
+        [
+          ["sanma", DEFAULT_SANMA_RULES],
+          ["yonma", MAJSOUL_YONMA_RULES],
+        ] as const
+      ).map(([mode, rules]) => ({
+        mode,
+        players: rules.playerCount,
+        chi: !rules.chiForbidden,
+        kita: rules.kitaEnabled,
+        startingScore: rules.startingScore,
+      })),
       defaults,
     });
   }
@@ -407,6 +427,24 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   function returnToSetup(): void {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     if (host && (host.isPlaying() || host.session.getPhase() !== "game_end")) throw new Error("GuiServer: 게임이 끝난 뒤에만 시작 화면으로 돌아갈 수 있습니다");
+    host = null;
+    lobbyScreen = "setup"; // 마지막으로 사용한 모드(lastSetup.mode)의 설정 화면으로 돌아간다
+    broadcast(`data: ${setupMessage()}\n\n`);
+  }
+
+  /** 로비 안에서 화면을 옮긴다: 허브로 가거나, 모드를 골라 그 모드의 설정 화면으로 간다. 대국 중에는 할 수 없다. */
+  function moveLobby(input: unknown): void {
+    if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
+    if (host && (host.isPlaying() || host.session.getPhase() !== "game_end")) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
+    const raw = (typeof input === "object" && input !== null ? input : {}) as { screen?: unknown; mode?: unknown };
+    if (raw.screen === "hub") {
+      lobbyScreen = "hub";
+    } else if (raw.screen === "setup") {
+      lastSetup = { ...lastSetup, mode: parseGuiMode(typeof raw.mode === "string" ? raw.mode : String(raw.mode)) };
+      lobbyScreen = "setup";
+    } else {
+      throw new Error('screen은 "hub" 또는 "setup"이어야 합니다');
+    }
     host = null;
     broadcast(`data: ${setupMessage()}\n\n`);
   }
@@ -548,6 +586,11 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
           frameDelayMs = PLAYBACK_FRAME_DELAY_MS[parsePlaybackSpeed(speed)];
         })
       );
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/lobby") {
+      readBody(req, (body) => reply(res, () => moveLobby(JSON.parse(body || "{}"))));
       return;
     }
 

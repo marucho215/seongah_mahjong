@@ -39,8 +39,9 @@ npm run play:gui                           # opens the start screen
 npm run play:gui -- my-seed --mode yonma --save-replays   # same, with these values pre-filled
 ```
 
-Open the printed `http://localhost:3000` (set `PORT` to change it). The browser opens on a start screen: pick sanma
-or yonma, choose a character for each opponent seat (every registered character is listed with a one-line playstyle
+Open the printed `http://localhost:3000` (set `PORT` to change it). The browser opens on a hub where you pick sanma
+or yonma (nothing starts yet); that leads to the game settings screen for the chosen mode, which is the same screen for
+both modes and has a "모드 선택으로" button back to the hub. There you choose a character for each opponent seat (every registered character is listed with a one-line playstyle
 description and a few short tags), optionally set a seed and replay saving, then start. Command-line arguments only pre-fill that
 screen. You sit at seat 0. A game runs all hands; after the last hand's result, "최종 결과 보기" shows the final
 standings (placement, score and pt from the engine, end reason, and the seed actually used). From there you can replay

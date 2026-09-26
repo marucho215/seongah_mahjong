@@ -1453,7 +1453,9 @@ function initSetupState(msg) {
   setupState = {
     roster: msg.roster,
     playerCounts: msg.playerCounts,
-    mode: prev ? prev.mode : msg.defaults.mode,
+    screen: msg.screen,
+    modes: msg.modes,
+    mode: msg.mode, // 어느 모드의 설정 화면인지는 서버가 정한다 (허브에서 고른 모드)
     opponents: { sanma: keepOpponents("sanma"), yonma: keepOpponents("yonma") },
     seed: prev ? prev.seed : msg.defaults.seed,
     saveReplays: prev ? prev.saveReplays : msg.defaults.saveReplays,
@@ -1498,26 +1500,6 @@ function sortedRoster() {
   const key = setupState.sort;
   if (key === "name") list.sort((a, b) => a.displayName.localeCompare(b.displayName, "ko"));
   return list;
-}
-
-function renderSetupModeGroup() {
-  const group = el("div", "setup-segmented", { role: "radiogroup", "aria-label": "규칙" });
-  for (const [mode, label, sub] of MODE_OPTIONS) {
-    const btn = el("button", "setup-segment", { type: "button", role: "radio", "aria-checked": String(setupState.mode === mode) });
-    const main = el("span", "segment-main");
-    main.textContent = label;
-    const small = el("span", "segment-sub");
-    small.textContent = sub;
-    btn.append(main, small);
-    btn.addEventListener("click", () => {
-      if (setupState.mode === mode) return;
-      setupState.mode = mode;
-      setupState.activeSlot = 0;
-      renderSetup();
-    });
-    group.appendChild(btn);
-  }
-  return group;
 }
 
 function renderSetupSeats() {
@@ -1602,7 +1584,66 @@ function setupSection(title, ...children) {
   return section;
 }
 
+function postLobby(body) {
+  return fetch("/lobby", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(async (res) => {
+    if (!res.ok) throw new Error(await res.text());
+  });
+}
+
+/** 허브: 산마/4마를 고른다. 모드 차이는 서버가 규칙 설정에서 보낸 값(msg.modes)만 보여준다. */
+function renderHub() {
+  const root = document.getElementById("setup-screen");
+  root.innerHTML = "";
+  const hub = el("div", "hub");
+  const h1 = el("h1", "hub-title");
+  h1.textContent = "성아 마작";
+  const lead = el("p", "hub-lead");
+  lead.textContent = "대국 방식을 고르세요. 다음 화면에서 상대와 시드를 정합니다.";
+  hub.append(h1, lead);
+
+  const choices = el("div", "hub-modes");
+  for (const [mode, label] of MODE_OPTIONS) {
+    const info = (setupState.modes || []).find((m) => m.mode === mode);
+    const card = el("button", "hub-mode", { type: "button" });
+    const name = el("span", "hub-mode-name");
+    name.textContent = label;
+    card.appendChild(name);
+    if (info) {
+      const facts = el("ul", "hub-mode-facts");
+      for (const text of [`${info.players}인`, `시작 점수 ${formatPoints(info.startingScore)}`, info.chi ? "치 있음" : "치 없음", info.kita ? "북 빼기 있음" : "북 빼기 없음"]) {
+        const li = el("li");
+        li.textContent = text;
+        facts.appendChild(li);
+      }
+      card.appendChild(facts);
+    }
+    card.addEventListener("click", () => {
+      AudioManager.play("ui.confirm");
+      postLobby({ screen: "setup", mode }).catch((err) => {
+        setupState.error = err instanceof Error ? err.message : String(err);
+        renderHub();
+      });
+    });
+    choices.appendChild(card);
+  }
+  hub.appendChild(choices);
+
+  const replayLink = el("a", "setup-replay-link", { href: "/replay.html", target: "_blank", rel: "noopener" });
+  replayLink.textContent = "저장된 리플레이 보기";
+  hub.appendChild(replayLink);
+  if (setupState.error) {
+    const err = el("p", "setup-error", { role: "alert" });
+    err.textContent = setupState.error;
+    hub.appendChild(err);
+  }
+  root.appendChild(hub);
+}
+
 function renderSetup() {
+  if (setupState.screen === "hub") {
+    renderHub();
+    return;
+  }
   const root = document.getElementById("setup-screen");
   const scrollTop = root.querySelector(".setup-roster-list")?.scrollTop ?? 0;
   root.innerHTML = "";
@@ -1621,7 +1662,20 @@ function renderSetup() {
   header.append(h1, lead, replayLink);
   side.appendChild(header);
 
-  side.appendChild(setupSection("규칙", renderSetupModeGroup()));
+  const modeLabel = (MODE_OPTIONS.find(([m]) => m === setupState.mode) ?? [setupState.mode, setupState.mode, ""]);
+  const modeLine = el("div", "setup-mode-line");
+  const modeText = el("span", "setup-mode-name");
+  modeText.textContent = `${modeLabel[1]} · ${modeLabel[2]}`;
+  const back = el("button", "setup-link-button", { type: "button" });
+  back.textContent = "모드 선택으로";
+  back.addEventListener("click", () => {
+    postLobby({ screen: "hub" }).catch((err) => {
+      setupState.error = err instanceof Error ? err.message : String(err);
+      renderSetup();
+    });
+  });
+  modeLine.append(modeText, back);
+  side.appendChild(setupSection("대국 방식", modeLine));
 
   const randomBtn = el("button", "setup-link-button", { type: "button" });
   randomBtn.textContent = "무작위로 채우기";

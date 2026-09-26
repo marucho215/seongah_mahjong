@@ -192,6 +192,8 @@ describe("시작 화면 서버 (createGuiLobbyServer)", () => {
     expect((await lobby.post("/setup")).status).toBe(204);
     const setup = await lobby.next();
     expect(setup.type).toBe("setup");
+    expect(setup.screen).toBe("setup"); // 설정 바꾸기: 허브가 아니라 마지막 모드의 설정 화면
+    expect(setup.mode).toBe("sanma");
     expect(setup.defaults.mode).toBe("sanma");
     expect(setup.defaults.opponents.sanma).toEqual(["magnum", "inan"]);
     expect(setup.defaults.seed).toBe("lobby-full");
@@ -223,4 +225,46 @@ describe("시작 화면 서버 (createGuiLobbyServer)", () => {
     expect(fresh.characterNames).toEqual([null, "조상민", "화영"]);
     expect(started[2]!.seed).not.toBe("rematch-seed");
   }, 120_000);
+
+  it("처음에는 모드를 고르는 허브이고, 모드를 고르면 그 모드의 설정 화면, 허브로 돌아가 다른 모드를 고를 수 있다", async () => {
+    const lobby = await startLobby();
+    cleanup = lobby.close;
+    const first = await lobby.next();
+    expect(first.type).toBe("setup");
+    expect(first.screen).toBe("hub");
+    expect(first.modes).toEqual([
+      { mode: "sanma", players: 3, chi: false, kita: true, startingScore: 35000 },
+      { mode: "yonma", players: 4, chi: true, kita: false, startingScore: 25000 },
+    ]);
+    expect(lobby.getSession()).toBeNull(); // 허브에서는 게임이 시작되지 않는다
+
+    expect((await lobby.post("/lobby", { screen: "setup", mode: "sanma" })).status).toBe(204);
+    const sanma = await lobby.next();
+    expect([sanma.screen, sanma.mode]).toEqual(["setup", "sanma"]);
+    expect(sanma.playerCounts.sanma).toBe(3);
+    expect(sanma.defaults.opponents.sanma.length).toBe(2);
+    expect(lobby.getSession()).toBeNull(); // 산마를 골라도 바로 시작하지 않는다
+
+    expect((await lobby.post("/lobby", { screen: "hub" })).status).toBe(204);
+    expect((await lobby.next()).screen).toBe("hub");
+    expect((await lobby.post("/lobby", { screen: "setup", mode: "yonma" })).status).toBe(204);
+    const yonma = await lobby.next();
+    expect([yonma.screen, yonma.mode]).toEqual(["setup", "yonma"]);
+    expect(yonma.defaults.opponents.yonma.length).toBe(3);
+
+    expect((await lobby.post("/lobby", { screen: "setup", mode: "gomoku" })).status).toBe(400);
+    expect((await lobby.post("/lobby", { screen: "elsewhere" })).status).toBe(400);
+
+    // 새 접속도 같은 화면을 본다 (서버가 화면 상태를 들고 있다)
+    const again = await fetch(`${lobby.baseUrl}/events`);
+    const reader = again.body!.getReader();
+    const reconnect = await readOneSseMessage(reader, { text: "" });
+    await reader.cancel();
+    expect([reconnect.screen, reconnect.mode]).toEqual(["setup", "yonma"]);
+
+    // 대국 중에는 로비로 옮길 수 없다
+    expect((await lobby.post("/start", { mode: "yonma", opponents: ["inan", "magnum", "yuwen"], seed: "hub-flow" })).status).toBe(204);
+    expect((await lobby.next()).type).toBe("decision");
+    expect((await lobby.post("/lobby", { screen: "hub" })).status).toBe(400);
+  }, 60_000);
 });

@@ -1,6 +1,7 @@
 /* GUI 진입점: `npm run play:gui [-- <seed>] [-- --mode yonma] [-- --save-replays]`. 실제 서버 로직은
- * createGuiServer.ts, 판 구성은 gameSetup.ts에 있다. 브라우저는 시작 화면(모드/상대/시드 선택)부터 열리고,
- * 명령줄 인자는 그 화면의 초기값이 된다. seat 0이 사람이며, 게임이 끝나면 시작 화면으로 돌아가 새 대국을 할 수 있다. */
+ * createGuiServer.ts, 판 구성은 gameSetup.ts에 있다. 브라우저는 모드(산마/4마)를 고르는 허브부터 열리고, 모드를 고르면
+ * 대국 설정 화면으로 간다. 명령줄 인자(시드/리플레이 저장/모드)는 설정 화면의 초기값이 된다. seat 0이 사람이며, 게임이 끝나면
+ * 마지막 모드의 설정 화면으로 돌아가 새 대국을 할 수 있다. */
 import { parseGameArgs } from "./gameSetup.js";
 import { createGuiLobbyServer } from "./createGuiServer.js";
 

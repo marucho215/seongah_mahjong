@@ -112,9 +112,12 @@
 - `src/gui/createGuiServer.ts`, `src/gui/server.ts`: HTTP + SSE 서버. `/events`(상태 스트림), `POST /respond`, `POST /continue`.
   접속 시 현재 요청을 그대로 다시 보내므로 새로고침 복구가 된다. 장면 재생 중에는 응답을 받지 않는다.
   `createGuiServer(game)`은 게임 하나에 묶인 서버(테스트용), `createGuiLobbyServer()`는 `npm run play:gui`가 쓰는 시작 화면 서버다:
-  `setup` 메시지 → `POST /start`(구성) → 게임 → game_end. game_end 메시지에는 엔진 `computeFinalStandings()` 결과(`standings`)와
+  로비 화면 상태(`screen: "hub" | "setup"`, `mode`)는 서버가 들고 있다: 최초는 허브, `POST /lobby`로 허브 ↔ 모드별 설정 화면을
+  오가며(대국 중에는 거절), 설정 화면은 두 모드가 공유하고 좌석 수/모드별 상대 구성만 데이터로 다르다(허브 카드의 모드 차이도
+  RuleConfig에서 보낸다). `setup` 메시지 → `POST /start`(구성) → 게임 → game_end. game_end 메시지에는 엔진 `computeFinalStandings()` 결과(`standings`)와
   이번 대국 구성(`gameConfig`, 실제 시드 포함)이 실린다. 종료 화면의 "같은 설정으로 다시"(시드 생략)와 "같은 시드로 다시"는
-  그 구성으로 다시 `POST /start`, "설정 바꾸기"는 `POST /setup`으로 시작 화면에 돌아간다. 게임마다 GameHost를 새로 만든다.
+  그 구성으로 다시 `POST /start`, "설정 바꾸기"는 `POST /setup`으로 마지막 모드의 설정 화면에 돌아간다(거기서 허브로 갈 수 있다). 진행 중인 대국에 다시
+  접속하면 새로고침 복구로 그 대국 화면이 나온다. 게임마다 GameHost를 새로 만든다.
   AI 진행 속도는 `POST /speed`(`src/gui/playbackSpeed.ts`: slow 700 / normal 400 / fast 150 / instant 0ms)로 서버 단위 장면 간격만
   바꾼다. AI 판단은 사람 응답 때 이미 끝나 있고 장면은 그 스냅샷이므로 결과/RNG와 무관하다(테스트로 로그 동일성 확인).
   자동 플레이 옵션(자동 쯔모기리/울기 패스/자동 화료, 기본 꺼짐)은 클라이언트(`app.js`의 `autoResponseFor`)가 해당 결정에 정해진
