@@ -327,7 +327,7 @@ interface Room {
 
 /** 대국 하나. 사람 좌석마다 그 좌석을 가진 사용자가 연결된다 (seatUsers[seat], AI 좌석은 null).
  *  대국 메시지는 사람 좌석의 사용자들에게만 가고, 결정 응답은 그 결정을 요청받은 좌석의 사용자만 보낼 수 있다.
- *  1.2에서는 사람 좌석이 하나(seat 0 = 대국을 시작한 사용자)뿐이다. 사람끼리 대전은 이 구조 위에 좌석을 늘려 얹는다. */
+ *  1.2에서는 대국을 연 사용자 한 명이 사람 좌석을 모두 가진다. 사람끼리 대전은 좌석마다 다른 사용자를 앉히는 식으로 이 구조 위에 얹는다. */
 interface Table {
   host: GameHost;
   seatUsers: (string | null)[];
@@ -428,9 +428,10 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     for (const res of room.sseClients) res.write(payload);
   };
 
-  /** 대국을 만들고 사람 좌석(seat 0)에 이 사용자를 앉힌다. 메시지는 사람 좌석의 사용자 로비로만 간다. */
+  /** 대국을 만들고 사람 좌석에 대국을 연 사용자를 앉힌다 (로비 대국은 seat 0만 사람이다. 직접 만든 게임을 여는 createGuiServer는
+   *  사람 좌석이 여럿일 수 있고, 모두 로컬 사용자가 둔다). 메시지는 사람 좌석의 사용자 로비로만 간다. */
   function openTable(room: Room, game: GameState, options: GuiServerOptions, startedConfig: StartedGameConfig | null): Table {
-    const seatUsers: (string | null)[] = game.controllers.map((c, seat) => (c === "human" && seat === 0 ? room.userId : null));
+    const seatUsers: (string | null)[] = game.controllers.map((c) => (c === "human" ? room.userId : null));
     const deliver = (payload: string): void => {
       for (const userId of new Set(seatUsers)) if (userId !== null) sendToRoom(roomOf(userId), payload);
     };
