@@ -2,8 +2,8 @@
  * port without spawning a subprocess - see tests/guiServer.test.ts. server.ts (the `npm run
  * play:gui` entry point) just calls this and listens; no behavior lives only in server.ts. */
 import { createServer, type Server } from "node:http";
-import { readFile, readdir, stat } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { readFile, readdir, rm, stat } from "node:fs/promises";
+import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GameState } from "../core/GameState.js";
 import type { GuiSession, GuiSessionPhase, WatchFrame } from "./guiSession.js";
@@ -332,7 +332,45 @@ export interface GuiLobbyOptions {
   /** 대국과 리플레이 재현을 돌릴 엔진 worker 풀 (engineWorkerPool.ts). 생략하면 같은 스레드에서 돌린다(테스트용).
    *  풀은 호출한 쪽이 만들고 닫는다. */
   engine?: EngineWorkerPool;
+  /** 입장 게이트가 있을 때 사용자별 저장 폴더의 상위 폴더 (기본 "server-data/users"). 사용자마다 <폴더>/<사용자 id>/custom-ai,
+   *  <폴더>/<사용자 id>/replays를 쓴다. 로컬 모드는 customAiDir/replayDir을 그대로 쓴다. */
+  userDataDir?: string;
+  /** 자원 제한 (온라인 서버용). 생략하면 제한 없음(로컬 모드). */
+  limits?: ResourceLimits;
 }
+
+/** 온라인 서버의 자원 제한 (1.2 4단계). */
+export interface ResourceLimits {
+  /** 서버 전체에서 동시에 열려 있는 대국 수 */
+  maxOpenGames: number;
+  /** 사용자의 요청이 이 시간 동안 없으면 그 사용자의 대국을 정리한다 (ms) */
+  idleGameMs: number;
+  /** 접속도 대국도 없는 로비를 메모리에서 지우기까지의 시간 (ms) */
+  idleRoomMs: number;
+  /** 사용자별 요청 빈도: 초당 채워지는 요청 수와 최대 연속 요청 수 */
+  requestsPerSecond: number;
+  requestBurst: number;
+  /** 사용자별 동시 이벤트 연결(탭) 수 */
+  maxStreamsPerUser: number;
+  /** 사용자별 CustomAI 수 */
+  maxCustomAisPerUser: number;
+  /** 사용자별로 남겨 두는 리플레이 수 (넘으면 오래된 것부터 지운다) */
+  maxReplaysPerUser: number;
+}
+
+export const ONLINE_LIMITS: ResourceLimits = {
+  maxOpenGames: 8,
+  idleGameMs: 30 * 60 * 1000,
+  idleRoomMs: 60 * 60 * 1000,
+  requestsPerSecond: 20,
+  requestBurst: 40,
+  maxStreamsPerUser: 5,
+  maxCustomAisPerUser: 20,
+  maxReplaysPerUser: 50,
+};
+
+/** 요청 본문 최대 크기 (모든 서버) */
+export const MAX_REQUEST_BODY_BYTES = 64 * 1024;
 
 export interface GuiLobbyServerHandle {
   server: Server;
@@ -373,6 +411,17 @@ interface Room {
   table: Table | null;
   /** 엔진이 새 대국을 만드는 중 (worker 응답 대기) */
   starting: boolean;
+  /** 이 사용자의 CustomAI 저장소 (로컬 모드는 서버 설정 폴더, 온라인은 사용자 폴더). 로비가 없는 서버면 null. */
+  customAiStore: CustomAiStore | null;
+  /** 이 사용자의 리플레이 폴더 */
+  replayDir: string;
+  /** 마지막으로 요청을 보낸 시각 (방치 정리 기준) */
+  lastActivity: number;
+  /** 요청 빈도 제한 토큰 */
+  tokens: number;
+  tokensAt: number;
+  /** 로비에 한 번 보여줄 안내 (예: 방치된 대국 정리) */
+  notice: string | null;
 }
 
 /** 대국 하나. 사람 좌석마다 그 좌석을 가진 사용자가 연결된다 (seatUsers[seat], AI 좌석은 null).
@@ -385,12 +434,16 @@ interface Table {
 
 function buildServer(initial: { game: GameState; options: GuiServerOptions } | null, lobby: GuiLobbyOptions | null): GuiLobbyServerHandle {
 
-  // 리플레이 뷰어: 이 서버가 리플레이를 저장하는 폴더를 그대로 읽는다 (기본 "replays", 프로젝트 루트 기준).
-  const replayDir = resolveReplayDir((initial ? initial.options.replay?.dir : lobby?.replayDir) ?? "replays");
-  /** 재현은 한 판에 수 초 걸리므로 파일(이름+수정 시각)별로 결과를 캐시한다. */
+  const access = lobby?.access ?? null;
+  const limits = lobby?.limits ?? null;
+  // 리플레이 뷰어: 사용자가 리플레이를 저장하는 폴더를 그대로 읽는다. 로컬 모드는 기본 "replays"(프로젝트 루트 기준),
+  // 입장 게이트가 있으면 사용자별 폴더.
+  const localReplayDir = resolveReplayDir((initial ? initial.options.replay?.dir : lobby?.replayDir) ?? "replays");
+  const userDataDir = resolve(lobby?.userDataDir ?? join("server-data", "users"));
+  /** 재현은 한 판에 수 초 걸리므로 파일(경로+수정 시각)별로 결과를 캐시한다. */
   const reproductionCache = new Map<string, { mtimeMs: number; body: string }>();
 
-  async function listReplays(): Promise<{ name: string; size: number; modified: number }[]> {
+  async function listReplays(replayDir: string): Promise<{ name: string; size: number; modified: number }[]> {
     let names: string[];
     try {
       names = await readdir(replayDir);
@@ -408,11 +461,16 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     return files.sort((a, b) => b.modified - a.modified);
   }
 
-  async function replayBody(name: string): Promise<string> {
+  /** 사용자 폴더의 리플레이 파일 경로 (폴더 밖을 가리킬 수 없는 이름만) */
+  function replayPath(replayDir: string, name: string): string {
     if (!REPLAY_FILE_NAME.test(name)) throw new Error("리플레이 파일 이름이 올바르지 않습니다");
-    const filePath = join(replayDir, name);
+    return join(replayDir, name);
+  }
+
+  async function replayBody(replayDir: string, name: string): Promise<string> {
+    const filePath = replayPath(replayDir, name);
     const st = await stat(filePath);
-    const cached = reproductionCache.get(name);
+    const cached = reproductionCache.get(filePath);
     if (cached && cached.mtimeMs === st.mtimeMs) return cached.body;
     const record = JSON.parse(await readFile(filePath, "utf-8")) as GameReplayRecord;
     const reproduction: ReplayReproduction = lobby?.engine ? await lobby.engine.reproduce(record) : reproduceReplay(record);
@@ -424,32 +482,31 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       seatKinds: seats.map((s) => s.kind),
       reproduction,
     });
-    reproductionCache.set(name, { mtimeMs: st.mtimeMs, body });
+    reproductionCache.set(filePath, { mtimeMs: st.mtimeMs, body });
     return body;
   }
 
   const officialRoster = lobby ? buildCharacterRoster() : [];
-  const customAiStore = lobby ? new CustomAiStore(lobby.customAiDir ?? "custom-ai") : null;
 
   /** 시작 화면 목록: 등록 캐릭터 + 검증을 통과한 CustomAI (CustomAI에는 설명/태그를 자동으로 만들지 않는다). */
-  function currentRoster() {
-    const customs = (customAiStore?.list() ?? []).flatMap((e) =>
+  function currentRoster(room: Room) {
+    const customs = (room.customAiStore?.list() ?? []).flatMap((e) =>
       e.ok ? [{ characterId: customAiCharacterId(e.definition.id), displayName: e.definition.name, summary: "", tags: [] as string[], custom: true }] : []
     );
     return [...officialRoster, ...customs];
   }
 
   /** 대국 상대 id -> 프로필. CustomAI는 게임을 시작하는 순간 파일에서 읽어 검증한 값이 그 대국의 스냅샷이 된다. */
-  function resolveOpponentProfile(id: string): CharacterProfile {
+  function resolveOpponentProfile(room: Room, id: string): CharacterProfile {
     if (isCustomAiCharacterId(id)) {
-      if (!customAiStore) throw new Error("이 서버에서는 CustomAI를 쓸 수 없습니다");
-      return customAiToProfile(customAiStore.get(id.slice(CUSTOM_AI_CHARACTER_PREFIX.length)));
+      if (!room.customAiStore) throw new Error("이 서버에서는 CustomAI를 쓸 수 없습니다");
+      return customAiToProfile(room.customAiStore.get(id.slice(CUSTOM_AI_CHARACTER_PREFIX.length)));
     }
     return getCharacterProfile(id);
   }
   /** 대국 상대 id -> 엔진에 넘길 구성. 등록 캐릭터는 id 그대로, CustomAI는 지금 파일에서 읽어 검증한 프로필이 그 대국의 스냅샷이 된다. */
-  function opponentSpecOf(id: string): OpponentSpec {
-    return isCustomAiCharacterId(id) ? { profile: resolveOpponentProfile(id) } : { characterId: id };
+  function opponentSpecOf(room: Room, id: string): OpponentSpec {
+    return isCustomAiCharacterId(id) ? { profile: resolveOpponentProfile(room, id) } : { characterId: id };
   }
 
   const defaults = lobby?.defaults ?? {};
@@ -475,6 +532,12 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
         frameDelayMs: initialFrameDelayMs,
         table: null,
         starting: false,
+        customAiStore: lobby ? new CustomAiStore(access ? join(userDataDir, userId, "custom-ai") : (lobby.customAiDir ?? "custom-ai")) : null,
+        replayDir: access ? join(userDataDir, userId, "replays") : localReplayDir,
+        lastActivity: Date.now(),
+        tokens: limits?.requestBurst ?? 0,
+        tokensAt: Date.now(),
+        notice: null,
       };
       rooms.set(userId, room);
     }
@@ -520,7 +583,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
 
   function setupMessage(room: Room): string {
     const { lastSetup, lobbyScreen } = room;
-    const roster = currentRoster();
+    const roster = currentRoster(room);
     // 마지막 구성에 이제 없는 상대(삭제된 CustomAI 등)가 있으면 그 좌석만 기본 상대 중 남는 캐릭터로 바꿔 보여준다 (화면 초기값일 뿐).
     const known = new Set(roster.map((r) => r.characterId));
     const defaults = { ...lastSetup, opponents: { ...lastSetup.opponents } };
@@ -533,6 +596,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       type: "setup",
       screen: lobbyScreen,
       mode: lastSetup.mode,
+      ...(room.notice ? { notice: room.notice } : {}),
       roster,
       playerCounts: { sanma: playerCountOf("sanma"), yonma: playerCountOf("yonma") },
       // 허브 카드에 보여줄 모드 차이: 규칙 설정(RuleConfig)에서 그대로 가져온다 (GUI가 규칙을 따로 적지 않는다).
@@ -566,6 +630,11 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   async function startGame(room: Room, config: GuiGameConfig): Promise<void> {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
+    // 이 사용자의 끝난 대국은 새 대국으로 바뀌므로 세지 않는다
+    if (limits && openGameCount() - (room.table ? 1 : 0) >= limits.maxOpenGames) {
+      throw new Error(`지금은 서버에서 진행 중인 대국이 많습니다 (최대 ${limits.maxOpenGames}판). 잠시 뒤 다시 시도해 주세요`);
+    }
+    room.notice = null;
     const seed = config.seed ?? `gui-${Date.now()}`;
     room.lastSetup = {
       mode: config.mode,
@@ -573,14 +642,17 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       seed: config.seed ?? "",
       saveReplays: config.saveReplays,
     };
-    const spec: GameSpec = { mode: config.mode, seed, opponents: config.opponents.map(opponentSpecOf) };
+    const spec: GameSpec = { mode: config.mode, seed, opponents: config.opponents.map((id) => opponentSpecOf(room, id)) };
     const options: GuiServerOptions = {
       ...(config.saveReplays
         ? {
             replay: {
               label: `human-${config.mode}-${seed}`,
-              ...(lobby.replayDir !== undefined ? { dir: lobby.replayDir } : {}),
-              ...(lobby.onReplaySaved ? { onSaved: lobby.onReplaySaved } : {}),
+              dir: room.replayDir,
+              onSaved: (path: string) => {
+                lobby.onReplaySaved?.(path);
+                pruneReplays(room.replayDir).catch(() => {});
+              },
             },
           }
         : {}),
@@ -623,6 +695,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
     const raw = (typeof input === "object" && input !== null ? input : {}) as { screen?: unknown; mode?: unknown };
+    room.notice = null;
     if (raw.screen === "hub") {
       room.lobbyScreen = "hub";
     } else if (raw.screen === "setup") {
@@ -636,7 +709,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   }
 
   /** CustomAI 편집 화면용 목록: 스키마(표시 이름/설명/범위)와 저장된 CustomAI(검증 실패 파일은 이유만). */
-  function customAiListBody(): string {
+  function customAiListBody(store: CustomAiStore): string {
     return JSON.stringify({
       schema: {
         nameMax: CUSTOM_AI_NAME_MAX,
@@ -644,7 +717,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
         max: SLIDER_MAX,
         fields: CUSTOM_AI_FIELDS.map((f) => ({ key: f.key, group: f.group, label: f.label, description: f.description, initial: f.initial })),
       },
-      entries: (customAiStore?.list() ?? []).map((e) =>
+      entries: store.list().map((e) =>
         e.ok
           ? { ok: true, id: e.definition.id, characterId: customAiCharacterId(e.definition.id), name: e.definition.name, style: e.definition.style, notices: customAiNotices(e.definition.style) }
           : { ok: false, file: e.file, reason: e.reason }
@@ -652,30 +725,41 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     });
   }
 
-  /** CustomAI가 바뀌면 시작 화면이 떠 있는 로비들에 새 목록을 보낸다. (CustomAI 저장소는 아직 서버 공용이다 - 5단계에서 사용자별로 나눈다) */
-  function refreshSetupRoster(): void {
-    for (const room of rooms.values()) if (!room.table) sendToRoom(room, `data: ${setupMessage(room)}\n\n`);
+  /** CustomAI가 바뀌면 그 사용자의 시작 화면에 새 목록을 보낸다. */
+  function refreshSetupRoster(room: Room): void {
+    if (!room.table) sendToRoom(room, `data: ${setupMessage(room)}\n\n`);
   }
 
-  function handleCustomAi(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse, pathname: string): void {
+  /** CustomAI 개수 제한 (온라인 서버). 검증에 실패한 파일도 한 개로 센다. */
+  function assertCustomAiRoom(store: CustomAiStore): void {
+    if (limits && store.list().length >= limits.maxCustomAisPerUser) throw new Error(`CustomAI는 한 사람당 ${limits.maxCustomAisPerUser}개까지 만들 수 있습니다`);
+  }
+
+  function handleCustomAi(room: Room, req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse, pathname: string): void {
     const json = (status: number, body: string) => res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }).end(body);
     const error = (err: unknown) => res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" }).end(String(err instanceof Error ? err.message : err));
-    if (!customAiStore) {
+    if (!room.customAiStore) {
       res.writeHead(404).end("Not found");
       return;
     }
-    const store = customAiStore;
+    const store = room.customAiStore;
     const rest = pathname.slice("/api/custom-ai".length).split("/").filter(Boolean); // [] | [id] | [id, "duplicate"]
     if (req.method === "GET" && rest.length === 0) {
-      json(200, customAiListBody());
+      json(200, customAiListBody(store));
       return;
     }
-    readBody(req, (body) => {
+    readBody(req, res, (body) => {
       try {
         let result: unknown;
-        if (req.method === "POST" && rest.length === 0) result = store.create(JSON.parse(body));
+        if (req.method === "POST" && rest.length === 0) {
+          assertCustomAiRoom(store);
+          result = store.create(JSON.parse(body));
+        }
         else if (req.method === "PUT" && rest.length === 1) result = store.update(rest[0]!, JSON.parse(body));
-        else if (req.method === "POST" && rest.length === 2 && rest[1] === "duplicate") result = store.duplicate(rest[0]!);
+        else if (req.method === "POST" && rest.length === 2 && rest[1] === "duplicate") {
+          assertCustomAiRoom(store);
+          result = store.duplicate(rest[0]!);
+        }
         else if (req.method === "DELETE" && rest.length === 1) {
           store.delete(rest[0]!);
           result = { deleted: rest[0] };
@@ -683,7 +767,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
           res.writeHead(405).end("Method not allowed");
           return;
         }
-        refreshSetupRoster();
+        refreshSetupRoster(room);
         json(200, JSON.stringify(result));
       } catch (err) {
         error(err);
@@ -691,10 +775,24 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     });
   }
 
-  function readBody(req: import("node:http").IncomingMessage, onBody: (body: string) => void): void {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("end", () => onBody(body));
+  /** 요청 본문을 읽는다. MAX_REQUEST_BODY_BYTES를 넘으면 413으로 끝내고 onBody를 부르지 않는다. */
+  function readBody(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse, onBody: (body: string) => void): void {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let tooLarge = false;
+    req.on("data", (chunk: Buffer) => {
+      if (tooLarge) return;
+      size += chunk.length;
+      if (size > MAX_REQUEST_BODY_BYTES) {
+        tooLarge = true;
+        res.writeHead(413, { "Content-Type": "text/plain; charset=utf-8", Connection: "close" }).end("요청이 너무 큽니다");
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      if (!tooLarge) onBody(Buffer.concat(chunks).toString("utf-8"));
+    });
   }
 
   function reply(res: import("node:http").ServerResponse, action: () => void | Promise<void>): void {
@@ -707,14 +805,12 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   }
 
 
-  const access = lobby?.access ?? null;
-
   /** 입장 게이트: 입장 화면/입장 요청은 통과시키고, 입장하지 않은 요청은 페이지면 입장 화면으로 보내고 나머지는 401로 막는다.
    *  요청을 여기서 끝냈으면 true. */
   function handleAccess(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse, pathname: string): boolean {
     if (!access) return false;
     if (req.method === "POST" && pathname === "/join") {
-      readBody(req, (body) => {
+      readBody(req, res, (body) => {
         try {
           const { token, user } = access.join(req, JSON.parse(body || "{}"));
           res
@@ -740,6 +836,50 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     }
     res.writeHead(401, { "Content-Type": "text/plain; charset=utf-8" }).end("입장이 필요합니다");
     return true;
+  }
+
+  /** 사용자별 요청 빈도 제한 (토큰 버킷). 제한이 없는 서버면 항상 통과. */
+  function takeToken(room: Room): boolean {
+    if (!limits) return true;
+    const now = Date.now();
+    room.tokens = Math.min(limits.requestBurst, room.tokens + ((now - room.tokensAt) / 1000) * limits.requestsPerSecond);
+    room.tokensAt = now;
+    if (room.tokens < 1) return false;
+    room.tokens -= 1;
+    return true;
+  }
+
+  /** 방치 정리: 요청이 오래 없는 사용자의 대국을 정리하고(리플레이는 저장하지 않음, 로비에 안내), 접속도 대국도 없는 로비는 지운다. */
+  function sweepIdle(): void {
+    if (!limits) return;
+    const now = Date.now();
+    for (const room of [...rooms.values()]) {
+      const idle = now - room.lastActivity;
+      if (room.table && idle > limits.idleGameMs) {
+        const ended = room.table.host.phase() === "game_end";
+        leaveTable(room);
+        room.lobbyScreen = "setup";
+        room.notice = ended ? null : "오래 응답이 없어 진행 중이던 대국을 정리했습니다 (리플레이는 저장하지 않았습니다).";
+        sendToRoom(room, `data: ${setupMessage(room)}\n\n`);
+      }
+      if (!room.table && !room.starting && room.sseClients.size === 0 && idle > limits.idleRoomMs) rooms.delete(room.userId);
+    }
+  }
+  const sweepTimer = limits ? setInterval(sweepIdle, Math.min(60_000, Math.max(1_000, limits.idleGameMs / 2))) : null;
+  sweepTimer?.unref();
+
+  /** 서버 전체에서 열려 있는 대국 수 (끝났지만 아직 떠나지 않은 대국 포함, 만드는 중인 대국 포함) */
+  function openGameCount(): number {
+    let count = 0;
+    for (const room of rooms.values()) if (room.table || room.starting) count++;
+    return count;
+  }
+
+  /** 사용자 리플레이 폴더를 최근 maxReplaysPerUser개로 줄인다 (온라인 서버). */
+  async function pruneReplays(replayDir: string): Promise<void> {
+    if (!limits) return;
+    const files = await listReplays(replayDir);
+    for (const f of files.slice(limits.maxReplaysPerUser)) await rm(join(replayDir, f.name), { force: true });
   }
 
   function serveStatic(pathname: string, res: import("node:http").ServerResponse): void {
@@ -771,7 +911,21 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     }
     const room = roomOf(userId);
 
+    // 로비/대국/API 요청만 사용자 활동으로 세고 빈도를 제한한다 (화면 파일, 패 그림 같은 정적 파일은 제외).
+    const isAppRequest = req.method !== "GET" || url.pathname === "/events" || url.pathname.startsWith("/api/");
+    if (isAppRequest) {
+      room.lastActivity = Date.now();
+      if (!takeToken(room)) {
+        res.writeHead(429, { "Content-Type": "text/plain; charset=utf-8", "Retry-After": "1" }).end("요청이 너무 잦습니다. 잠시 뒤 다시 시도해 주세요");
+        return;
+      }
+    }
+
     if (req.method === "GET" && url.pathname === "/events") {
+      if (limits && room.sseClients.size >= limits.maxStreamsPerUser) {
+        res.writeHead(429, { "Content-Type": "text/plain; charset=utf-8" }).end(`동시에 열 수 있는 화면은 ${limits.maxStreamsPerUser}개까지입니다`);
+        return;
+      }
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -784,7 +938,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     }
 
     if (req.method === "POST" && url.pathname === "/respond") {
-      readBody(req, (body) =>
+      readBody(req, res, (body) =>
         reply(res, () => respondAt(room, JSON.parse(body) as DecisionResponse))
       );
       return;
@@ -799,12 +953,12 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     }
 
     if (req.method === "POST" && url.pathname === "/start") {
-      readBody(req, (body) => reply(res, () => startGame(room, parseGuiGameConfig(JSON.parse(body), resolveOpponentProfile))));
+      readBody(req, res, (body) => reply(res, () => startGame(room, parseGuiGameConfig(JSON.parse(body), (id) => resolveOpponentProfile(room, id)))));
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/api/replays") {
-      listReplays()
+      listReplays(room.replayDir)
         .then((files) => res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }).end(JSON.stringify(files)))
         .catch((err) => res.writeHead(500, { "Content-Type": "text/plain" }).end(String(err instanceof Error ? err.message : err)));
       return;
@@ -812,19 +966,31 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
 
     if (req.method === "GET" && url.pathname.startsWith("/api/replays/")) {
       const name = decodeURIComponent(url.pathname.slice("/api/replays/".length));
-      replayBody(name)
+      if (url.searchParams.has("download")) {
+        // 버그 제보용: 원본 파일을 그대로 내려받는다 (재현하지 않는다)
+        Promise.resolve()
+          .then(() => readFile(replayPath(room.replayDir, name)))
+          .then((data) =>
+            res
+              .writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "Content-Disposition": `attachment; filename="${name}"` })
+              .end(data)
+          )
+          .catch((err) => res.writeHead(REPLAY_FILE_NAME.test(name) ? 404 : 400, { "Content-Type": "text/plain" }).end(String(err instanceof Error ? err.message : err)));
+        return;
+      }
+      replayBody(room.replayDir, name)
         .then((body) => res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }).end(body))
         .catch((err) => res.writeHead(REPLAY_FILE_NAME.test(name) ? 404 : 400, { "Content-Type": "text/plain" }).end(String(err instanceof Error ? err.message : err)));
       return;
     }
 
     if (url.pathname === "/api/custom-ai" || url.pathname.startsWith("/api/custom-ai/")) {
-      handleCustomAi(req, res, url.pathname);
+      handleCustomAi(room, req, res, url.pathname);
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/speed") {
-      readBody(req, (body) =>
+      readBody(req, res, (body) =>
         reply(res, () => {
           const { speed } = JSON.parse(body) as { speed?: unknown };
           room.frameDelayMs = PLAYBACK_FRAME_DELAY_MS[parsePlaybackSpeed(speed)];
@@ -839,7 +1005,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     }
 
     if (req.method === "POST" && url.pathname === "/lobby") {
-      readBody(req, (body) => reply(res, () => moveLobby(room, JSON.parse(body || "{}"))));
+      readBody(req, res, (body) => reply(res, () => moveLobby(room, JSON.parse(body || "{}"))));
       return;
     }
 
@@ -854,6 +1020,10 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     }
 
     res.writeHead(405).end("Method not allowed");
+  });
+
+  server.on("close", () => {
+    if (sweepTimer) clearInterval(sweepTimer);
   });
 
   // 같은 스레드에서 도는 대국만 세션을 돌려준다 (worker 대국은 null)

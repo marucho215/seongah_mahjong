@@ -20,7 +20,7 @@ function tempDir(): string {
 
 async function startGated(dataDir: string, gate?: AccessGate) {
   const access = gate ?? new AccessGate({ inviteCode: INVITE, dataDir });
-  const handle = createGuiLobbyServer({ frameDelayMs: 0, access, customAiDir: join(dataDir, "custom-ai") });
+  const handle = createGuiLobbyServer({ frameDelayMs: 0, access, userDataDir: join(dataDir, "users") });
   handle.server.keepAliveTimeout = 0;
   await new Promise<void>((resolve) => handle.server.listen(0, resolve));
   const baseUrl = `http://localhost:${(handle.server.address() as AddressInfo).port}`;

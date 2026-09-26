@@ -239,7 +239,7 @@
    `createGuiServer.ts`의 `Room`(사용자별 로비 화면, 마지막 설정, SSE 연결, AI 속도, 앉은 대국)과 `Table`(GameHost +
    `seatUsers`). 대국 메시지는 사람 좌석 사용자에게만 가고, 응답은 요청받은 좌석의 사용자만 보낼 수 있다. 로컬 모드는
    사용자 `local` 하나. 로비 상태는 메모리에만 있다(서버 재시작 시 허브부터). `tests/guiRooms.test.ts`.
-   남은 공용 자원: CustomAI 저장소와 리플레이 폴더(5단계). 같은 시드로 두 사용자가 리플레이를 저장하면 파일 이름이 겹친다(5단계에서 해결).
+   (CustomAI/리플레이 공용 문제는 5단계에서 사용자별 폴더로 해결. 같은 사용자가 같은 시드로 다시 저장하면 파일을 덮어쓰는 것은 로컬 모드와 같다.)
 3. AI 계산 worker 풀: 대국 진행과 리플레이 재현을 메인 스레드에서 분리. **완료** - `engineRunner.ts`(공통 EngineCore와
    스냅샷, 같은 스레드용 InlineEngineRunner), `engineWorkerPool.ts`/`engineWorker.ts`(대국은 시작할 때 가장 한가한 worker에
    배정되어 끝까지 그 worker에 있다). GameHost는 스냅샷만 보고 메시지를 만든다(로그는 받은 이벤트를 이어 붙인 사본).
@@ -247,8 +247,15 @@
    개발 중에는 worker 안에서 tsx를 먼저 등록해 .ts를 띄운다. worker가 죽으면 그 worker의 대국은 사라지고(요청이 오류로 끝남)
    새 worker로 바뀐다. 측정: 사람 응답 1회당 AI 계산 20~50ms(최대 약 350ms), 리플레이 재현 약 4.6초.
    `tests/guiEngineWorker.test.ts`(worker와 같은 스레드의 메시지가 끝까지 같음, 재현 중에도 다른 사용자 즉시 응답).
-4. 자원 관리: 동시 대국 수 제한, 방치된 대국 정리, 요청 빈도 제한.
-5. 사용자별 저장: 리플레이/CustomAI, 버그 제보용 리플레이 다운로드.
+4. 자원 관리: 동시 대국 수 제한, 방치된 대국 정리, 요청 빈도 제한. **완료** - `createGuiServer.ts`의 `ResourceLimits`/
+   `ONLINE_LIMITS`(초대 코드 서버에만, `server.ts`가 넘긴다): 서버 전체 대국 8판(`SEONGAH_MAX_GAMES`, 끝났지만 떠나지 않은
+   대국 포함), 요청 없는 대국 30분 뒤 정리(리플레이 저장 안 함, 로비 `notice`), 접속·대국 없는 로비 1시간 뒤 메모리에서 삭제,
+   사용자별 토큰 버킷(초당 20, 최대 40 - 정적 파일 제외), 사용자별 이벤트 연결 5개. 요청 본문 64KB 제한은 모든 서버(413).
+5. 사용자별 저장: 리플레이/CustomAI, 버그 제보용 리플레이 다운로드. **완료** - 초대 코드 서버는
+   `server-data/users/<사용자 id>/custom-ai`, `.../replays`(`userDataDir` 옵션). 사용자당 CustomAI 20개, 리플레이 최근 50개
+   (저장 직후 오래된 것부터 삭제). 다른 사용자의 CustomAI는 목록/대국 시작 모두 불가. 리플레이 뷰어 "파일 내려받기"
+   (`/api/replays/<이름>?download=1`, 로컬 모드 포함). 재현 캐시 키는 파일 경로. 로컬 모드의 `custom-ai/`, `replays/`는
+   온라인 서버에서 보이지 않는다(옮기는 기능 없음). `tests/guiOnline.test.ts`.
 6. 배포: Windows + Cloudflare Tunnel 운영 문서, SSE heartbeat.
 7. 두 사용자 동시 접속 스모크 테스트.
 

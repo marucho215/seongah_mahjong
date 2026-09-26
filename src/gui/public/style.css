@@ -1291,6 +1291,8 @@ body.replay-page {
 
 .setup-replay-link { font-size: 13px; color: rgba(240, 240, 240, 0.66); }
 .setup-nickname { margin: 6px 0 0; font-size: 13px; color: rgba(240, 240, 240, 0.66); }
+.setup-notice { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: #ffd54a; }
+.rv-download { font-size: 13px; color: rgba(240, 240, 240, 0.75); }
 
 /* --- CustomAI (시작 화면) --- */
 

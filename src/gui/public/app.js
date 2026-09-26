@@ -1491,6 +1491,7 @@ function initSetupState(msg) {
     saveReplays: prev ? prev.saveReplays : msg.defaults.saveReplays,
     pending: false,
     error: "",
+    notice: msg.notice ?? "", // 서버 안내 (예: 오래 응답이 없어 대국을 정리함)
     activeSlot: prev ? prev.activeSlot : 0,
     sort: prev ? prev.sort : "registered",
     customAi: prev ? prev.customAi : { schema: null, entries: [], error: "" },
@@ -1699,6 +1700,11 @@ function renderSetup() {
   replayLink.textContent = "저장된 리플레이 보기";
   header.append(h1, lead, replayLink);
   if (onlineNickname !== null) header.appendChild(renderNicknameLine());
+  if (setupState.notice) {
+    const notice = el("p", "setup-notice");
+    notice.textContent = setupState.notice;
+    header.appendChild(notice);
+  }
   side.appendChild(header);
 
   const modeChildren = [renderModeRows(isHub)];

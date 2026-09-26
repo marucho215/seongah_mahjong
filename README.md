@@ -91,10 +91,16 @@ per browser (stored as a hash in `server-data/sessions.json`, so entries survive
 the same browser only changes the nickname. Wrong invite codes are rate-limited per client. Without an invite code the
 server works exactly as before (local mode).
 
-Each entered user has their own lobby, game, event stream and AI speed setting (several tabs of the same browser share
-them). Online play is still in development (see `HANDOFF.md` §10): CustomAI and saved replays are still shared by all
-users. Games and replay reproduction run on engine worker threads, so one user's AI turns or replay do not pause the
-others.
+Each entered user has their own lobby, game, event stream, AI speed setting, CustomAIs and saved replays (several tabs
+of the same browser share them). Per-user data lives in `server-data/users/<user id>/custom-ai` and `.../replays`; the
+local-mode `custom-ai/` and `replays/` folders are not used by an invite-code server. Games and replay reproduction run
+on engine worker threads, so one user's AI turns or replay do not pause the others.
+
+An invite-code server also limits resources: at most 8 open games on the server (`SEONGAH_MAX_GAMES`), a game with no
+request from its player for 30 minutes is cleared (not saved as a replay; the lobby shows a notice), 20 CustomAIs and the
+latest 50 replays per user, 5 open tabs per user, and a per-user request rate limit. The replay viewer has a
+"파일 내려받기" link to download the original replay file (useful for bug reports). Online play is still in development
+(see `HANDOFF.md` §10).
 
 ### Play in the terminal (CLI)
 

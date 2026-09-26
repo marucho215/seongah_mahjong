@@ -84,6 +84,10 @@ async function loadReplay(name) {
   stopPlay();
   $("rv-main").classList.add("hidden");
   data = null;
+  // 원본 파일 내려받기 (버그 제보용): 재현 가능 여부와 관계없이 고른 파일이면 보여준다
+  const download = $("rv-download");
+  download.classList.toggle("hidden", !name);
+  if (name) download.href = `/api/replays/${encodeURIComponent(name)}?download=1`;
   if (!name) {
     setStatus("");
     return;

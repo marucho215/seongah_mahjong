@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -113,11 +113,10 @@ describe("엔진 worker 풀 (engineWorkerPool)", () => {
       if (session.getPhase() === "hand_end") session.continueToNextHand();
       else session.respond(defaultResponse(session.getCurrentRequest()!));
     }
-    writeGameReplay(buildGameReplayRecord(game, "busy", 0, replaySeatsFromGame(game)), dir);
+    const record = buildGameReplayRecord(game, "busy", 0, replaySeatsFromGame(game));
 
     const { baseUrl } = await listen({
-      replayDir: dir,
-      customAiDir: join(dir, "custom-ai"),
+      userDataDir: join(dir, "users"),
       access: new AccessGate({ inviteCode: "x", dataDir: dir }),
       engine: pool,
     });
@@ -127,6 +126,10 @@ describe("엔진 worker 풀 (engineWorkerPool)", () => {
     };
     const a = await enter("A");
     const b = await enter("B");
+    // 온라인 서버의 리플레이는 사용자 폴더에 있다: A의 폴더에 넣는다
+    const sessions = JSON.parse(readFileSync(join(dir, "sessions.json"), "utf-8")).sessions as Record<string, { userId: string; nickname: string }>;
+    const userA = Object.values(sessions).find((u) => u.nickname === "A")!.userId;
+    writeGameReplay(record, join(dir, "users", userA, "replays"));
 
     const started = Date.now();
     const reproduction = fetch(`${baseUrl}/api/replays/busy_game0.json`, { headers: a }).then(async (r) => ({ at: Date.now(), body: await r.json() }));

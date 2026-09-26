@@ -8,9 +8,11 @@
  * 브라우저만 쓸 수 있다. 세션은 server-data/sessions.json에 저장된다 (accessGate.ts).
  *
  * 대국과 리플레이 재현은 엔진 worker 풀에서 돌린다 (engineWorkerPool.ts). worker 수는 환경 변수 SEONGAH_ENGINE_WORKERS로 바꿀 수 있다
- * (기본: CPU 수 - 1, 1~4개). */
+ * (기본: CPU 수 - 1, 1~4개).
+ *
+ * 초대 코드로 연 서버는 사용자별로 server-data/users/<사용자 id>/에 CustomAI와 리플레이를 저장하고, 자원 제한(ONLINE_LIMITS)을 둔다. */
 import { parseGameArgs } from "./gameSetup.js";
-import { createGuiLobbyServer } from "./createGuiServer.js";
+import { ONLINE_LIMITS, createGuiLobbyServer } from "./createGuiServer.js";
 import { AccessGate } from "./accessGate.js";
 import { EngineWorkerPool, defaultEngineWorkerCount } from "./engineWorkerPool.js";
 
@@ -27,7 +29,10 @@ const { server } = createGuiLobbyServer({
   defaults: { mode: parsed.mode, saveReplays: parsed.saveReplays, ...(parsed.seed !== undefined ? { seed: parsed.seed } : {}) },
   onGameStarted: (config) => console.log(`Game started - Mode: ${config.mode}, Seed: ${config.seed}, Opponents: ${config.opponents.join(", ")}`),
   onReplaySaved: (path) => console.log(`Replay saved: ${path}`),
-  ...(access ? { access } : {}),
+  // 초대 코드로 연 온라인 서버에만 자원 제한을 둔다. 동시 대국 수는 SEONGAH_MAX_GAMES로 바꿀 수 있다.
+  ...(access
+    ? { access, limits: { ...ONLINE_LIMITS, ...(process.env.SEONGAH_MAX_GAMES ? { maxOpenGames: Number(process.env.SEONGAH_MAX_GAMES) } : {}) } }
+    : {}),
   engine,
 });
 server.listen(PORT, () => {

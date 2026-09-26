@@ -19,8 +19,7 @@ async function startServer() {
   const handle = createGuiLobbyServer({
     frameDelayMs: 0,
     access: new AccessGate({ inviteCode: INVITE, dataDir: dir }),
-    customAiDir: join(dir, "custom-ai"),
-    replayDir: join(dir, "replays"),
+    userDataDir: join(dir, "users"),
   });
   handle.server.keepAliveTimeout = 0;
   await new Promise<void>((resolve) => handle.server.listen(0, resolve));
