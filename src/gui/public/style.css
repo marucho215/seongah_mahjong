@@ -769,6 +769,13 @@ body {
 .win-score-detail { font-size: 15px; }
 .win-score-points { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* 더블 론: 두 번째 화료부터 앞 화료와 구분한다 */
+.overlay-panel .win-score + .win-headline {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+}
+
 .win-extras { font-size: 13px; opacity: 0.8; margin: 4px 0 8px; }
 
 /* 결과 구획을 위에서부터 짧게 차례로 보여준다. 패널을 누르면(.reveal-done) 즉시 전부 보인다. */
