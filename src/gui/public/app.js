@@ -1535,11 +1535,13 @@ function renderSetupSeats() {
   return list;
 }
 
-function renderCharacterCard(entry) {
+/** `browseOnly`: 허브에서는 목록을 보기만 한다 (좌석 표시 없음, 눌러도 앉히지 않음). */
+function renderCharacterCard(entry, browseOnly = false) {
   const opponents = currentOpponents();
   const n = setupState.playerCounts[setupState.mode];
-  const seatIndex = opponents.indexOf(entry.characterId);
+  const seatIndex = browseOnly ? -1 : opponents.indexOf(entry.characterId);
   const card = el("button", "character-card" + (seatIndex >= 0 ? " is-seated" : ""), { type: "button" });
+  card.disabled = browseOnly;
 
   const head = el("div", "card-head");
   const name = el("span", "card-name");
@@ -1590,60 +1592,42 @@ function postLobby(body) {
   });
 }
 
-/** 허브: 산마/4마를 고른다. 모드 차이는 서버가 규칙 설정에서 보낸 값(msg.modes)만 보여준다. */
-function renderHub() {
-  const root = document.getElementById("setup-screen");
-  root.innerHTML = "";
-  const hub = el("div", "hub");
-  const h1 = el("h1", "hub-title");
-  h1.textContent = "성아 마작";
-  const lead = el("p", "hub-lead");
-  lead.textContent = "대국 방식을 고르세요. 다음 화면에서 상대와 시드를 정합니다.";
-  hub.append(h1, lead);
-
-  const choices = el("div", "hub-modes");
+/** 대국 방식 줄: 좌석 줄(setup-seat)과 같은 모양으로 "인원 | 이름 | 규칙 요약"을 보여준다. 규칙 요약은 서버가 RuleConfig에서 보낸 값이다.
+ *  허브에서는 두 모드를 모두 보여주고 누르면 그 모드의 설정으로 간다. 설정 화면에서는 고른 모드 한 줄만 선택 상태로 보인다. */
+function renderModeRows(isHub) {
+  const list = el("ol", "setup-seats");
   for (const [mode, label] of MODE_OPTIONS) {
+    if (!isHub && mode !== setupState.mode) continue;
     const info = (setupState.modes || []).find((m) => m.mode === mode);
-    const card = el("button", "hub-mode", { type: "button" });
-    const name = el("span", "hub-mode-name");
+    const li = el("li");
+    const row = el(isHub ? "button" : "div", "setup-seat" + (isHub ? "" : " is-active"), isHub ? { type: "button" } : undefined);
+    const where = el("span", "seat-where");
+    where.textContent = info ? `${info.players}인` : "";
+    const name = el("span", "seat-name");
     name.textContent = label;
-    card.appendChild(name);
-    if (info) {
-      const facts = el("ul", "hub-mode-facts");
-      for (const text of [`${info.players}인`, `시작 점수 ${formatPoints(info.startingScore)}`, info.chi ? "치 있음" : "치 없음", info.kita ? "북 빼기 있음" : "북 빼기 없음"]) {
-        const li = el("li");
-        li.textContent = text;
-        facts.appendChild(li);
-      }
-      card.appendChild(facts);
-    }
-    card.addEventListener("click", () => {
-      AudioManager.play("ui.confirm");
-      postLobby({ screen: "setup", mode }).catch((err) => {
-        setupState.error = err instanceof Error ? err.message : String(err);
-        renderHub();
+    const facts = el("span", "seat-tags");
+    facts.textContent = info
+      ? [`시작 ${formatPoints(info.startingScore)}`, info.chi ? "치 있음" : "치 없음", info.kita ? "북 빼기 있음" : "북 빼기 없음"].join(" · ")
+      : "";
+    row.append(where, name, facts);
+    if (isHub) {
+      row.addEventListener("click", () => {
+        AudioManager.play("ui.confirm");
+        postLobby({ screen: "setup", mode }).catch((err) => {
+          setupState.error = err instanceof Error ? err.message : String(err);
+          renderSetup();
+        });
       });
-    });
-    choices.appendChild(card);
+    }
+    li.appendChild(row);
+    list.appendChild(li);
   }
-  hub.appendChild(choices);
-
-  const replayLink = el("a", "setup-replay-link", { href: "/replay.html", target: "_blank", rel: "noopener" });
-  replayLink.textContent = "저장된 리플레이 보기";
-  hub.appendChild(replayLink);
-  if (setupState.error) {
-    const err = el("p", "setup-error", { role: "alert" });
-    err.textContent = setupState.error;
-    hub.appendChild(err);
-  }
-  root.appendChild(hub);
+  return list;
 }
 
 function renderSetup() {
-  if (setupState.screen === "hub") {
-    renderHub();
-    return;
-  }
+  // 허브(모드 선택 전)와 설정 화면은 같은 화면이다. 허브에서는 대국 방식만 고를 수 있고, 나머지 설정은 모드를 고른 뒤에 나온다.
+  const isHub = setupState.screen === "hub";
   const root = document.getElementById("setup-screen");
   const scrollTop = root.querySelector(".setup-roster-list")?.scrollTop ?? 0;
   root.innerHTML = "";
@@ -1656,27 +1640,29 @@ function renderSetup() {
   const h1 = el("h1");
   h1.textContent = "새 대국";
   const lead = el("p", "setup-lead");
-  lead.textContent = "좌석을 고르고 캐릭터를 눌러 앉힙니다. 같은 캐릭터는 한 좌석에만 앉을 수 있습니다.";
+  lead.textContent = isHub
+    ? "대국 방식을 고르면 좌석과 상대를 정할 수 있습니다."
+    : "좌석을 고르고 캐릭터를 눌러 앉힙니다. 같은 캐릭터는 한 좌석에만 앉을 수 있습니다.";
   const replayLink = el("a", "setup-replay-link", { href: "/replay.html", target: "_blank", rel: "noopener" });
   replayLink.textContent = "저장된 리플레이 보기";
   header.append(h1, lead, replayLink);
   side.appendChild(header);
 
-  const modeLabel = (MODE_OPTIONS.find(([m]) => m === setupState.mode) ?? [setupState.mode, setupState.mode, ""]);
-  const modeLine = el("div", "setup-mode-line");
-  const modeText = el("span", "setup-mode-name");
-  modeText.textContent = `${modeLabel[1]} · ${modeLabel[2]}`;
-  const back = el("button", "setup-link-button", { type: "button" });
-  back.textContent = "모드 선택으로";
-  back.addEventListener("click", () => {
-    postLobby({ screen: "hub" }).catch((err) => {
-      setupState.error = err instanceof Error ? err.message : String(err);
-      renderSetup();
+  const modeChildren = [renderModeRows(isHub)];
+  if (!isHub) {
+    const back = el("button", "setup-link-button", { type: "button" });
+    back.textContent = "대국 방식 바꾸기";
+    back.addEventListener("click", () => {
+      postLobby({ screen: "hub" }).catch((err) => {
+        setupState.error = err instanceof Error ? err.message : String(err);
+        renderSetup();
+      });
     });
-  });
-  modeLine.append(modeText, back);
-  side.appendChild(setupSection("대국 방식", modeLine));
+    modeChildren.push(back);
+  }
+  side.appendChild(setupSection("대국 방식", ...modeChildren));
 
+  if (!isHub) {
   const randomBtn = el("button", "setup-link-button", { type: "button" });
   randomBtn.textContent = "무작위로 채우기";
   randomBtn.addEventListener("click", () => {
@@ -1708,6 +1694,7 @@ function renderSetup() {
   start.disabled = setupState.pending;
   start.addEventListener("click", startGameFromSetup);
   side.appendChild(start);
+  }
   if (setupState.error) {
     const err = el("p", "setup-error", { role: "alert" });
     err.textContent = setupState.error;
@@ -1721,7 +1708,7 @@ function renderSetup() {
   const n = setupState.playerCounts[setupState.mode];
   rh.textContent = `캐릭터 ${setupState.roster.length}명`;
   const target = el("span", "setup-roster-target");
-  target.textContent = `${opponentSeatLabel(setupState.activeSlot, n)} 좌석에 앉힐 캐릭터`;
+  target.textContent = isHub ? "대국 방식을 고르면 좌석에 앉힐 수 있습니다" : `${opponentSeatLabel(setupState.activeSlot, n)} 좌석에 앉힐 캐릭터`;
   const sort = el("select", "setup-select", { "aria-label": "정렬" });
   for (const [value, label] of SORT_OPTIONS) {
     const opt = el("option", "", { value });
@@ -1738,7 +1725,7 @@ function renderSetup() {
   rosterHead.append(titleWrap, sort);
 
   const grid = el("div", "setup-roster-list");
-  for (const entry of sortedRoster()) grid.appendChild(renderCharacterCard(entry));
+  for (const entry of sortedRoster()) grid.appendChild(renderCharacterCard(entry, isHub));
   rosterPane.append(rosterHead, grid);
 
   layout.append(side, rosterPane);

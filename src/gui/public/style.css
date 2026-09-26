@@ -1343,37 +1343,7 @@ body.replay-page {
   cursor: pointer;
 }
 
-/* --- 허브 (모드 선택) --- */
-
-.hub {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 64px 20px 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-.hub-title { margin: 0; font-size: 30px; }
-.hub-lead { margin: 0; color: var(--setup-muted); font-size: 14px; }
-.hub-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-.hub-mode {
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  padding: 22px 22px 18px;
-  border-radius: 12px;
-  border: 1px solid var(--setup-line);
-  background: var(--setup-panel);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.hub-mode:hover { border-color: var(--setup-accent); }
-.hub-mode:focus-visible { outline: 2px solid var(--setup-accent); outline-offset: 2px; }
-.hub-mode-name { font-size: 24px; font-weight: 700; }
-.hub-mode-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.hub-mode-facts li { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--setup-line); color: var(--setup-muted); }
-.setup-mode-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.setup-mode-name { font-size: 17px; font-weight: 700; }
-#setup-screen:has(.hub) { overflow-y: auto; }
+/* 허브(대국 방식 고르기 전)에서는 캐릭터 목록을 보기만 한다 */
+.character-card:disabled { cursor: default; }
+.character-card:disabled:hover { border-color: var(--setup-line); }
+div.setup-seat { cursor: default; }
