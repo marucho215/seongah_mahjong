@@ -256,8 +256,12 @@
    (저장 직후 오래된 것부터 삭제). 다른 사용자의 CustomAI는 목록/대국 시작 모두 불가. 리플레이 뷰어 "파일 내려받기"
    (`/api/replays/<이름>?download=1`, 로컬 모드 포함). 재현 캐시 키는 파일 경로. 로컬 모드의 `custom-ai/`, `replays/`는
    온라인 서버에서 보이지 않는다(옮기는 기능 없음). `tests/guiOnline.test.ts`.
-6. 배포: Windows + Cloudflare Tunnel 운영 문서, SSE heartbeat.
-7. 두 사용자 동시 접속 스모크 테스트.
+6. 배포: Windows + Cloudflare Tunnel 운영 문서, SSE heartbeat. **진행 중** - 완료: SSE 연결 유지 신호(25초마다 `: ping`,
+   `SSE_HEARTBEAT_MS`), `X-Accel-Buffering: no`, `HOST` 환경 변수(예: 127.0.0.1로 터널에만 공개). 남음: 운영 문서 -
+   Cloudflare Quick Tunnel은 SSE를 지원하지 않는다는 제한이 있는 것으로 알고 있어(이 개발 환경에서는 확인 불가) 터널 방식을
+   운영자와 정하는 중.
+7. 두 사용자 동시 접속 스모크 테스트. **완료** - `e2e/onlineSmoke.e2e.ts`(입장 게이트 + worker 풀 + 자원 제한, 쿠키가
+   따로인 브라우저 두 개: 각자 입장/로비/대국, 한쪽 그만두기와 새로고침이 다른 쪽에 영향 없음, 미입장/틀린 초대 코드).
 
 1.2 이후: 사람끼리 대전(매칭, 재접속, 시간 제한), 다른 기기에서 이어 하기(복구 코드 등), 상시 호스팅(Oracle Cloud Always Free 등).
 

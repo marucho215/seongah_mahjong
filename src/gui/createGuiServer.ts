@@ -337,7 +337,13 @@ export interface GuiLobbyOptions {
   userDataDir?: string;
   /** 자원 제한 (온라인 서버용). 생략하면 제한 없음(로컬 모드). */
   limits?: ResourceLimits;
+  /** 이벤트 연결 유지 신호 간격 (ms, 기본 SSE_HEARTBEAT_MS). 0이면 보내지 않는다. */
+  heartbeatMs?: number;
 }
+
+/** 이벤트 연결(SSE) 유지 신호 간격. 터널/프록시는 한동안 데이터가 없는 연결을 끊기도 하므로(흔히 60~100초),
+ *  그보다 짧게 SSE 주석 줄(": ping")을 보낸다. 브라우저 EventSource는 주석 줄을 무시한다. */
+export const SSE_HEARTBEAT_MS = 25_000;
 
 /** 온라인 서버의 자원 제한 (1.2 4단계). */
 export interface ResourceLimits {
@@ -928,8 +934,10 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       }
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
+        "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
+        // 프록시가 이벤트를 모아 두지 않고 바로 흘려보내게 한다
+        "X-Accel-Buffering": "no",
       });
       res.write(`data: ${connectMessage(room)}\n\n`);
       room.sseClients.add(res);
@@ -1022,8 +1030,18 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     res.writeHead(405).end("Method not allowed");
   });
 
+  const heartbeatMs = lobby?.heartbeatMs ?? SSE_HEARTBEAT_MS;
+  const heartbeatTimer =
+    heartbeatMs > 0
+      ? setInterval(() => {
+          for (const room of rooms.values()) sendToRoom(room, ": ping\n\n");
+        }, heartbeatMs)
+      : null;
+  heartbeatTimer?.unref();
+
   server.on("close", () => {
     if (sweepTimer) clearInterval(sweepTimer);
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
   });
 
   // 같은 스레드에서 도는 대국만 세션을 돌려준다 (worker 대국은 null)

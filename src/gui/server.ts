@@ -35,6 +35,8 @@ const { server } = createGuiLobbyServer({
     : {}),
   engine,
 });
-server.listen(PORT, () => {
-  console.log(`Seongah Majak GUI: http://localhost:${PORT}${access ? " (초대 코드 입장)" : ""}, 엔진 worker ${engine.size}개`);
+// HOST를 지정하면 그 주소에서만 받는다 (예: 터널로만 공개할 때 127.0.0.1). 기본은 모든 주소.
+const HOST = process.env.HOST || undefined;
+server.listen(PORT, HOST, () => {
+  console.log(`Seongah Majak GUI: http://localhost:${PORT}${HOST ? ` (${HOST}에서만 받음)` : ""}${access ? " (초대 코드 입장)" : ""}, 엔진 worker ${engine.size}개`);
 });

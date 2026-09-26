@@ -231,3 +231,22 @@ describe("요청 본문 크기 제한 (모든 서버)", () => {
     for (let i = 0; i < 50; i++) expect((await fetch(`${baseUrl}/speed`, { method: "POST", body: JSON.stringify({ speed: "fast" }) })).status).toBe(204);
   });
 });
+
+describe("이벤트 연결 유지 신호 (heartbeat)", () => {
+  it("연결된 이벤트 스트림에 주기적으로 주석 줄을 보내고, 프록시 버퍼링을 끄는 헤더를 붙인다", async () => {
+    const s = await startOnline({}, { heartbeatMs: 100 });
+    const a = await s.enter("A");
+    const res = await a.request("/events");
+    expect(res.headers.get("x-accel-buffering")).toBe("no");
+    const reader = res.body!.getReader();
+    cleanups.push(() => reader.cancel().catch(() => {}));
+    let text = "";
+    const deadline = Date.now() + 3000;
+    while (!/: ping\n\n[\s\S]*: ping\n\n/.test(text) && Date.now() < deadline) {
+      const { value } = await reader.read();
+      text += Buffer.from(value!).toString("utf-8");
+    }
+    expect(text.startsWith("data: ")).toBe(true); // 첫 메시지(로비)는 그대로
+    expect(text.match(/: ping\n\n/g)!.length).toBeGreaterThanOrEqual(2);
+  });
+});
