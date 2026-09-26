@@ -23,19 +23,58 @@ export function parseGameArgs(args: readonly string[]): { mode: GuiGameMode; see
   return { mode, seed: positional[0], saveReplays };
 }
 
-export function createGuiGame(mode: GuiGameMode, seed: string): GameState {
-  if (mode === "yonma") {
-    return new GameState({
-      rules: MAJSOUL_YONMA_RULES,
-      seed,
-      characterProfiles: [null, getCharacterProfile("jegalmina"), getCharacterProfile("jegalnahui"), getCharacterProfile("byeonari")],
-      controllers: ["human", undefined, undefined, undefined],
-    });
+/** 상대 좌석(seat 1..)의 기본 캐릭터. 시작 화면의 초기값이자 CLI/테스트가 상대를 지정하지 않을 때의 구성. */
+export const DEFAULT_OPPONENTS: Record<GuiGameMode, readonly string[]> = {
+  sanma: ["jegalmina", "jegalnahui"],
+  yonma: ["jegalmina", "jegalnahui", "byeonari"],
+};
+
+export function playerCountOf(mode: GuiGameMode): number {
+  return mode === "yonma" ? 4 : 3;
+}
+
+/** 시작 화면에서 고른 대국 구성. seed가 없으면 호출자가 새로 만든다. */
+export interface GuiGameConfig {
+  mode: GuiGameMode;
+  opponents: string[];
+  seed?: string;
+  saveReplays: boolean;
+}
+
+const MAX_SEED_LENGTH = 100;
+
+/** 클라이언트가 보낸 구성을 검증하고 정규화한다 (legacy characterId는 정식 id로 바꾼다).
+ *  한 판에 같은 캐릭터가 두 번 앉을 수는 없다 - 이름표로 구분할 수 없기 때문이다. */
+export function parseGuiGameConfig(input: unknown): GuiGameConfig {
+  if (typeof input !== "object" || input === null) throw new Error("대국 설정이 비어 있습니다");
+  const raw = input as Record<string, unknown>;
+  const mode = parseGuiMode(typeof raw.mode === "string" ? raw.mode : String(raw.mode));
+  if (!Array.isArray(raw.opponents)) throw new Error("상대 목록(opponents)이 필요합니다");
+  const expected = playerCountOf(mode) - 1;
+  if (raw.opponents.length !== expected) throw new Error(`상대는 ${expected}명이어야 합니다`);
+  const opponents = raw.opponents.map((id) => {
+    if (typeof id !== "string") throw new Error("상대 characterId는 문자열이어야 합니다");
+    return getCharacterProfile(id).characterId;
+  });
+  if (new Set(opponents).size !== opponents.length) throw new Error("같은 캐릭터를 두 좌석에 앉힐 수 없습니다");
+  let seed: string | undefined;
+  if (raw.seed !== undefined && raw.seed !== null) {
+    if (typeof raw.seed !== "string") throw new Error("시드는 문자열이어야 합니다");
+    const trimmed = raw.seed.trim();
+    if (trimmed.length > MAX_SEED_LENGTH) throw new Error(`시드는 ${MAX_SEED_LENGTH}자 이하여야 합니다`);
+    if (trimmed !== "") seed = trimmed;
   }
+  if (raw.saveReplays !== undefined && typeof raw.saveReplays !== "boolean") throw new Error("saveReplays는 true/false여야 합니다");
+  return { mode, opponents, ...(seed !== undefined ? { seed } : {}), saveReplays: raw.saveReplays === true };
+}
+
+export function createGuiGame(mode: GuiGameMode, seed: string, opponents: readonly string[] = DEFAULT_OPPONENTS[mode]): GameState {
+  if (opponents.length !== playerCountOf(mode) - 1) throw new Error(`${mode}: 상대는 ${playerCountOf(mode) - 1}명이어야 합니다`);
+  const profiles = opponents.map((id) => getCharacterProfile(id));
   return new GameState({
-    rules: DEFAULT_SANMA_RULES,
+    rules: mode === "yonma" ? MAJSOUL_YONMA_RULES : DEFAULT_SANMA_RULES,
     seed,
-    characterProfiles: [null, getCharacterProfile("jegalmina"), getCharacterProfile("jegalnahui")],
-    controllers: ["human", undefined, undefined],
+    characterProfiles: [null, ...profiles],
+    controllers: ["human", ...profiles.map(() => undefined)],
   });
 }

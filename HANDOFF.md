@@ -71,10 +71,15 @@
 - `src/core/decisions.ts`: Request/Response 타입 전부 (`discard`, `call_pon|call_daiminkan|ankan|kakan|kita`, `ron`, `tsumo`,
   `chi`, `nine_terminals`)
 - `src/gui/gameSetup.ts`: `--mode`/`--save-replays` 인자 해석과 게임 생성 (GUI 서버와 CLI 공용). 산마/4마는 여기서 규칙과
-  좌석 구성만 다르다.
+  좌석 구성만 다르다. 시작 화면이 보내는 구성(`parseGuiGameConfig`: 모드, 상대 characterId, 시드, 리플레이 저장)도 여기서 검증한다.
+- `src/gui/characterRoster.ts`: 시작 화면용 캐릭터 목록. `CharacterProfile`은 읽기만 하고, 화면 전용 정보(archetype 한국어 표기
+  `ARCHETYPE_LABELS`, 선택 필드 `CHARACTER_PORTRAITS`)는 여기 둔다. 초상화는 아직 없고, 시작 화면은 텍스트/수치만으로 완성된
+  형태다(임시 아바타나 빈 이미지 영역을 만들지 않는다). 초상화가 생기면 여기에 등록하고 그때 카드 레이아웃을 확장한다.
 - `src/gui/guiSession.ts`: 여러 국을 한 `GameState`로 잇는 세션(`decision|hand_end|game_end`), 응답 사전 검증
 - `src/gui/createGuiServer.ts`, `src/gui/server.ts`: HTTP + SSE 서버. `/events`(상태 스트림), `POST /respond`, `POST /continue`.
   접속 시 현재 요청을 그대로 다시 보내므로 새로고침 복구가 된다. 장면 재생 중에는 응답을 받지 않는다.
+  `createGuiServer(game)`은 게임 하나에 묶인 서버(테스트용), `createGuiLobbyServer()`는 `npm run play:gui`가 쓰는 시작 화면 서버다:
+  `setup` 메시지 → `POST /start`(구성) → 게임 → game_end에서 `POST /setup`으로 시작 화면 복귀. 게임마다 GameHost를 새로 만든다.
 - `src/gui/public/`: 바닐라 JS 클라이언트 (`app.js`, `audioManager.js`, `style.css`, `index.html`). 4-position 작탁 하나로
   산마/4마를 함께 그린다(좌석 번호 하드코딩 없이 내 좌석 기준 상대 위치). 개발 중 프런트 파일은 `Cache-Control: no-store`.
 - `src/cli/humanPlayDriver.ts`(요청별 입력 처리), `src/cli/humanPlayCli.ts`(진입점, 한 국만 진행)
@@ -152,7 +157,7 @@
 - **CustomAI는 미구현**: `ControllerKind`의 `"customAI"`는 예약 슬롯일 뿐이고, 이 값으로 `GameState`를 만들면 생성자가
   throw한다 (`GameState: controller kind "customAI" is not implemented yet`).
 - replay viewer/timeline 없음. GUI는 게임이 끝날 때 한 번만 replay를 저장하며, 서버가 게임 도중 죽으면 복구하지 않는다.
-- GUI는 사람을 seat 0, 상대는 고정 CharacterAI(산마: 제갈 미나·제갈 나희, 4마: +변아리)로 시작한다. 시작 화면/좌석 선택 없음.
+- GUI는 사람을 seat 0에 앉힌다. 상대는 시작 화면에서 고르며 기본값은 산마: 제갈 미나·제갈 나희, 4마: +변아리. 사람 좌석 선택은 없다.
 - CLI는 한 국만 진행한다.
 - 전체 회귀가 약 15~17분이라, 작업 중에는 관련 파일만 돌리고 안정된 시점에만 전체를 돌린다.
 - 루트의 `*-full-regression.log`, `validation-phaseC-partial-baseline.md`는 과거 검증 기록이다. 새 기준 로그는 덮어쓰지 말고
@@ -160,7 +165,7 @@
 
 ## 10. 1.0 이후 후보 (우선순위 없음)
 
-CustomAI 구현과 설정/편집 UI, replay viewer(재생/timeline/seek), 캐릭터 보이스와 화료 컷인, 시작 화면과 좌석/상대
+CustomAI 구현과 설정/편집 UI, replay viewer(재생/timeline/seek), 캐릭터 보이스와 화료 컷인, 캐릭터 초상화, 사람 좌석
 선택, 추가 presentation 옵션과 UI polish, 추가 효과음, 새로운 마작 룰, 5000판급 장기 자체 대국 검증(Phase C 기준선 참고).
 
 ## 11. 다음 작업자 체크리스트

@@ -10,6 +10,8 @@ import { GuiSession, type WatchFrame } from "./guiSession.js";
 import { AudioCueTracker, toPublicAction, type AudioCue, type PublicAction } from "./audioCues.js";
 import type { DecisionResponse } from "../core/decisions.js";
 import { buildGameReplayRecord, replaySeatsFromGame, writeGameReplay } from "../sim/replayRecorder.js";
+import { buildCharacterRoster } from "./characterRoster.js";
+import { DEFAULT_OPPONENTS, createGuiGame, parseGuiGameConfig, playerCountOf, type GuiGameConfig, type GuiGameMode } from "./gameSetup.js";
 
 export const PUBLIC_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "public");
 
@@ -54,14 +56,20 @@ function holdMultiplier(actions: PublicAction[]): number {
   return 1;
 }
 
-/** Builds (but does not start listening) an http.Server driving `game` via one GuiSession -
- *  one human seat, continuing across every hand of the game on the same GameState until
- *  GuiSession reaches "game_end" (see GuiSession's own doc comment for the phase model). */
-export function createGuiServer(game: GameState, options: GuiServerOptions = {}): GuiServerHandle {
+/** 한 게임(GameState 하나)을 GuiSession으로 진행하며 SSE 메시지를 만든다. HTTP 서버는 이것을 게임마다 새로 만든다. */
+interface GameHost {
+  session: GuiSession;
+  connectMessage(): string;
+  isPlaying(): boolean;
+  respond(response: DecisionResponse): void;
+  continueToNextHand(): void;
+}
+
+/** `canStartNewGame`: 게임이 끝났을 때 클라이언트가 "새 대국" 버튼을 보여줄지 (시작 화면이 있는 서버만). */
+function createGameHost(game: GameState, options: GuiServerOptions, broadcast: (payload: string) => void, canStartNewGame: boolean): GameHost {
   const frameDelayMs = options.frameDelayMs ?? DEFAULT_FRAME_DELAY_MS;
   const session = new GuiSession(game);
   session.takeFrames(); // 접속 전의 AI 턴은 재생하지 않는다
-  const sseClients = new Set<import("node:http").ServerResponse>();
 
   let replaySaved = false;
   function saveReplayIfFinished(): void {
@@ -93,7 +101,7 @@ export function createGuiServer(game: GameState, options: GuiServerOptions = {})
   function currentStateMessage(extra: { cues: AudioCue[]; cueBase?: number }): string {
     const phase = session.getPhase();
     if (phase === "game_end") {
-      return JSON.stringify({ type: "game_end", event: session.getGameEndEvent(), handEvent: session.getHandEndEvent(), characterNames, ...extra });
+      return JSON.stringify({ type: "game_end", event: session.getGameEndEvent(), handEvent: session.getHandEndEvent(), characterNames, canStartNewGame, ...extra });
     }
     if (phase === "hand_end") {
       return JSON.stringify({ type: "hand_end", event: session.getHandEndEvent(), characterNames, ...extra });
@@ -145,8 +153,7 @@ export function createGuiServer(game: GameState, options: GuiServerOptions = {})
     const step = (): void => {
       if (i < frames.length) {
         lastWatchMessage = watchMessage(frames[i++]!);
-        const payload = `data: ${lastWatchMessage}\n\n`;
-        for (const res of sseClients) res.write(payload);
+        broadcast(`data: ${lastWatchMessage}\n\n`);
         setTimeout(step, lastHold).unref();
       } else {
         playing = false;
@@ -162,9 +169,139 @@ export function createGuiServer(game: GameState, options: GuiServerOptions = {})
     const cues = cueTracker.cuesAfter(lastBroadcastSeq);
     lastBroadcastSeq = cueTracker.latestSeq();
     cueTracker.discardThrough(lastBroadcastSeq);
-    const payload = `data: ${currentStateMessage({ cues })}\n\n`;
-    for (const res of sseClients) res.write(payload);
+    broadcast(`data: ${currentStateMessage({ cues })}\n\n`);
   }
+
+  return {
+    session,
+    connectMessage,
+    isPlaying: () => playing,
+    respond(response) {
+      if (playing) throw new Error("GuiServer: 장면 재생 중에는 응답할 수 없습니다");
+      session.respond(response);
+      saveReplayIfFinished();
+      broadcastAfterAction();
+    },
+    continueToNextHand() {
+      if (playing) throw new Error("GuiServer: 장면 재생 중에는 진행할 수 없습니다");
+      session.continueToNextHand();
+      broadcastAfterAction();
+    },
+  };
+}
+
+/** 시작 화면(대국 설정)부터 여는 서버의 옵션. 설정 화면의 초기값과, 게임마다 쓸 리플레이 저장 위치를 받는다. */
+export interface GuiLobbyOptions {
+  frameDelayMs?: number;
+  /** 시작 화면 초기값 (CLI 인자에서 온다). opponents를 생략하면 모드별 기본 상대. */
+  defaults?: { mode?: GuiGameMode; seed?: string; saveReplays?: boolean; opponents?: Partial<Record<GuiGameMode, string[]>> };
+  replayDir?: string;
+  onReplaySaved?: (path: string) => void;
+  onGameStarted?: (config: GuiGameConfig & { seed: string }) => void;
+}
+
+export interface GuiLobbyServerHandle {
+  server: Server;
+  /** 진행 중인 게임의 세션 (시작 화면에서는 null) */
+  getSession(): GuiSession | null;
+}
+
+/** Builds (but does not start listening) an http.Server driving `game` via one GuiSession -
+ *  one human seat, continuing across every hand of the game on the same GameState until
+ *  GuiSession reaches "game_end" (see GuiSession's own doc comment for the phase model). */
+export function createGuiServer(game: GameState, options: GuiServerOptions = {}): GuiServerHandle {
+  const { server, getSession } = buildServer({ game, options }, null);
+  return { server, session: getSession()! };
+}
+
+/** 시작 화면에서 모드/상대/시드를 고른 뒤 게임을 시작하고, 게임이 끝나면 다시 시작 화면으로 돌아갈 수 있는 서버. */
+export function createGuiLobbyServer(options: GuiLobbyOptions = {}): GuiLobbyServerHandle {
+  return buildServer(null, options);
+}
+
+function buildServer(initial: { game: GameState; options: GuiServerOptions } | null, lobby: GuiLobbyOptions | null): GuiLobbyServerHandle {
+  const sseClients = new Set<import("node:http").ServerResponse>();
+  const broadcast = (payload: string): void => {
+    for (const res of sseClients) res.write(payload);
+  };
+  let host: GameHost | null = initial ? createGameHost(initial.game, initial.options, broadcast, false) : null;
+
+  const roster = lobby ? buildCharacterRoster() : [];
+  const defaults = lobby?.defaults ?? {};
+  /** 시작 화면에 채워 둘 값: 처음에는 CLI 기본값, 한 판을 한 뒤에는 마지막으로 고른 구성 */
+  let lastSetup = {
+    mode: defaults.mode ?? "sanma",
+    opponents: {
+      sanma: [...(defaults.opponents?.sanma ?? DEFAULT_OPPONENTS.sanma)],
+      yonma: [...(defaults.opponents?.yonma ?? DEFAULT_OPPONENTS.yonma)],
+    } as Record<GuiGameMode, string[]>,
+    seed: defaults.seed ?? "",
+    saveReplays: defaults.saveReplays ?? false,
+  };
+
+  function setupMessage(): string {
+    return JSON.stringify({
+      type: "setup",
+      roster,
+      playerCounts: { sanma: playerCountOf("sanma"), yonma: playerCountOf("yonma") },
+      defaults: lastSetup,
+    });
+  }
+
+  function connectMessage(): string {
+    return host ? host.connectMessage() : setupMessage();
+  }
+
+  function startGame(config: GuiGameConfig): void {
+    if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
+    if (host && (host.isPlaying() || host.session.getPhase() !== "game_end")) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
+    const seed = config.seed ?? `gui-${Date.now()}`;
+    lastSetup = {
+      mode: config.mode,
+      opponents: { ...lastSetup.opponents, [config.mode]: [...config.opponents] },
+      seed: config.seed ?? "",
+      saveReplays: config.saveReplays,
+    };
+    const game = createGuiGame(config.mode, seed, config.opponents);
+    const options: GuiServerOptions = {
+      ...(lobby.frameDelayMs !== undefined ? { frameDelayMs: lobby.frameDelayMs } : {}),
+      ...(config.saveReplays
+        ? {
+            replay: {
+              label: `human-${config.mode}-${seed}`,
+              ...(lobby.replayDir !== undefined ? { dir: lobby.replayDir } : {}),
+              ...(lobby.onReplaySaved ? { onSaved: lobby.onReplaySaved } : {}),
+            },
+          }
+        : {}),
+    };
+    host = createGameHost(game, options, broadcast, true);
+    lobby.onGameStarted?.({ ...config, seed });
+    broadcast(`data: ${host.connectMessage()}\n\n`);
+  }
+
+  function returnToSetup(): void {
+    if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
+    if (host && (host.isPlaying() || host.session.getPhase() !== "game_end")) throw new Error("GuiServer: 게임이 끝난 뒤에만 시작 화면으로 돌아갈 수 있습니다");
+    host = null;
+    broadcast(`data: ${setupMessage()}\n\n`);
+  }
+
+  function readBody(req: import("node:http").IncomingMessage, onBody: (body: string) => void): void {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => onBody(body));
+  }
+
+  function reply(res: import("node:http").ServerResponse, action: () => void): void {
+    try {
+      action();
+      res.writeHead(204).end();
+    } catch (err) {
+      res.writeHead(400, { "Content-Type": "text/plain" }).end(String(err instanceof Error ? err.message : err));
+    }
+  }
+
 
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -182,32 +319,30 @@ export function createGuiServer(game: GameState, options: GuiServerOptions = {})
     }
 
     if (req.method === "POST" && url.pathname === "/respond") {
-      let body = "";
-      req.on("data", (chunk) => (body += chunk));
-      req.on("end", () => {
-        try {
-          const response = JSON.parse(body) as DecisionResponse;
-          if (playing) throw new Error("GuiServer: 장면 재생 중에는 응답할 수 없습니다");
-          session.respond(response);
-          saveReplayIfFinished();
-          broadcastAfterAction();
-          res.writeHead(204).end();
-        } catch (err) {
-          res.writeHead(400, { "Content-Type": "text/plain" }).end(String(err instanceof Error ? err.message : err));
-        }
-      });
+      readBody(req, (body) =>
+        reply(res, () => {
+          if (!host) throw new Error("GuiServer: 진행 중인 게임이 없습니다");
+          host.respond(JSON.parse(body) as DecisionResponse);
+        })
+      );
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/continue") {
-      try {
-        if (playing) throw new Error("GuiServer: 장면 재생 중에는 진행할 수 없습니다");
-        session.continueToNextHand();
-        broadcastAfterAction();
-        res.writeHead(204).end();
-      } catch (err) {
-        res.writeHead(400, { "Content-Type": "text/plain" }).end(String(err instanceof Error ? err.message : err));
-      }
+      reply(res, () => {
+        if (!host) throw new Error("GuiServer: 진행 중인 게임이 없습니다");
+        host.continueToNextHand();
+      });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/start") {
+      readBody(req, (body) => reply(res, () => startGame(parseGuiGameConfig(JSON.parse(body)))));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/setup") {
+      reply(res, returnToSetup);
       return;
     }
 
@@ -232,5 +367,5 @@ export function createGuiServer(game: GameState, options: GuiServerOptions = {})
     res.writeHead(405).end("Method not allowed");
   });
 
-  return { server, session };
+  return { server, getSession: () => host?.session ?? null };
 }

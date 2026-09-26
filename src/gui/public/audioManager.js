@@ -164,6 +164,12 @@ const AudioManager = (() => {
     if (typeof seq === "number") lastSeq = Math.max(lastSeq, seq);
   }
 
+  /** 새 게임이 시작되면 seq가 처음부터 다시 매겨지므로 기준점을 비운다. */
+  function reset() {
+    lastSeq = 0;
+    queue.length = 0;
+  }
+
   /** 받은 신호를 순서대로 재생 대기열에 넣는다 (이미 본 seq는 무시). */
   function enqueueCues(cues) {
     for (const cue of cues || []) {
@@ -232,5 +238,5 @@ const AudioManager = (() => {
   window.addEventListener("pointerdown", unlock);
   window.addEventListener("keydown", unlock);
 
-  return { play, enqueueCues, setBase, setMaster, setMuted, setCategoryVolume, mountControls, keysForCue, MANIFEST };
+  return { play, enqueueCues, setBase, reset, setMaster, setMuted, setCategoryVolume, mountControls, keysForCue, MANIFEST };
 })();

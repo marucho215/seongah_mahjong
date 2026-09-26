@@ -35,14 +35,15 @@ npm install
 ### Play in the browser (GUI)
 
 ```bash
-npm run play:gui                           # sanma, random seed
-npm run play:gui -- my-seed                # sanma, fixed seed
-npm run play:gui -- --mode yonma           # yonma
-npm run play:gui -- my-seed --mode yonma --save-replays
+npm run play:gui                           # opens the start screen
+npm run play:gui -- my-seed --mode yonma --save-replays   # same, with these values pre-filled
 ```
 
-Open the printed `http://localhost:3000` (set `PORT` to change it). You sit at seat 0; the opponents are
-CharacterAI seats (2 in sanma, 3 in yonma). One process plays one whole game (all hands, then final standings).
+Open the printed `http://localhost:3000` (set `PORT` to change it). The browser opens on a start screen: pick sanma
+or yonma, choose a character for each opponent seat (every registered character is listed with its playstyle and
+its main tendencies), optionally set a seed and replay saving, then start. Command-line arguments only pre-fill that
+screen. You sit at seat 0. A game runs all hands to the final standings; from there "새 대국 설정" returns to the start
+screen with the last choices pre-filled.
 
 GUI features: one shared 4-position table for sanma and yonma, click-to-discard with riichi confirmation, action bar
 for every decision (chi options are drawn as tiles), the AI's discards/calls/riichi/wins replayed one at a time,
@@ -116,6 +117,8 @@ and full human + AI games in both modes.
 - **CustomAI** is not implemented. The `customAI` controller kind is only a reserved slot: creating a game with it
   throws. User-authored AI and any editor/settings UI are future work.
 - No replay viewer / timeline / seek, no character voices or win cut-ins, no additional presentation options.
-- The GUI always seats the human at seat 0 with fixed CharacterAI opponents (no start screen or seat/opponent picker).
+- The GUI always seats the human at seat 0 (opponents are chosen on the start screen; the human's seat is not).
+- Character portraits are not included yet. The start screen is text-only by design; `CHARACTER_PORTRAITS` in
+  `src/gui/characterRoster.ts` is the optional slot for them.
 - The CLI plays one hand per run.
 - Rank/room/account progression scoring is out of scope.

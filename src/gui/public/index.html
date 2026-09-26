@@ -6,6 +6,9 @@
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
+  <!-- 시작 화면: 모드/상대/시드를 고른다. 텍스트와 수치만으로 구성한다 (app.js의 renderSetup). -->
+  <div id="setup-screen" class="hidden"></div>
+
   <!-- One table, four visual positions (bottom/right/top/left); built by app.js so 3- and
        4-player games share the same DOM and only hide the unused position. -->
   <div id="table" data-players="3"></div>

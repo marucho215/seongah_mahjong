@@ -1011,11 +1011,22 @@ function renderGameEndExtra(gameEndEvent, mySeat) {
   panel.appendChild(list);
 }
 
-function renderGameEnd(gameEndEvent, handEndEvent, mySeat) {
+function renderGameEnd(gameEndEvent, handEndEvent, mySeat, canStartNewGame) {
   console.log("[debug] game_end event:", gameEndEvent);
   if (handEndEvent) renderHandEndPanel(handEndEvent, mySeat, true);
   else document.getElementById("hand-end-panel").innerHTML = "";
   renderGameEndExtra(gameEndEvent, mySeat);
+  if (canStartNewGame) {
+    const panel = document.getElementById("hand-end-panel");
+    const newGameBtn = el("button", "continue-button");
+    newGameBtn.textContent = "새 대국 설정";
+    newGameBtn.addEventListener("click", () => {
+      AudioManager.play("ui.confirm");
+      newGameBtn.disabled = true;
+      fetch("/setup", { method: "POST" });
+    });
+    panel.appendChild(newGameBtn);
+  }
   document.getElementById("hand-end-overlay").classList.remove("hidden");
   clearActionBar();
 }
@@ -1041,6 +1052,329 @@ function handleMessage(msg) {
   // 접속 직후 메시지의 cueBase 이하는 과거 신호라 재생하지 않는다.
   AudioManager.setBase(msg.cueBase);
   AudioManager.enqueueCues(msg.cues);
+}
+
+// --- 시작 화면 (대국 설정): 모드, 상대 좌석, 시드를 고른다. 캐릭터 정보는 서버의 roster를 그대로 쓴다.
+// 카드는 이름 · 성향 · 수치만으로 완성된 형태다. roster 항목의 portrait는 선택 필드로, 아직 어느
+// 캐릭터에도 없으며 이 화면은 그 필드를 읽지 않는다 (초상화가 제공되면 카드 레이아웃을 그때 확장한다).
+
+const TRAIT_LABELS = [
+  ["skill", "실력"],
+  ["aggression", "공격"],
+  ["defense", "수비"],
+  ["riichiBias", "리치"],
+  ["callBias", "울기"],
+  ["valueGreed", "타점"],
+  ["riskTolerance", "위험 감수"],
+];
+
+const SORT_OPTIONS = [
+  ["registered", "등록순"],
+  ["name", "이름순"],
+  ["skill", "실력 높은 순"],
+  ["aggression", "공격 높은 순"],
+  ["defense", "수비 높은 순"],
+];
+
+const MODE_OPTIONS = [
+  ["sanma", "산마", "3인"],
+  ["yonma", "4마", "4인"],
+];
+
+let setupState = null;
+
+/** 상대 좌석 i(0부터, seat i+1)의 자리 이름: 다음 차례가 하가, 이전 차례가 상가, 4인의 맞은편이 대면. */
+function opponentSeatLabel(index, playerCount) {
+  const seat = index + 1;
+  if (seat === 1) return "하가";
+  if (seat === playerCount - 1) return "상가";
+  return "대면";
+}
+
+function initSetupState(msg) {
+  const keepUi = setupState ? { activeSlot: 0, sort: setupState.sort } : { activeSlot: 0, sort: "registered" };
+  setupState = {
+    roster: msg.roster,
+    playerCounts: msg.playerCounts,
+    mode: msg.defaults.mode,
+    opponents: { sanma: [...msg.defaults.opponents.sanma], yonma: [...msg.defaults.opponents.yonma] },
+    seed: msg.defaults.seed,
+    saveReplays: msg.defaults.saveReplays,
+    pending: false,
+    error: "",
+    ...keepUi,
+  };
+}
+
+function rosterEntry(characterId) {
+  return setupState.roster.find((c) => c.characterId === characterId) ?? null;
+}
+
+function currentOpponents() {
+  return setupState.opponents[setupState.mode];
+}
+
+/** 활성 좌석에 캐릭터를 앉힌다. 이미 다른 좌석에 있으면 두 좌석을 맞바꾼다. */
+function assignToActiveSlot(characterId) {
+  const opponents = currentOpponents();
+  const slot = setupState.activeSlot;
+  const existing = opponents.indexOf(characterId);
+  if (existing === slot) return;
+  if (existing >= 0) opponents[existing] = opponents[slot];
+  opponents[slot] = characterId;
+}
+
+function randomizeOpponents() {
+  const pool = setupState.roster.map((c) => c.characterId);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  setupState.opponents[setupState.mode] = pool.slice(0, currentOpponents().length);
+}
+
+function sortedRoster() {
+  const list = [...setupState.roster];
+  const key = setupState.sort;
+  if (key === "name") list.sort((a, b) => a.displayName.localeCompare(b.displayName, "ko"));
+  else if (key !== "registered") list.sort((a, b) => b.traits[key] - a.traits[key]);
+  return list;
+}
+
+function traitValueText(v) {
+  return String(Math.round(v * 100));
+}
+
+function renderSetupModeGroup() {
+  const group = el("div", "setup-segmented", { role: "radiogroup", "aria-label": "규칙" });
+  for (const [mode, label, sub] of MODE_OPTIONS) {
+    const btn = el("button", "setup-segment", { type: "button", role: "radio", "aria-checked": String(setupState.mode === mode) });
+    const main = el("span", "segment-main");
+    main.textContent = label;
+    const small = el("span", "segment-sub");
+    small.textContent = sub;
+    btn.append(main, small);
+    btn.addEventListener("click", () => {
+      if (setupState.mode === mode) return;
+      setupState.mode = mode;
+      setupState.activeSlot = 0;
+      renderSetup();
+    });
+    group.appendChild(btn);
+  }
+  return group;
+}
+
+function renderSetupSeats() {
+  const list = el("ol", "setup-seats");
+  const me = el("li", "setup-seat is-me");
+  const meWhere = el("span", "seat-where");
+  meWhere.textContent = "나";
+  const meName = el("span", "seat-name");
+  meName.textContent = "플레이어";
+  me.append(meWhere, meName);
+  list.appendChild(me);
+
+  const opponents = currentOpponents();
+  const n = setupState.playerCounts[setupState.mode];
+  opponents.forEach((id, i) => {
+    const entry = rosterEntry(id);
+    const li = el("li");
+    const btn = el("button", "setup-seat" + (i === setupState.activeSlot ? " is-active" : ""), { type: "button", "aria-pressed": String(i === setupState.activeSlot) });
+    const where = el("span", "seat-where");
+    where.textContent = opponentSeatLabel(i, n);
+    const name = el("span", "seat-name");
+    name.textContent = entry ? entry.displayName : id;
+    const arch = el("span", "seat-archetype");
+    arch.textContent = entry ? entry.archetypeLabel : "";
+    btn.append(where, name, arch);
+    btn.addEventListener("click", () => {
+      setupState.activeSlot = i;
+      renderSetup();
+    });
+    li.appendChild(btn);
+    list.appendChild(li);
+  });
+  return list;
+}
+
+function renderCharacterCard(entry) {
+  const opponents = currentOpponents();
+  const n = setupState.playerCounts[setupState.mode];
+  const seatIndex = opponents.indexOf(entry.characterId);
+  const card = el("button", "character-card" + (seatIndex >= 0 ? " is-seated" : ""), { type: "button" });
+
+  const head = el("div", "card-head");
+  const name = el("span", "card-name");
+  name.textContent = entry.displayName;
+  head.appendChild(name);
+  if (seatIndex >= 0) {
+    const tag = el("span", "card-seat");
+    tag.textContent = opponentSeatLabel(seatIndex, n);
+    head.appendChild(tag);
+  }
+  const arch = el("div", "card-archetype");
+  arch.textContent = entry.archetypeLabel;
+
+  const traits = el("dl", "card-traits");
+  for (const [key, label] of TRAIT_LABELS) {
+    const value = entry.traits[key];
+    const dt = el("dt");
+    dt.textContent = label;
+    const dd = el("dd");
+    const meter = el("span", "trait-meter", { "aria-hidden": "true" });
+    const fill = el("span", "trait-fill");
+    fill.style.width = `${Math.round(value * 100)}%`;
+    meter.appendChild(fill);
+    const num = el("span", "trait-value");
+    num.textContent = traitValueText(value);
+    dd.append(meter, num);
+    traits.append(dt, dd);
+  }
+
+  card.append(head, arch, traits);
+  card.setAttribute("aria-label", `${entry.displayName}, ${entry.archetypeLabel}`);
+  card.addEventListener("click", () => {
+    assignToActiveSlot(entry.characterId);
+    renderSetup();
+  });
+  return card;
+}
+
+function setupSection(title, ...children) {
+  const section = el("section", "setup-section");
+  const h = el("h2", "setup-heading");
+  h.textContent = title;
+  section.append(h, ...children);
+  return section;
+}
+
+function renderSetup() {
+  const root = document.getElementById("setup-screen");
+  const scrollTop = root.querySelector(".setup-roster-list")?.scrollTop ?? 0;
+  root.innerHTML = "";
+
+  const layout = el("div", "setup-layout");
+
+  // 왼쪽(좁은 화면에서는 위): 규칙, 좌석, 옵션, 시작
+  const side = el("aside", "setup-side");
+  const header = el("header", "setup-header");
+  const h1 = el("h1");
+  h1.textContent = "새 대국";
+  const lead = el("p", "setup-lead");
+  lead.textContent = "좌석을 고른 뒤 목록에서 캐릭터를 눌러 앉힙니다.";
+  header.append(h1, lead);
+  side.appendChild(header);
+
+  side.appendChild(setupSection("규칙", renderSetupModeGroup()));
+
+  const randomBtn = el("button", "setup-link-button", { type: "button" });
+  randomBtn.textContent = "무작위로 채우기";
+  randomBtn.addEventListener("click", () => {
+    randomizeOpponents();
+    renderSetup();
+  });
+  side.appendChild(setupSection("좌석", renderSetupSeats(), randomBtn));
+
+  const seedLabel = el("label", "setup-field");
+  const seedText = el("span", "field-label");
+  seedText.textContent = "시드";
+  const seedInput = el("input", "setup-input", { type: "text", maxlength: "100", placeholder: "비워 두면 무작위", spellcheck: "false" });
+  seedInput.value = setupState.seed;
+  seedInput.addEventListener("input", () => (setupState.seed = seedInput.value));
+  seedLabel.append(seedText, seedInput);
+
+  const replayLabel = el("label", "setup-check");
+  const replayInput = el("input", "", { type: "checkbox" });
+  replayInput.checked = setupState.saveReplays;
+  replayInput.addEventListener("change", () => (setupState.saveReplays = replayInput.checked));
+  const replayText = el("span");
+  replayText.textContent = "게임이 끝나면 리플레이 저장";
+  replayLabel.append(replayInput, replayText);
+  side.appendChild(setupSection("옵션", seedLabel, replayLabel));
+
+  const start = el("button", "setup-start", { type: "button" });
+  start.textContent = setupState.pending ? "시작하는 중..." : "대국 시작";
+  start.disabled = setupState.pending;
+  start.addEventListener("click", startGameFromSetup);
+  side.appendChild(start);
+  if (setupState.error) {
+    const err = el("p", "setup-error", { role: "alert" });
+    err.textContent = setupState.error;
+    side.appendChild(err);
+  }
+
+  // 오른쪽: 캐릭터 목록
+  const rosterPane = el("section", "setup-roster");
+  const rosterHead = el("div", "setup-roster-head");
+  const rh = el("h2", "setup-heading");
+  const n = setupState.playerCounts[setupState.mode];
+  rh.textContent = `캐릭터 ${setupState.roster.length}명`;
+  const target = el("span", "setup-roster-target");
+  target.textContent = `${opponentSeatLabel(setupState.activeSlot, n)} 좌석에 앉힐 캐릭터`;
+  const sort = el("select", "setup-select", { "aria-label": "정렬" });
+  for (const [value, label] of SORT_OPTIONS) {
+    const opt = el("option", "", { value });
+    opt.textContent = label;
+    if (value === setupState.sort) opt.selected = true;
+    sort.appendChild(opt);
+  }
+  sort.addEventListener("change", () => {
+    setupState.sort = sort.value;
+    renderSetup();
+  });
+  const titleWrap = el("div", "setup-roster-title");
+  titleWrap.append(rh, target);
+  rosterHead.append(titleWrap, sort);
+
+  const grid = el("div", "setup-roster-list");
+  for (const entry of sortedRoster()) grid.appendChild(renderCharacterCard(entry));
+  rosterPane.append(rosterHead, grid);
+
+  layout.append(side, rosterPane);
+  root.appendChild(layout);
+  grid.scrollTop = scrollTop;
+}
+
+async function startGameFromSetup() {
+  if (!setupState || setupState.pending) return;
+  AudioManager.play("ui.confirm");
+  setupState.pending = true;
+  setupState.error = "";
+  renderSetup();
+  const body = {
+    mode: setupState.mode,
+    opponents: currentOpponents(),
+    seed: setupState.seed,
+    saveReplays: setupState.saveReplays,
+  };
+  try {
+    const res = await fetch("/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(await res.text());
+    // 성공하면 서버가 첫 상태를 보내며, 그 메시지가 시작 화면을 닫는다.
+  } catch (err) {
+    setupState.pending = false;
+    setupState.error = err instanceof Error ? err.message : String(err);
+    renderSetup();
+  }
+}
+
+function showSetup(msg) {
+  initSetupState(msg);
+  document.body.classList.add("is-setup");
+  document.getElementById("hand-end-overlay").classList.add("hidden");
+  document.getElementById("setup-screen").classList.remove("hidden");
+  clearActionBar();
+  clearRecentFeed();
+  AudioManager.reset(); // 다음 게임의 효과음 seq는 1부터 다시 시작한다
+  renderSetup();
+}
+
+function hideSetup() {
+  if (!document.body.classList.contains("is-setup")) return;
+  document.body.classList.remove("is-setup");
+  document.getElementById("setup-screen").classList.add("hidden");
+  if (setupState) setupState.pending = false;
 }
 
 const FEED_TEXT = { discard: "타패", chi: "치", pon: "퐁", kan: "깡", kita: "북 빼기", riichi: "리치", ron: "론", tsumo: "쯔모" };
@@ -1073,6 +1407,11 @@ function clearRecentFeed() {
 
 function handleMessageBody(msg) {
   awaitingServer = false; // 서버가 새 상태를 보냈으니 다음 응답을 보낼 수 있다
+  if (msg.type === "setup") {
+    showSetup(msg);
+    return;
+  }
+  hideSetup();
   currentCharacterNames = msg.characterNames ?? [];
   if (msg.type === "hand_end" || msg.type === "game_end") clearRecentFeed();
   if (msg.type === "watch") {
@@ -1092,7 +1431,7 @@ function handleMessageBody(msg) {
     return;
   }
   if (msg.type === "game_end") {
-    renderGameEnd(msg.event, msg.handEvent, lastKnownMySeat);
+    renderGameEnd(msg.event, msg.handEvent, lastKnownMySeat, msg.canStartNewGame);
     return;
   }
   if (msg.type === "hand_end") {
