@@ -118,6 +118,15 @@ Funnel은 켜 둔 채로 두어도 된다(서버가 다시 켜지면 같은 주�
 
 ## 10. 문제가 생기면
 
+- **다른 기기에서 `http://localhost:3000`으로 접속하면 안 된다**: `localhost`는 "그 기기 자신"이라는 뜻이다. 노트북 밖에서는
+  반드시 Funnel 주소(`https://….ts.net`, 포트 번호 없이)로 들어온다.
+- **`'tailscale' 용어가 … 인식되지 않습니다`**: Tailscale을 설치하기 전에 열어 둔 PowerShell 창이면 창을 새로 연다. 그래도
+  안 되면 전체 경로로 실행한다: `& "C:\Program Files\Tailscale\tailscale.exe" funnel 3000`
+  (설치 여부는 `Test-Path "C:\Program Files\Tailscale\tailscale.exe"`가 `True`인지로 확인한다).
+- **`Funnel is not enabled on your tailnet.`**: 함께 나온 `https://login.tailscale.com/f/funnel?...` 링크를 브라우저로 열고,
+  같은 Tailscale 계정으로 허용한 뒤 명령을 다시 실행한다(처음 한 번만).
+- **노트북에서는 `….ts.net`이 열리는데 휴대폰에서는 안 된다**: Tailscale이 켜진 기기는 Funnel이 꺼져 있어도 내부 경로로 열린다.
+  `tailscale funnel status`에 `Funnel on`이 보이는지 확인하고, 휴대폰은 Tailscale 앱을 끄고 모바일 데이터로 시험한다.
 - **주소가 열리지 않는다**: `tailscale funnel status`로 Funnel이 켜져 있는지, 서버 창이 살아 있는지 확인한다.
   처음 켠 직후라면 몇 분 기다린다.
 - **입장 화면으로 계속 돌아간다**: 브라우저가 쿠키를 막고 있는지 확인한다(시크릿 창은 닫으면 입장 상태가 사라진다).
