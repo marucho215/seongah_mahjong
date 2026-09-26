@@ -1,7 +1,7 @@
 import { describe, expect, it, afterEach } from "vitest";
 import type { AddressInfo } from "node:net";
 import { CHARACTER_PROFILES } from "../src/ai/characterProfiles.js";
-import { ARCHETYPE_LABELS, BALANCED_TENDENCY, MAX_TENDENCIES, buildCharacterRoster, tendenciesOf } from "../src/gui/characterRoster.js";
+import { CHARACTER_PRESENTATION, buildCharacterRoster } from "../src/gui/characterRoster.js";
 import { createGuiLobbyServer, type GuiLobbyOptions } from "../src/gui/createGuiServer.js";
 import { DEFAULT_OPPONENTS, createGuiGame, parseGuiGameConfig } from "../src/gui/gameSetup.js";
 import { defaultResponse } from "./helpers/yonmaHuman.js";
@@ -41,30 +41,23 @@ async function startLobby(options: GuiLobbyOptions = {}) {
 }
 
 describe("시작 화면 캐릭터 목록 (characterRoster)", () => {
-  it("등록된 모든 캐릭터를 순서대로 담고, 성향 표기가 빠진 archetype이 없다", () => {
+  it("등록된 모든 캐릭터를 순서대로 담고, 모두 플레이 경향 문구와 태그 2~4개를 가진다", () => {
     const roster = buildCharacterRoster();
     expect(roster.map((c) => c.characterId)).toEqual(Object.keys(CHARACTER_PROFILES));
+    expect(Object.keys(CHARACTER_PRESENTATION).sort()).toEqual(Object.keys(CHARACTER_PROFILES).sort());
     for (const entry of roster) {
-      expect(ARCHETYPE_LABELS[entry.archetype], entry.characterId).toBeDefined();
-      expect(entry.archetypeLabel).toBe(ARCHETYPE_LABELS[entry.archetype]);
-      expect(["high", "mid", "low"]).toContain(entry.skillLevel);
-      expect(entry.tendencies.length).toBeGreaterThan(0);
-      expect(entry.tendencies.length).toBeLessThanOrEqual(MAX_TENDENCIES);
+      expect(entry.summary.length, entry.characterId).toBeGreaterThan(0);
+      expect(entry.tags.length, entry.characterId).toBeGreaterThanOrEqual(2);
+      expect(entry.tags.length, entry.characterId).toBeLessThanOrEqual(4);
+      expect(new Set(entry.tags).size).toBe(entry.tags.length);
     }
   });
 
-  it("내부 AI 파라미터 수치는 목록에 싣지 않는다 (문구와 숙련도 구간만)", () => {
+  it("내부 AI 수치와 archetype 식별자는 목록에 싣지 않는다", () => {
     for (const entry of buildCharacterRoster()) {
-      expect(Object.keys(entry).sort()).toEqual(["archetype", "archetypeLabel", "characterId", "displayName", "skillLevel", "tendencies"]);
+      expect(Object.keys(entry).sort()).toEqual(["characterId", "displayName", "summary", "tags"]);
+      expect(JSON.stringify(entry)).not.toContain(CHARACTER_PROFILES[entry.characterId]!.archetype);
     }
-  });
-
-  it("성향 문구는 문턱값을 크게 넘는 순이며, 해당이 없으면 균형형이다", () => {
-    const base = CHARACTER_PROFILES.jegalmina!;
-    const neutral = { ...base, aggression: 0.5, defense: 0.5, callBias: 0.4, riichiBias: 0.5, damaBias: 0.4, valueGreed: 0.5, entropy: 0.3 };
-    expect(tendenciesOf(neutral)).toEqual([BALANCED_TENDENCY]);
-    expect(tendenciesOf({ ...neutral, callBias: 0.9, aggression: 0.7 })).toEqual(["울기를 자주 사용함", "공격적인 편"]);
-    expect(tendenciesOf({ ...neutral, callBias: 0.9, aggression: 0.95, defense: 0.1, entropy: 0.9 })).toHaveLength(MAX_TENDENCIES);
   });
 
   it("초상화는 선택 필드다: 등록되지 않은 캐릭터에는 portrait 키 자체가 없다", () => {

@@ -725,6 +725,8 @@ body.is-setup #audio-controls {
   background: var(--setup-bg);
   color: #f0f0f0;
   overflow: hidden;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 #setup-screen *,
@@ -835,7 +837,7 @@ body.is-setup #audio-controls {
 }
 .setup-seat .seat-where { grid-row: 1 / span 2; font-size: 12px; color: var(--setup-muted); }
 .setup-seat .seat-name { font-size: 15px; font-weight: 600; }
-.setup-seat .seat-archetype { grid-column: 2; font-size: 12px; color: var(--setup-muted); }
+.setup-seat .seat-tags { grid-column: 2; font-size: 12px; color: var(--setup-muted); }
 .setup-seat.is-me { cursor: default; opacity: 0.75; }
 .setup-seat.is-active {
   border-color: var(--setup-accent);
@@ -967,32 +969,27 @@ body.is-setup #audio-controls {
   background: var(--setup-accent);
   color: #1b1b1b;
 }
-.card-archetype {
-  font-size: 12px;
-  color: var(--setup-muted);
-  margin-bottom: 8px;
-}
-
-.card-skill {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+.card-summary {
+  margin: 2px 0 0;
   font-size: 13px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--setup-line);
+  line-height: 1.5;
+  color: var(--setup-muted);
 }
-.card-skill-label { color: var(--setup-muted); }
-.card-skill-value { font-weight: 600; }
 
-.card-tendencies {
+.card-tags {
   list-style: none;
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   padding: 0;
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  font-size: 13px;
-  line-height: 1.45;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.card-tags li {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--setup-line);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 @media (max-width: 760px) {

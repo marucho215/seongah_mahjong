@@ -1055,16 +1055,12 @@ function handleMessage(msg) {
 }
 
 // --- 시작 화면 (대국 설정): 모드, 상대 좌석, 시드를 고른다. 캐릭터 정보는 서버의 roster를 그대로 쓴다.
-// 카드는 이름 · 성향 · 숙련도 · 성향 문구만으로 완성된 형태다. roster 항목의 portrait는 선택 필드로, 아직 어느
+// 카드는 이름 · 플레이 경향 한 줄 · 짧은 태그만으로 완성된 형태다. roster 항목의 portrait는 선택 필드로, 아직 어느
 // 캐릭터에도 없으며 이 화면은 그 필드를 읽지 않는다 (초상화가 제공되면 카드 레이아웃을 그때 확장한다).
-
-const SKILL_LEVEL_KO = { high: "높음", mid: "보통", low: "낮음" };
-const SKILL_LEVEL_RANK = { high: 0, mid: 1, low: 2 };
 
 const SORT_OPTIONS = [
   ["registered", "등록순"],
   ["name", "이름순"],
-  ["skill", "숙련도 높은 순"],
 ];
 
 const MODE_OPTIONS = [
@@ -1128,7 +1124,6 @@ function sortedRoster() {
   const list = [...setupState.roster];
   const key = setupState.sort;
   if (key === "name") list.sort((a, b) => a.displayName.localeCompare(b.displayName, "ko"));
-  else if (key === "skill") list.sort((a, b) => SKILL_LEVEL_RANK[a.skillLevel] - SKILL_LEVEL_RANK[b.skillLevel]);
   return list;
 }
 
@@ -1172,9 +1167,9 @@ function renderSetupSeats() {
     where.textContent = opponentSeatLabel(i, n);
     const name = el("span", "seat-name");
     name.textContent = entry ? entry.displayName : id;
-    const arch = el("span", "seat-archetype");
-    arch.textContent = entry ? entry.archetypeLabel : "";
-    btn.append(where, name, arch);
+    const tagLine = el("span", "seat-tags");
+    tagLine.textContent = entry ? entry.tags.join(" · ") : "";
+    btn.append(where, name, tagLine);
     btn.addEventListener("click", () => {
       setupState.activeSlot = i;
       renderSetup();
@@ -1200,25 +1195,20 @@ function renderCharacterCard(entry) {
     tag.textContent = opponentSeatLabel(seatIndex, n);
     head.appendChild(tag);
   }
-  const arch = el("div", "card-archetype");
-  arch.textContent = entry.archetypeLabel;
+  const summary = el("p", "card-summary");
+  summary.textContent = entry.summary;
 
-  const skill = el("div", "card-skill");
-  const skillLabel = el("span", "card-skill-label");
-  skillLabel.textContent = "숙련도";
-  const skillValue = el("span", "card-skill-value");
-  skillValue.textContent = SKILL_LEVEL_KO[entry.skillLevel] ?? entry.skillLevel;
-  skill.append(skillLabel, skillValue);
-
-  const tendencies = el("ul", "card-tendencies");
-  for (const text of entry.tendencies) {
+  const tags = el("ul", "card-tags");
+  for (const text of entry.tags) {
     const li = el("li");
     li.textContent = text;
-    tendencies.appendChild(li);
+    tags.appendChild(li);
   }
 
-  card.append(head, arch, skill, tendencies);
-  card.setAttribute("aria-label", `${entry.displayName}, ${entry.archetypeLabel}`);
+  card.append(head);
+  if (entry.summary) card.appendChild(summary);
+  if (entry.tags.length > 0) card.appendChild(tags);
+  card.setAttribute("aria-label", `${entry.displayName}. ${entry.summary} ${entry.tags.join(", ")}`);
   card.addEventListener("click", () => {
     assignToActiveSlot(entry.characterId);
     renderSetup();
