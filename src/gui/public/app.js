@@ -612,8 +612,12 @@ function turnSeatOf(request) {
 }
 
 /** Only my own turn's requests have a just-drawn tile to set apart in the hand. */
+/** 손패에서 떼어 그릴 "방금 뽑은 패". 타패 요청은 쯔모 뒤인지 울기(퐁/치/대명깡) 뒤인지 모양만으로 구분할 수 없으므로
+ *  엔진이 준 drawnTileId만 쓴다 (울기 직후에는 없어서 떼어 그리지 않는다). 쯔모/북 빼기/암깡·가깡/구종구패 요청은 늘 쯔모
+ *  직후에만 오고, 엔진은 뽑은 패를 손패 끝에 붙인다(Hand.addDrawn). */
 function drawnTileIdFor(request) {
-  const ownTurn = ["discard", "kita", "ankan", "kakan", "nine_terminals", "tsumo"].includes(request.type);
+  if (request.type === "discard") return request.drawnTileId;
+  const ownTurn = ["kita", "ankan", "kakan", "nine_terminals", "tsumo"].includes(request.type);
   const tiles = request.view.concealedTiles;
   return ownTurn && tiles.length > 0 ? tiles[tiles.length - 1].id : undefined;
 }
@@ -2042,6 +2046,12 @@ function handleMessageBody(msg) {
     placeActionBar();
     awaitingServer = true; // 재생이 끝나 새 요청이 오기 전에는 응답을 보내지 않는다
     return;
+  }
+  // 국/게임 종료: 서버가 보낸 마지막 장면 view가 있으면 결과 창 뒤의 작탁을 그 상태로 다시 그린다 (새로고침 뒤에도 비지 않게)
+  if ((msg.type === "game_end" || msg.type === "hand_end") && msg.view) {
+    lastKnownMySeat = msg.view.seat;
+    renderTable(msg.view, null);
+    renderMySeat(msg.view, {});
   }
   if (msg.type === "game_end") {
     renderGameEnd(msg, lastKnownMySeat);

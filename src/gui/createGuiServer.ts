@@ -112,10 +112,12 @@ function createGameHost(
   frameDelayMs: () => number
 ): GameHost {
   const session = new GuiSession(game);
-  session.takeFrames(); // 접속 전의 AI 턴은 재생하지 않는다
+  /** 가장 최근 장면(화료/유국 포함)의 사람 좌석 view. 국/게임 종료 상태를 새로고침으로 다시 받을 때 작탁을 그 상태로 다시 그리는 데 쓴다. */
+  let lastFrameView: WatchFrame["view"] | null = session.takeFrames().at(-1)?.view ?? null; // 접속 전의 AI 턴은 재생하지 않는다
   /** 시작 화면이 있는 서버에서 시작한 대국만 도중에 그만두고 로비로 돌아갈 수 있다. */
   const canAbandon = startedConfig !== null;
   let disposed = false;
+  let lastRequestView: WatchFrame["view"] | null = null;
 
   let replaySaved = false;
   function saveReplayIfFinished(): void {
@@ -146,6 +148,8 @@ function createGameHost(
 
   function currentStateMessage(extra: { cues: AudioCue[]; cueBase?: number }): string {
     const phase = session.getPhase();
+    // 종료 화면 뒤에 그릴 작탁: 마지막 장면, 없으면 마지막 결정 요청의 view (사람 좌석 view라 숨은 정보가 없다)
+    const view = lastFrameView ?? lastRequestView;
     if (phase === "game_end") {
       // 순위/우마는 엔진의 computeFinalStandings() 결과를 그대로 보낸다 (GUI가 따로 정렬하지 않는다).
       return JSON.stringify({
@@ -154,19 +158,27 @@ function createGameHost(
         handEvent: session.getHandEndEvent(),
         standings: game.computeFinalStandings(),
         characterNames,
+        ...(view ? { view } : {}),
         canStartNewGame: startedConfig !== null,
         ...(startedConfig ? { gameConfig: startedConfig } : {}),
         ...extra,
       });
     }
     if (phase === "hand_end") {
-      return JSON.stringify({ type: "hand_end", event: session.getHandEndEvent(), characterNames, canAbandon, ...extra });
+      return JSON.stringify({ type: "hand_end", event: session.getHandEndEvent(), ...(view ? { view } : {}), characterNames, canAbandon, ...extra });
     }
-    return JSON.stringify({ type: "decision", request: session.getCurrentRequest(), characterNames, canAbandon, ...extra });
+    const request = session.getCurrentRequest();
+    if (request) lastRequestView = request.view;
+    return JSON.stringify({ type: "decision", request, characterNames, canAbandon, ...extra });
   }
 
   /** 새로 접속한 클라이언트: 과거 신호는 보내지 않고, 현재 seq만 기준점(cueBase)으로 알려준다. */
   function connectMessage(): string {
+    // 아직 꺼내지 않은 장면이 있으면(응답 처리 밖에서 세션이 진행된 경우) 새 접속에는 재생하지 않되 마지막 상태로는 반영한다
+    if (!playing) {
+      const pending = session.takeFrames();
+      if (pending.length > 0) lastFrameView = pending.at(-1)!.view;
+    }
     cueTracker.sync();
     // 재생 중에 접속하면 가장 최근 장면을 보여준다 (최종 상태는 재생이 끝난 뒤 브로드캐스트된다).
     if (playing && lastWatchMessage) return lastWatchMessage;
@@ -200,6 +212,7 @@ function createGameHost(
   /** 응답 처리 뒤 상태를 보낸다. 그 사이 AI 턴이 있었다면 한 수씩 간격을 두고 보여준 다음 최종 상태를 보낸다. */
   function broadcastAfterAction(): void {
     const frames = session.takeFrames();
+    if (frames.length > 0) lastFrameView = frames.at(-1)!.view;
     if (frameDelayMs() <= 0 || frames.length === 0) {
       broadcastState();
       return;

@@ -186,6 +186,10 @@ describe("시작 화면 서버 (createGuiLobbyServer)", () => {
     const ended = await connectOnce(lobby.baseUrl);
     expect(ended.type).toBe("game_end");
     expect(ended.canStartNewGame).toBe(true);
+    // 새로고침으로 받은 종료 상태에도 작탁을 다시 그릴 마지막 장면 view(사람 좌석, 상대 손패 없음)가 있다
+    expect(ended.view.seat).toBe(0);
+    expect(ended.view.concealedTiles.length).toBeGreaterThan(0);
+    for (const o of ended.view.opponents) expect(o).not.toHaveProperty("concealedTiles");
     expect(ended.gameConfig).toEqual({ mode: "sanma", opponents: ["magnum", "inan"], seed: "lobby-full", saveReplays: false });
     expect(ended.standings.map((s: { player: number }) => s.player).sort()).toEqual([0, 1, 2]);
     expect(ended.standings.map((s: { placement: number }) => s.placement)).toEqual([1, 2, 3]);
