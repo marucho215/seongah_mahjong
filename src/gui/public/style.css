@@ -1161,3 +1161,94 @@ body.is-setup #audio-controls {
   .setup-roster-head { padding: 20px 16px 12px; }
   .setup-roster-list { overflow: visible; padding: 14px 16px 24px; grid-template-columns: 1fr; }
 }
+
+/* --- 리플레이 뷰어 (replay.html) --- */
+
+body.replay-page {
+  height: auto;
+  min-height: 100vh;
+  overflow: auto;
+  display: block;
+  padding: 0;
+  background: #173f24;
+  word-break: keep-all;
+}
+.rv-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.rv-header h1 { margin: 0; font-size: 20px; }
+.rv-header select,
+.rv-controls button,
+.rv-hand {
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.rv-header select { max-width: min(520px, 100%); }
+.rv-header select option { color: #111; }
+.rv-status { font-size: 13px; color: rgba(240, 240, 240, 0.75); }
+.rv-back { margin-left: auto; font-size: 13px; color: rgba(240, 240, 240, 0.75); }
+
+.rv-main { padding: 14px 20px 30px; }
+.rv-hands { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.rv-hand.is-current { border-color: #ffd54a; box-shadow: inset 0 0 0 1px #ffd54a; }
+.rv-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 14px; }
+.rv-controls input[type="range"] { flex: 1; min-width: 180px; }
+.rv-position { font-size: 12px; font-variant-numeric: tabular-nums; color: rgba(240, 240, 240, 0.75); }
+
+.rv-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 380px); gap: 20px; align-items: start; }
+.rv-event { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.rv-round { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 10px; font-size: 13px; }
+.rv-dora { display: flex; align-items: center; gap: 3px; }
+.rv-seat {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid transparent;
+}
+.rv-seat.is-actor { border-color: rgba(255, 213, 74, 0.6); }
+.rv-seat-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; font-size: 14px; }
+.rv-wind { font-size: 12px; opacity: 0.75; }
+.rv-name { font-weight: 700; }
+.rv-badge { font-size: 11px; padding: 0 5px; border-radius: 3px; background: #ffd54a; color: #1b1b1b; font-weight: 700; }
+.rv-badge.is-riichi { background: #e57373; color: #fff; }
+.rv-score { margin-left: auto; font-variant-numeric: tabular-nums; }
+.rv-hand-tiles, .rv-river { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 2px; }
+.rv-hand-tiles { margin-bottom: 6px; }
+.rv-meld { display: inline-flex; align-items: flex-end; gap: 1px; margin-left: 8px; }
+.rv-meld-label { font-size: 11px; opacity: 0.7; margin-right: 3px; }
+.rv-river .tile-img.is-called { opacity: 0.35; }
+.rv-river .tile-img.is-riichi { transform: rotate(-90deg); margin: 0 6px; }
+.rv-river .tile-img.is-latest { box-shadow: 0 0 0 2px #ffd54a; border-radius: 3px; }
+
+.rv-ai { position: sticky; top: 12px; padding: 12px 14px; border-radius: 8px; background: rgba(0, 0, 0, 0.25); max-height: calc(100vh - 40px); overflow: auto; }
+.rv-ai h2 { margin: 0 0 4px; font-size: 15px; }
+.rv-ai-note, .rv-ai-empty { margin: 0 0 10px; font-size: 12px; color: rgba(240, 240, 240, 0.66); }
+.rv-ai-entry { margin-bottom: 14px; }
+.rv-ai-entry h3 { margin: 0 0 6px; font-size: 13px; }
+.rv-ai-table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; margin-bottom: 6px; }
+.rv-ai-table th { text-align: left; font-weight: 600; color: rgba(240, 240, 240, 0.66); padding: 2px 4px; }
+.rv-ai-table td { padding: 2px 4px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.rv-ai-table tr.is-chosen td { font-weight: 700; color: #ffd54a; }
+.rv-ai-sub { font-size: 12px; margin: 6px 0 2px; color: rgba(240, 240, 240, 0.66); }
+.rv-kv { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 0; font-size: 11px; }
+.rv-kv dt { color: rgba(240, 240, 240, 0.66); overflow-wrap: anywhere; }
+.rv-kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 860px) {
+  .rv-body { grid-template-columns: 1fr; }
+  .rv-ai { position: static; max-height: none; }
+}
+
+.setup-replay-link { font-size: 13px; color: rgba(240, 240, 240, 0.66); }

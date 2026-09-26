@@ -68,6 +68,19 @@
 - `src/core/GameLog.ts`: replay event와 auditable `hand_end.result` schema
 - `src/validation/`: replay/event invariant 검증(테스트와 `npm run validate`가 공유), `tests/helpers/replayQa.ts`는 재수출
 
+### 리플레이 뷰어
+
+- `src/replay/replayReproduction.ts`: 리플레이의 시드/규칙/좌석/사람 결정으로 현재 엔진에서 대국을 다시 진행하며(재시뮬레이션),
+  이벤트가 로그에 추가될 때마다 원본의 같은 위치와 비교하고 표시용 상태(모든 좌석 손패/멘츠/강/북, 도라 표시패, 점수)를
+  복사한다. 한 곳이라도 다르거나 끝의 이벤트 수/AI 판단/사람 결정 기록이 다르면 `ok:false`(재현 불가)이며 상태를 만들지 않는다.
+  관찰은 재현용 인스턴스의 `log.push`와 엔진의 표시 전용 접근자 `GameState.observeCurrentHands()`만 쓴다. AI 판단은 "이 이벤트
+  직전에 새로 기록된 판단"만 붙인다. 원본 파일은 읽기만 한다. 관찰 기능 추가 전후 리플레이 바이트 동일성은
+  `tests/replayParity.test.ts`(고정 해시)가 지킨다.
+- 서버: `GET /api/replays`(목록), `GET /api/replays/<파일>`(재현 결과, 파일별 캐시). 화면: `src/gui/public/replay.html`, `replay.js`.
+- 향후 replay schema 개선 후보 (이번에는 확장하지 않음): 치 이벤트의 멘츠 구성 패(지금은 울은 패 종류만 있음), 배패/쯔모의 적5
+  정보(지금은 종류만 있음), AI 판단 기록과 이벤트의 직접 연결 필드(지금은 handIndex/player만 있음). 이것들이 있으면 재시뮬레이션
+  없이도(또는 엔진이 바뀐 뒤의 옛 기록도) 복원할 수 있다.
+
 ### 사람 플레이 (CLI/GUI)
 
 - `src/core/decisions.ts`: Request/Response 타입 전부 (`discard`, `call_pon|call_daiminkan|ankan|kakan|kita`, `ron`, `tsumo`,
@@ -165,7 +178,8 @@
 
 - **CustomAI는 미구현**: `ControllerKind`의 `"customAI"`는 예약 슬롯일 뿐이고, 이 값으로 `GameState`를 만들면 생성자가
   throw한다 (`GameState: controller kind "customAI" is not implemented yet`).
-- replay viewer/timeline 없음. GUI는 게임이 끝날 때 한 번만 replay를 저장하며, 서버가 게임 도중 죽으면 복구하지 않는다.
+- 리플레이 뷰어는 현재 엔진으로 정확히 재현되는 기록만 보여준다 (엔진 규칙/AI가 바뀌기 전의 옛 기록은 대개 재현 불가로 표시).
+  GUI는 게임이 끝날 때 한 번만 replay를 저장하며, 서버가 게임 도중 죽으면 복구하지 않는다.
 - GUI는 사람을 seat 0에 앉힌다. 상대는 시작 화면에서 고르며 기본값은 산마: 제갈 미나·제갈 나희, 4마: +변아리. 사람 좌석 선택은 없다.
 - CLI는 한 국만 진행한다.
 - 전체 회귀가 약 15~17분이라, 작업 중에는 관련 파일만 돌리고 안정된 시점에만 전체를 돌린다.
@@ -174,7 +188,7 @@
 
 ## 10. 1.0 이후 후보 (우선순위 없음)
 
-CustomAI 구현과 설정/편집 UI, replay viewer(재생/timeline/seek), 캐릭터 보이스와 화료 컷인, 캐릭터 초상화, 사람 좌석
+CustomAI 구현과 설정/편집 UI, 캐릭터 보이스와 화료 컷인, 캐릭터 초상화, 사람 좌석
 선택, 추가 presentation 옵션과 UI polish, 추가 효과음, 새로운 마작 룰, 5000판급 장기 자체 대국 검증(Phase C 기준선 참고),
 대국 통계(화료/방총/리치 횟수). 캐릭터 성향을 실측으로 확인할 때는 전체 국 대비 비율 대신 조건부 지표(예: 리치 가능 상태가
 된 횟수 중 실제 리치 비율)를 쓸 것 - 울기가 많은 캐릭터는 멘젠 상태가 일찍 깨져 단순 리치 비율이 의향을 반영하지 않는다.

@@ -175,6 +175,14 @@ export class GameState {
   readonly kitaDecisionPolicy?: GameStateOptions["kitaDecisionPolicy"];
   /** GameStateOptions.frameObserver와 같다. GuiSession이 생성 후에 붙일 수 있도록 공개한다. */
   frameObserver?: GameStateOptions["frameObserver"];
+  /** 진행 중인 국의 손패 (리플레이 뷰어의 재시뮬레이션이 표시용 상태를 읽는 용도, src/replay/). 국이 시작될 때
+   *  참조만 담으며 엔진은 이 값을 읽지 않는다 - 게임 진행/RNG/AI 판단/로그와 무관하다. 읽는 쪽은 절대 수정하지 않는다. */
+  private currentHandsForObservation: readonly Hand[] | null = null;
+
+  /** 표시 전용: 진행 중인 국의 손패(모든 좌석)를 읽기 전용으로 돌려준다. 국이 시작되기 전이면 null. */
+  observeCurrentHands(): readonly Readonly<Hand>[] | null {
+    return this.currentHandsForObservation;
+  }
   /** Per-seat controller assignment - see ControllerKind and GameStateOptions.controllers
    *  for the exact derivation/precedence. This, not characterProfiles, is the source of
    *  truth for who decides a seat's actions. */
@@ -393,6 +401,7 @@ export class GameState {
     this.assertFullGameplaySupported();
     const wallSeed = `${this.baseSeed}::hand${this.handIndex}`;
     const { wall, hands } = this.bootstrapPhysicalHand();
+    this.currentHandsForObservation = hands;
     const seats = allSeats(this.rules.playerCount);
     const dealt = hands.map((hand) => [...hand.concealed]);
     const furiten = seats.map(() => new FuritenTracker());

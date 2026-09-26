@@ -1547,7 +1547,9 @@ function renderSetup() {
   h1.textContent = "새 대국";
   const lead = el("p", "setup-lead");
   lead.textContent = "좌석을 고르고 캐릭터를 눌러 앉힙니다. 같은 캐릭터는 한 좌석에만 앉을 수 있습니다.";
-  header.append(h1, lead);
+  const replayLink = el("a", "setup-replay-link", { href: "/replay.html", target: "_blank", rel: "noopener" });
+  replayLink.textContent = "저장된 리플레이 보기";
+  header.append(h1, lead, replayLink);
   side.appendChild(header);
 
   side.appendChild(setupSection("규칙", renderSetupModeGroup()));

@@ -2,14 +2,16 @@
  * port without spawning a subprocess - see tests/guiServer.test.ts. server.ts (the `npm run
  * play:gui` entry point) just calls this and listens; no behavior lives only in server.ts. */
 import { createServer, type Server } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GameState } from "../core/GameState.js";
 import { GuiSession, type WatchFrame } from "./guiSession.js";
 import { AudioCueTracker, toPublicAction, type AudioCue, type PublicAction } from "./audioCues.js";
 import type { DecisionResponse } from "../core/decisions.js";
-import { buildGameReplayRecord, replaySeatsFromGame, writeGameReplay } from "../sim/replayRecorder.js";
+import { buildGameReplayRecord, replaySeatsFromGame, resolveReplayDir, writeGameReplay, type GameReplayRecord } from "../sim/replayRecorder.js";
+import { reproduceReplay, type ReplayReproduction } from "../replay/replayReproduction.js";
+import { getCharacterProfile } from "../ai/characterProfiles.js";
 import { buildCharacterRoster } from "./characterRoster.js";
 import { DEFAULT_PLAYBACK_SPEED, PLAYBACK_FRAME_DELAY_MS, parsePlaybackSpeed } from "./playbackSpeed.js";
 import { DEFAULT_OPPONENTS, createGuiGame, parseGuiGameConfig, playerCountOf, type GuiGameConfig, type GuiGameMode } from "./gameSetup.js";
@@ -29,7 +31,22 @@ const MIME_TYPES: Record<string, string> = {
 
 /** The frontend files that change constantly during development are never cached, so a normal
  *  reload always shows the current UI. Tile SVGs and other static assets are left cacheable. */
-const NO_STORE_FILES = new Set(["/index.html", "/app.js", "/audioManager.js", "/style.css"]);
+const NO_STORE_FILES = new Set(["/index.html", "/app.js", "/audioManager.js", "/style.css", "/replay.html", "/replay.js"]);
+
+/** 리플레이 뷰어가 여는 파일 이름: 폴더 밖을 가리킬 수 없는 단순한 이름만 허용한다. */
+const REPLAY_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*\.json$/;
+
+/** 리플레이 좌석의 표시 이름: 캐릭터 이름, 사람이면 "플레이어", 캐릭터가 없는 AI면 종류. */
+function replaySeatName(seat: { kind: string; characterId?: string }): string {
+  if (seat.characterId) {
+    try {
+      return getCharacterProfile(seat.characterId).displayName;
+    } catch {
+      return seat.characterId;
+    }
+  }
+  return seat.kind === "human" ? "플레이어" : seat.kind;
+}
 
 export interface GuiServerHandle {
   server: Server;
@@ -248,6 +265,49 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   const currentFrameDelayMs = (): number => frameDelayMs;
   let host: GameHost | null = initial ? createGameHost(initial.game, initial.options, broadcast, null, currentFrameDelayMs) : null;
 
+  // 리플레이 뷰어: 이 서버가 리플레이를 저장하는 폴더를 그대로 읽는다 (기본 "replays", 프로젝트 루트 기준).
+  const replayDir = resolveReplayDir((initial ? initial.options.replay?.dir : lobby?.replayDir) ?? "replays");
+  /** 재현은 한 판에 수 초 걸리므로 파일(이름+수정 시각)별로 결과를 캐시한다. */
+  const reproductionCache = new Map<string, { mtimeMs: number; body: string }>();
+
+  async function listReplays(): Promise<{ name: string; size: number; modified: number }[]> {
+    let names: string[];
+    try {
+      names = await readdir(replayDir);
+    } catch {
+      return [];
+    }
+    const files = await Promise.all(
+      names
+        .filter((n) => REPLAY_FILE_NAME.test(n))
+        .map(async (name) => {
+          const st = await stat(join(replayDir, name));
+          return { name, size: st.size, modified: st.mtimeMs };
+        })
+    );
+    return files.sort((a, b) => b.modified - a.modified);
+  }
+
+  async function replayBody(name: string): Promise<string> {
+    if (!REPLAY_FILE_NAME.test(name)) throw new Error("리플레이 파일 이름이 올바르지 않습니다");
+    const filePath = join(replayDir, name);
+    const st = await stat(filePath);
+    const cached = reproductionCache.get(name);
+    if (cached && cached.mtimeMs === st.mtimeMs) return cached.body;
+    const record = JSON.parse(await readFile(filePath, "utf-8")) as GameReplayRecord;
+    const reproduction: ReplayReproduction = reproduceReplay(record);
+    const seats = Array.isArray(record.meta?.seats) ? record.meta.seats : [];
+    const body = JSON.stringify({
+      name,
+      meta: record.meta ? { gameSeed: record.meta.gameSeed, rules: { playerCount: record.meta.rules?.playerCount }, replaySchemaVersion: record.meta.replaySchemaVersion ?? 1 } : null,
+      seatNames: seats.map(replaySeatName),
+      seatKinds: seats.map((s) => s.kind),
+      reproduction,
+    });
+    reproductionCache.set(name, { mtimeMs: st.mtimeMs, body });
+    return body;
+  }
+
   const roster = lobby ? buildCharacterRoster() : [];
   const defaults = lobby?.defaults ?? {};
   /** 시작 화면에 채워 둘 값: 처음에는 CLI 기본값, 한 판을 한 뒤에는 마지막으로 고른 구성 */
@@ -360,6 +420,21 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
 
     if (req.method === "POST" && url.pathname === "/start") {
       readBody(req, (body) => reply(res, () => startGame(parseGuiGameConfig(JSON.parse(body)))));
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/replays") {
+      listReplays()
+        .then((files) => res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }).end(JSON.stringify(files)))
+        .catch((err) => res.writeHead(500, { "Content-Type": "text/plain" }).end(String(err instanceof Error ? err.message : err)));
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname.startsWith("/api/replays/")) {
+      const name = decodeURIComponent(url.pathname.slice("/api/replays/".length));
+      replayBody(name)
+        .then((body) => res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }).end(body))
+        .catch((err) => res.writeHead(REPLAY_FILE_NAME.test(name) ? 404 : 400, { "Content-Type": "text/plain" }).end(String(err instanceof Error ? err.message : err)));
       return;
     }
 

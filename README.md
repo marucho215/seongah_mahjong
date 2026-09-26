@@ -100,7 +100,12 @@ own `events` log (deals, draws, discards, calls, riichi, wins with auditable sco
 
 Replays are checked by the same invariant validators the tests use (`src/validation/`, `tests/helpers/replayQa.ts`).
 GUI games save once, when the game ends; if the server process dies mid-game the unfinished replay is not recovered
-(a browser refresh does not interrupt recording). There is no replay viewer yet.
+(a browser refresh does not interrupt recording). The GUI server also serves a replay viewer at `http://localhost:3000/replay.html` (linked from the start screen). It lists
+the files in `replays/` and re-plays the chosen game with the current engine from the recorded seed, rules, seats and human
+decisions, checking every event against the file in order. If anything differs, the viewer says the replay cannot be
+reproduced exactly by this engine version and shows nothing further. Otherwise you can move by hand or by move, jump to
+wins/draws, see every seat's hand, melds, kita and river at that moment, and see the CharacterAI decision entries that were
+logged right before each move. Replay files are only read, never modified.
 
 ## Tests
 
@@ -119,7 +124,8 @@ and full human + AI games in both modes.
 
 - **CustomAI** is not implemented. The `customAI` controller kind is only a reserved slot: creating a game with it
   throws. User-authored AI and any editor/settings UI are future work.
-- No replay viewer / timeline / seek, no character voices or win cut-ins, no additional presentation options.
+- No character voices or win cut-ins, no additional presentation options. Replays recorded by an older engine version
+  usually cannot be reproduced by the viewer (it reports this instead of guessing).
 - The GUI always seats the human at seat 0 (opponents are chosen on the start screen; the human's seat is not).
 - Character portraits are not included yet. The start screen is text-only by design; `CHARACTER_PORTRAITS` in
   `src/gui/characterRoster.ts` is the optional slot for them.

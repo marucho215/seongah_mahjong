@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>리플레이 뷰어</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body class="replay-page">
+  <header class="rv-header">
+    <h1>리플레이 뷰어</h1>
+    <select id="rv-file" aria-label="리플레이 파일"></select>
+    <span id="rv-status" class="rv-status" role="status"></span>
+    <a class="rv-back" href="/">대국 화면으로</a>
+  </header>
+  <main id="rv-main" class="rv-main hidden">
+    <nav id="rv-hands" class="rv-hands" aria-label="국 이동"></nav>
+    <section class="rv-controls" aria-label="타임라인">
+      <button type="button" data-act="handStart" title="국 처음">⏮</button>
+      <button type="button" data-act="prev" title="이전 수 (←)">◀</button>
+      <button type="button" data-act="play" id="rv-play" title="자동 재생">재생</button>
+      <button type="button" data-act="next" title="다음 수 (→)">▶</button>
+      <button type="button" data-act="handEnd" title="국 끝">⏭</button>
+      <button type="button" data-act="result" title="이 국의 화료/유국 지점">화료·유국</button>
+      <input type="range" id="rv-slider" min="0" value="0" aria-label="수순" />
+      <span id="rv-position" class="rv-position"></span>
+    </section>
+    <div class="rv-body">
+      <section class="rv-table">
+        <div id="rv-event" class="rv-event"></div>
+        <div id="rv-round" class="rv-round"></div>
+        <div id="rv-seats"></div>
+      </section>
+      <aside class="rv-ai" aria-label="AI 판단 기록">
+        <h2>AI 판단 기록</h2>
+        <p class="rv-ai-note">이 수 직전에 엔진이 기록한 판단만 보여줍니다.</p>
+        <div id="rv-ai"></div>
+      </aside>
+    </div>
+  </main>
+  <script src="/replay.js"></script>
+</body>
+</html>
