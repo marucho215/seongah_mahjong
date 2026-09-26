@@ -102,6 +102,11 @@ latest 50 replays per user, 5 open tabs per user, and a per-user request rate li
 "파일 내려받기" link to download the original replay file (useful for bug reports). Online play is still in development
 (see `HANDOFF.md` §10).
 
+To host online from a Windows laptop for free (Tailscale Funnel, step by step, in Korean), see
+[docs/ONLINE_HOSTING.md](docs/ONLINE_HOSTING.md). Server environment variables: `PORT`, `HOST` (e.g. `127.0.0.1` to accept
+only local/tunnel connections), `SEONGAH_INVITE_CODE`, `SEONGAH_MAX_GAMES`, `SEONGAH_ENGINE_WORKERS`. The event stream
+sends a keep-alive comment every 25 seconds so tunnels and proxies do not drop idle connections.
+
 ### Play in the terminal (CLI)
 
 ```bash

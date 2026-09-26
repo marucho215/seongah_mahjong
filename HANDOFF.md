@@ -229,7 +229,8 @@
 결정 사항:
 - 접근: 초대 코드(공유 비밀번호)를 아는 사람만 입장한다.
 - 계정: 닉네임만 정하는 최소 방식. 서버가 세션 토큰(쿠키)을 발급하고 닉네임은 표시용이다. 데이터는 그 브라우저의 쿠키에 묶인다.
-- 호스팅: 운영자의 Windows 노트북에서 서버를 켜고 Cloudflare Tunnel로 외부 주소를 받는다(무료, 노트북이 켜져 있을 때만 접속 가능).
+- 호스팅: 운영자의 Windows 노트북에서 서버를 켜고 Tailscale Funnel로 외부 https 주소를 받는다(무료, 노트북이 켜져 있을 때만
+  접속 가능. 처음에는 Cloudflare Tunnel로 정했으나 Quick Tunnel의 SSE 제한 때문에 바꿨다 - 6단계).
 - CustomAI: 온라인에서도 쓴다(사용자별 저장, 기존 검증 그대로, 사용자당 개수 상한).
 
 단계:
@@ -256,10 +257,11 @@
    (저장 직후 오래된 것부터 삭제). 다른 사용자의 CustomAI는 목록/대국 시작 모두 불가. 리플레이 뷰어 "파일 내려받기"
    (`/api/replays/<이름>?download=1`, 로컬 모드 포함). 재현 캐시 키는 파일 경로. 로컬 모드의 `custom-ai/`, `replays/`는
    온라인 서버에서 보이지 않는다(옮기는 기능 없음). `tests/guiOnline.test.ts`.
-6. 배포: Windows + Cloudflare Tunnel 운영 문서, SSE heartbeat. **진행 중** - 완료: SSE 연결 유지 신호(25초마다 `: ping`,
-   `SSE_HEARTBEAT_MS`), `X-Accel-Buffering: no`, `HOST` 환경 변수(예: 127.0.0.1로 터널에만 공개). 남음: 운영 문서 -
-   Cloudflare Quick Tunnel은 SSE를 지원하지 않는다는 제한이 있는 것으로 알고 있어(이 개발 환경에서는 확인 불가) 터널 방식을
-   운영자와 정하는 중.
+6. 배포: 운영 문서, SSE heartbeat. **완료** - SSE 연결 유지 신호(25초마다 `: ping`, `SSE_HEARTBEAT_MS`),
+   `X-Accel-Buffering: no`, `HOST` 환경 변수(예: 127.0.0.1로 터널에만 공개). 운영 문서 `docs/ONLINE_HOSTING.md`.
+   터널은 운영자와 정해 **Tailscale Funnel**로 바꿨다: Cloudflare Quick Tunnel은 SSE를 지원하지 않는다는 제한이 있는 것으로
+   알고 있고(이 개발 환경은 네트워크가 막혀 확인 불가), 이름 있는 터널은 도메인 비용이 든다. Funnel도 이 환경에서는 시험하지
+   못했으므로 운영자의 노트북에서 처음 켤 때 확인이 필요하다.
 7. 두 사용자 동시 접속 스모크 테스트. **완료** - `e2e/onlineSmoke.e2e.ts`(입장 게이트 + worker 풀 + 자원 제한, 쿠키가
    따로인 브라우저 두 개: 각자 입장/로비/대국, 한쪽 그만두기와 새로고침이 다른 쪽에 영향 없음, 미입장/틀린 초대 코드).
 
