@@ -20,6 +20,7 @@
 
   <!-- 재생 설정: 자동 플레이 옵션 + AI 진행 속도 (app.js가 연결) + 효과음 음소거/마스터 볼륨 (audioManager.js가 연결) -->
   <div id="audio-controls">
+    <button type="button" class="abandon-button hidden" title="진행 중인 대국을 그만두고 로비로 돌아갑니다 (리플레이는 저장하지 않음)">대국 그만두기</button>
     <button type="button" class="auto-toggle" data-auto="tsumogiri" aria-pressed="false" title="쯔모 뒤 타패 차례에 뽑은 패를 자동으로 버립니다 (리치는 선언하지 않음)">자동 쯔모기리</button>
     <button type="button" class="auto-toggle" data-auto="passCalls" aria-pressed="false" title="치·퐁·대명깡 제안을 자동으로 넘깁니다 (암깡·가깡·북 빼기는 제외)">울기 패스</button>
     <button type="button" class="auto-toggle" data-auto="autoWin" aria-pressed="false" title="론·쯔모가 가능하면 자동으로 선언합니다">자동 화료</button>

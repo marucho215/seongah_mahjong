@@ -1,4 +1,7 @@
 import { describe, expect, it, afterEach } from "vitest";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { CHARACTER_PROFILES } from "../src/ai/characterProfiles.js";
 import { CHARACTER_PRESENTATION, buildCharacterRoster } from "../src/gui/characterRoster.js";
@@ -266,5 +269,46 @@ describe("시작 화면 서버 (createGuiLobbyServer)", () => {
     expect((await lobby.post("/start", { mode: "yonma", opponents: ["inan", "magnum", "yuwen"], seed: "hub-flow" })).status).toBe(204);
     expect((await lobby.next()).type).toBe("decision");
     expect((await lobby.post("/lobby", { screen: "hub" })).status).toBe(400);
+  }, 60_000);
+
+  it("대국 그만두기: 그 모드의 설정 화면으로 돌아가고, 리플레이는 저장하지 않으며, 재생 중이던 장면도 멈춘다", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "abandon-replays-"));
+    const lobby = await startLobby({ frameDelayMs: 30, replayDir: dir });
+    const close = lobby.close;
+    cleanup = async () => {
+      await close();
+      rmSync(dir, { recursive: true, force: true });
+    };
+    await lobby.next();
+    expect((await lobby.post("/abandon")).status).toBe(400); // 대국이 없다
+
+    expect((await lobby.post("/lobby", { screen: "setup", mode: "yonma" })).status).toBe(204);
+    await lobby.next();
+    expect((await lobby.post("/start", { mode: "yonma", opponents: ["inan", "magnum", "yuwen"], seed: "abandon-me", saveReplays: true })).status).toBe(204);
+    const first = await lobby.next();
+    expect(first.type).toBe("decision");
+    expect(first.canAbandon).toBe(true);
+
+    // 한 수 두어 AI 장면 재생을 시작시킨 뒤, 재생 도중에 그만둔다
+    const request = first.request;
+    const answer = request.type === "discard" ? { type: "discard", tileId: request.legalTileIds[0], declareRiichi: false } : { type: request.type, declare: false };
+    expect((await lobby.post("/respond", answer)).status).toBe(204);
+    const watch = await lobby.next();
+    expect(watch.type).toBe("watch");
+    expect(watch.canAbandon).toBe(true);
+    expect((await lobby.post("/abandon")).status).toBe(204);
+
+    let msg = await lobby.next();
+    while (msg.type === "watch") msg = await lobby.next(); // 그만두기 직전에 이미 보낸 장면만 남을 수 있다
+    expect([msg.type, msg.screen, msg.mode]).toEqual(["setup", "setup", "yonma"]);
+    expect(lobby.getSession()).toBeNull();
+    // 남은 장면 타이머가 살아 있었다면 원래 연결로 장면(watch)을 더 보냈을 것이다: 0.4초 동안 아무 메시지도 없어야 한다
+    const extra = await Promise.race([lobby.next(), new Promise((r) => setTimeout(() => r("none"), 400))]);
+    expect(extra).toBe("none");
+    const reconnect = await fetch(`${lobby.baseUrl}/events`);
+    const reader = reconnect.body!.getReader();
+    expect((await readOneSseMessage(reader, { text: "" })).type).toBe("setup");
+    await reader.cancel();
+    expect(readdirSync(dir)).toEqual([]); // 중단한 대국의 리플레이는 없다
   }, 60_000);
 });

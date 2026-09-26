@@ -95,6 +95,8 @@ interface GameHost {
   isPlaying(): boolean;
   respond(response: DecisionResponse): void;
   continueToNextHand(): void;
+  /** 대국 그만두기: 이후 이 호스트는 아무 메시지도 보내지 않는다 (재생 중이던 장면 타이머 포함). 리플레이는 저장하지 않는다. */
+  dispose(): void;
 }
 
 /** 시작 화면에서 시작한 대국의 구성 (실제로 쓰인 시드 포함). 종료 화면의 "다시 하기"가 이것을 그대로 /start에 보낸다. */
@@ -111,6 +113,9 @@ function createGameHost(
 ): GameHost {
   const session = new GuiSession(game);
   session.takeFrames(); // 접속 전의 AI 턴은 재생하지 않는다
+  /** 시작 화면이 있는 서버에서 시작한 대국만 도중에 그만두고 로비로 돌아갈 수 있다. */
+  const canAbandon = startedConfig !== null;
+  let disposed = false;
 
   let replaySaved = false;
   function saveReplayIfFinished(): void {
@@ -155,9 +160,9 @@ function createGameHost(
       });
     }
     if (phase === "hand_end") {
-      return JSON.stringify({ type: "hand_end", event: session.getHandEndEvent(), characterNames, ...extra });
+      return JSON.stringify({ type: "hand_end", event: session.getHandEndEvent(), characterNames, canAbandon, ...extra });
     }
-    return JSON.stringify({ type: "decision", request: session.getCurrentRequest(), characterNames, ...extra });
+    return JSON.stringify({ type: "decision", request: session.getCurrentRequest(), characterNames, canAbandon, ...extra });
   }
 
   /** 새로 접속한 클라이언트: 과거 신호는 보내지 않고, 현재 seq만 기준점(cueBase)으로 알려준다. */
@@ -186,7 +191,7 @@ function createGameHost(
       if (e.type === "discard") { latestDiscardSeat = e.player; break; }
       if (e.type === "hand_start") break;
     }
-    const message = JSON.stringify({ type: "watch", view: frame.view, actor: frame.actor, latestDiscardSeat, actions, characterNames, cues });
+    const message = JSON.stringify({ type: "watch", view: frame.view, actor: frame.actor, latestDiscardSeat, actions, characterNames, canAbandon, cues });
     lastHold = frameDelayMs() * holdMultiplier(actions);
     return message;
   }
@@ -202,6 +207,7 @@ function createGameHost(
     playing = true;
     let i = 0;
     const step = (): void => {
+      if (disposed) return;
       if (i < frames.length) {
         lastWatchMessage = watchMessage(frames[i++]!);
         broadcast(`data: ${lastWatchMessage}\n\n`);
@@ -216,6 +222,7 @@ function createGameHost(
   }
 
   function broadcastState(): void {
+    if (disposed) return;
     cueTracker.sync();
     const cues = cueTracker.cuesAfter(lastBroadcastSeq);
     lastBroadcastSeq = cueTracker.latestSeq();
@@ -237,6 +244,10 @@ function createGameHost(
       if (playing) throw new Error("GuiServer: 장면 재생 중에는 진행할 수 없습니다");
       session.continueToNextHand();
       broadcastAfterAction();
+    },
+    dispose() {
+      disposed = true;
+      playing = false;
     },
   };
 }
@@ -432,6 +443,18 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     broadcast(`data: ${setupMessage()}\n\n`);
   }
 
+  /** 진행 중인 대국을 그만두고 그 모드의 설정 화면(로비)으로 돌아간다. 리플레이는 저장하지 않는다(저장은 게임 종료 때만 한다).
+   *  게임이 이미 끝났다면 "설정 바꾸기"(/setup)를 쓴다. */
+  function abandonGame(): void {
+    if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
+    if (!host) throw new Error("GuiServer: 진행 중인 대국이 없습니다");
+    if (host.session.getPhase() === "game_end") throw new Error("GuiServer: 이미 끝난 대국입니다");
+    host.dispose();
+    host = null;
+    lobbyScreen = "setup";
+    broadcast(`data: ${setupMessage()}\n\n`);
+  }
+
   /** 로비 안에서 화면을 옮긴다: 허브로 가거나, 모드를 골라 그 모드의 설정 화면으로 간다. 대국 중에는 할 수 없다. */
   function moveLobby(input: unknown): void {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
@@ -586,6 +609,11 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
           frameDelayMs = PLAYBACK_FRAME_DELAY_MS[parsePlaybackSpeed(speed)];
         })
       );
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/abandon") {
+      reply(res, abandonGame);
       return;
     }
 

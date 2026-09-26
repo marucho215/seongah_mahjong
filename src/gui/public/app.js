@@ -1409,6 +1409,32 @@ function mountAutoPlayControls() {
 
 mountAutoPlayControls();
 
+// --- 대국 그만두기: 서버가 canAbandon을 보낸 대국 중에만 보인다. 확인 후 로비(그 모드의 설정 화면)로 돌아가며,
+// 중단한 대국의 리플레이는 저장되지 않는다. ---
+
+function updateAbandonButton(msg) {
+  const btn = document.querySelector("#audio-controls .abandon-button");
+  if (!btn) return;
+  btn.classList.toggle("hidden", !(msg.canAbandon && msg.type !== "game_end" && msg.type !== "setup"));
+}
+
+function mountAbandonButton() {
+  const btn = document.querySelector("#audio-controls .abandon-button");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    if (!window.confirm("진행 중인 대국을 그만두고 로비로 돌아갈까요?\n이 대국은 리플레이로 저장되지 않습니다.")) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch("/abandon", { method: "POST" });
+      if (!res.ok) showActionError(`그만두지 못했습니다: ${await res.text()}`);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+mountAbandonButton();
+
 function handleMessage(msg) {
   handleMessageBody(msg);
   // 접속 직후 메시지의 cueBase 이하는 과거 신호라 재생하지 않는다.
@@ -1992,6 +2018,7 @@ function clearRecentFeed() {
 
 function handleMessageBody(msg) {
   awaitingServer = false; // 서버가 새 상태를 보냈으니 다음 응답을 보낼 수 있다
+  updateAbandonButton(msg);
   if (msg.type === "setup") {
     showSetup(msg);
     return;
