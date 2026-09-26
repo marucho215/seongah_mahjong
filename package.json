@@ -13,10 +13,12 @@
     "analyze:ari": "tsx src/sim/ariDiagnosticStats.ts",
     "validate": "tsx src/sim/validationHarness.ts",
     "play": "tsx src/cli/humanPlayCli.ts",
-    "play:gui": "tsx src/gui/server.ts"
+    "play:gui": "tsx src/gui/server.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
+    "playwright": "1.56.1",
     "tsx": "^4.16.2",
     "typescript": "^5.5.4",
     "vitest": "^2.0.5"
