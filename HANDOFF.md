@@ -76,12 +76,15 @@
   태그 0~4개 `CHARACTER_PRESENTATION`, 선택 필드 `CHARACTER_PORTRAITS`)는 여기 둔다. 한 줄 설명은 확정 문구로 이 파일이 source of
   truth다. 태그는 CharacterAI에 구현된 행동 로직을 근거로 하고, 평가/서열 표현은 쓰지 않는다. 내부 튜닝 수치와 archetype
   식별자는 클라이언트로 보내지 않는다. 초상화는 아직 없고, 시작 화면은 텍스트만으로 완성된 형태다(임시 아바타나 빈 이미지
-  영역을 만들지 않는다). 초상화가 생기면 여기에 등록하고 그때 카드 레이아웃을 확장한다.
+  영역을 만들지 않는다). 초상화가 생기면 여기에 등록하고 그때 카드 레이아웃을 확장한다. 캐릭터 이름/소개가 필요한 다른
+  화면(리플레이 뷰어, CustomAI 등)도 이 파일을 재사용해 표현을 한곳에서 관리한다.
 - `src/gui/guiSession.ts`: 여러 국을 한 `GameState`로 잇는 세션(`decision|hand_end|game_end`), 응답 사전 검증
 - `src/gui/createGuiServer.ts`, `src/gui/server.ts`: HTTP + SSE 서버. `/events`(상태 스트림), `POST /respond`, `POST /continue`.
   접속 시 현재 요청을 그대로 다시 보내므로 새로고침 복구가 된다. 장면 재생 중에는 응답을 받지 않는다.
   `createGuiServer(game)`은 게임 하나에 묶인 서버(테스트용), `createGuiLobbyServer()`는 `npm run play:gui`가 쓰는 시작 화면 서버다:
-  `setup` 메시지 → `POST /start`(구성) → 게임 → game_end에서 `POST /setup`으로 시작 화면 복귀. 게임마다 GameHost를 새로 만든다.
+  `setup` 메시지 → `POST /start`(구성) → 게임 → game_end. game_end 메시지에는 엔진 `computeFinalStandings()` 결과(`standings`)와
+  이번 대국 구성(`gameConfig`, 실제 시드 포함)이 실린다. 종료 화면의 "같은 설정으로 다시"(시드 생략)와 "같은 시드로 다시"는
+  그 구성으로 다시 `POST /start`, "설정 바꾸기"는 `POST /setup`으로 시작 화면에 돌아간다. 게임마다 GameHost를 새로 만든다.
 - `src/gui/public/`: 바닐라 JS 클라이언트 (`app.js`, `audioManager.js`, `style.css`, `index.html`). 4-position 작탁 하나로
   산마/4마를 함께 그린다(좌석 번호 하드코딩 없이 내 좌석 기준 상대 위치). 개발 중 프런트 파일은 `Cache-Control: no-store`.
 - `src/cli/humanPlayDriver.ts`(요청별 입력 처리), `src/cli/humanPlayCli.ts`(진입점, 한 국만 진행)
@@ -168,7 +171,9 @@
 ## 10. 1.0 이후 후보 (우선순위 없음)
 
 CustomAI 구현과 설정/편집 UI, replay viewer(재생/timeline/seek), 캐릭터 보이스와 화료 컷인, 캐릭터 초상화, 사람 좌석
-선택, 추가 presentation 옵션과 UI polish, 추가 효과음, 새로운 마작 룰, 5000판급 장기 자체 대국 검증(Phase C 기준선 참고).
+선택, 추가 presentation 옵션과 UI polish, 추가 효과음, 새로운 마작 룰, 5000판급 장기 자체 대국 검증(Phase C 기준선 참고),
+대국 통계(화료/방총/리치 횟수). 캐릭터 성향을 실측으로 확인할 때는 전체 국 대비 비율 대신 조건부 지표(예: 리치 가능 상태가
+된 횟수 중 실제 리치 비율)를 쓸 것 - 울기가 많은 캐릭터는 멘젠 상태가 일찍 깨져 단순 리치 비율이 의향을 반영하지 않는다.
 
 ## 11. 다음 작업자 체크리스트
 

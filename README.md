@@ -42,8 +42,10 @@ npm run play:gui -- my-seed --mode yonma --save-replays   # same, with these val
 Open the printed `http://localhost:3000` (set `PORT` to change it). The browser opens on a start screen: pick sanma
 or yonma, choose a character for each opponent seat (every registered character is listed with a one-line playstyle
 description and a few short tags), optionally set a seed and replay saving, then start. Command-line arguments only pre-fill that
-screen. You sit at seat 0. A game runs all hands to the final standings; from there "새 대국 설정" returns to the start
-screen with the last choices pre-filled.
+screen. You sit at seat 0. A game runs all hands; after the last hand's result, "최종 결과 보기" shows the final
+standings (placement, score and pt from the engine, end reason, and the seed actually used). From there you can replay
+with the same opponents and a new seed, replay the exact same game with the same seed, or return to the start screen
+with the last choices pre-filled - no server restart needed.
 
 GUI features: one shared 4-position table for sanma and yonma, click-to-discard with riichi confirmation, action bar
 for every decision (chi options are drawn as tiles), the AI's discards/calls/riichi/wins replayed one at a time,

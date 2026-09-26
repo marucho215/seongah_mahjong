@@ -857,7 +857,7 @@ function nextHandLine(result) {
 }
 
 /** `isFinalHand`: true when this hand ended the game - suppresses the "다음: 동X국" line,
- *  since renderGameEnd() appends the actual final-standings section instead. */
+ *  since the game-end flow shows the final-result step (renderFinalResultStep) next instead. */
 function renderHandEndPanel(handEndEvent, mySeat, isFinalHand) {
   const panel = document.getElementById("hand-end-panel");
   panel.innerHTML = "";
@@ -980,55 +980,152 @@ const GAME_END_REASON_KO = {
   tobi: "파산 (토비) 종료",
 };
 
-function renderGameEndExtra(gameEndEvent, mySeat) {
-  const panel = document.getElementById("hand-end-panel");
+const MODE_KO = { sanma: "산마", yonma: "4마" };
 
-  const hr = document.createElement("hr");
-  panel.appendChild(hr);
-
-  const h2 = el("h2");
-  h2.textContent = "게임 종료";
-  panel.appendChild(h2);
-
-  const reason = el("div", "result-headline");
-  reason.textContent = GAME_END_REASON_KO[gameEndEvent.reason] ?? gameEndEvent.reason;
-  panel.appendChild(reason);
-
-  const standings = [...gameEndEvent.finalScores.keys()].sort(
-    (a, b) => gameEndEvent.finalScores[b] - gameEndEvent.finalScores[a]
-  );
-  const list = el("div", "score-changes");
-  standings.forEach((seat, i) => {
-    const row = el("div", "row");
-    const name = el("span");
-    name.textContent = `${i + 1}위 ${displayNameForSeat(seat, mySeat)}`;
-    const value = el("span");
-    value.textContent = formatPoints(gameEndEvent.finalScores[seat]);
-    row.appendChild(name);
-    row.appendChild(value);
-    list.appendChild(row);
-  });
-  panel.appendChild(list);
+function formatPt(points) {
+  const text = Math.abs(points).toFixed(1);
+  if (points > 0) return `+${text}`;
+  if (points < 0) return `-${text}`;
+  return "±0.0";
 }
 
-function renderGameEnd(gameEndEvent, handEndEvent, mySeat, canStartNewGame) {
-  console.log("[debug] game_end event:", gameEndEvent);
-  if (handEndEvent) renderHandEndPanel(handEndEvent, mySeat, true);
-  else document.getElementById("hand-end-panel").innerHTML = "";
-  renderGameEndExtra(gameEndEvent, mySeat);
-  if (canStartNewGame) {
-    const panel = document.getElementById("hand-end-panel");
-    const newGameBtn = el("button", "continue-button");
-    newGameBtn.textContent = "새 대국 설정";
-    newGameBtn.addEventListener("click", () => {
-      AudioManager.play("ui.confirm");
-      newGameBtn.disabled = true;
-      fetch("/setup", { method: "POST" });
-    });
-    panel.appendChild(newGameBtn);
-  }
+/** 게임 종료 상태: 마지막 국 결과를 먼저 보여주고, "최종 결과 보기"로 최종 결과 화면에 넘어간다. */
+let gameEndState = null;
+
+function renderGameEnd(msg, mySeat) {
+  console.log("[debug] game_end event:", msg.event);
+  gameEndState = { msg, mySeat, pending: false, error: "" };
+  if (msg.handEvent) renderFinalHandStep();
+  else renderFinalResultStep();
   document.getElementById("hand-end-overlay").classList.remove("hidden");
   clearActionBar();
+}
+
+function renderFinalHandStep() {
+  const { msg, mySeat } = gameEndState;
+  renderHandEndPanel(msg.handEvent, mySeat, true);
+  const panel = document.getElementById("hand-end-panel");
+  const btn = el("button", "continue-button");
+  btn.textContent = "최종 결과 보기";
+  btn.addEventListener("click", () => {
+    AudioManager.play("ui.confirm");
+    renderFinalResultStep();
+  });
+  panel.insertBefore(btn, panel.firstChild.nextSibling);
+}
+
+function renderFinalStandings(standings, gameEndEvent, mySeat) {
+  const table = el("table", "final-standings");
+  const thead = el("thead");
+  const headRow = el("tr");
+  for (const [text, cls] of [["순위", "col-rank"], ["이름", "col-name"], ["점수", "col-score"], ["pt", "col-pt"]]) {
+    const th = el("th", cls, { scope: "col" });
+    th.textContent = text;
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  const tbody = el("tbody");
+  for (const s of standings) {
+    const tr = el("tr", s.player === mySeat ? "is-me" : "");
+    const rank = el("td", "col-rank");
+    rank.textContent = `${s.placement}위`;
+    const name = el("td", "col-name");
+    name.textContent = displayNameForSeat(s.player, mySeat);
+    if (gameEndEvent.eliminatedPlayers.includes(s.player)) {
+      const badge = el("span", "standing-badge");
+      badge.textContent = "토비";
+      name.appendChild(badge);
+    }
+    const score = el("td", "col-score");
+    score.textContent = formatPoints(s.rawScore);
+    const pt = el("td", "col-pt");
+    pt.textContent = formatPt(s.points);
+    tr.append(rank, name, score, pt);
+    tbody.appendChild(tr);
+  }
+  table.append(thead, tbody);
+  return table;
+}
+
+async function restartGame(body) {
+  if (gameEndState.pending) return;
+  AudioManager.play("ui.confirm");
+  gameEndState.pending = true;
+  gameEndState.error = "";
+  renderFinalResultStep();
+  try {
+    const res = await fetch("/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(await res.text());
+    // 성공하면 서버가 새 게임의 첫 상태를 보내며 이 화면이 닫힌다.
+  } catch (err) {
+    gameEndState.pending = false;
+    gameEndState.error = err instanceof Error ? err.message : String(err);
+    renderFinalResultStep();
+  }
+}
+
+function renderFinalResultStep() {
+  const { msg, mySeat, pending, error } = gameEndState;
+  const panel = document.getElementById("hand-end-panel");
+  panel.innerHTML = "";
+
+  const h2 = el("h2");
+  h2.textContent = "최종 결과";
+  panel.appendChild(h2);
+
+  const meta = el("div", "result-headline final-meta");
+  const parts = [GAME_END_REASON_KO[msg.event.reason] ?? msg.event.reason];
+  if (msg.gameConfig) parts.unshift(MODE_KO[msg.gameConfig.mode] ?? msg.gameConfig.mode);
+  meta.textContent = parts.join(" · ");
+  panel.appendChild(meta);
+
+  panel.appendChild(renderFinalStandings(msg.standings, msg.event, mySeat));
+
+  if (msg.gameConfig) {
+    const seed = el("div", "final-seed");
+    const label = el("span", "final-seed-label");
+    label.textContent = "시드";
+    const value = el("code");
+    value.textContent = msg.gameConfig.seed;
+    seed.append(label, value);
+    panel.appendChild(seed);
+  }
+
+  if (msg.canStartNewGame && msg.gameConfig) {
+    const cfg = msg.gameConfig;
+    const actions = el("div", "final-actions");
+    const same = el("button", "continue-button");
+    same.textContent = pending ? "시작하는 중..." : "같은 설정으로 다시";
+    same.title = "같은 모드와 상대, 새 시드";
+    same.addEventListener("click", () => restartGame({ mode: cfg.mode, opponents: cfg.opponents, saveReplays: cfg.saveReplays }));
+    const sameSeed = el("button", "secondary-button");
+    sameSeed.textContent = "같은 시드로 다시";
+    sameSeed.title = "같은 모드와 상대, 같은 시드";
+    sameSeed.addEventListener("click", () => restartGame({ mode: cfg.mode, opponents: cfg.opponents, seed: cfg.seed, saveReplays: cfg.saveReplays }));
+    const change = el("button", "secondary-button");
+    change.textContent = "설정 바꾸기";
+    change.addEventListener("click", () => {
+      AudioManager.play("ui.confirm");
+      gameEndState.pending = true;
+      renderFinalResultStep();
+      fetch("/setup", { method: "POST" });
+    });
+    for (const b of [same, sameSeed, change]) b.disabled = pending;
+    actions.append(same, sameSeed, change);
+    panel.appendChild(actions);
+    if (error) {
+      const err = el("p", "final-error", { role: "alert" });
+      err.textContent = error;
+      panel.appendChild(err);
+    }
+  }
+
+  if (msg.handEvent) {
+    const back = el("button", "link-button");
+    back.textContent = "마지막 국 결과 다시 보기";
+    back.addEventListener("click", renderFinalHandStep);
+    panel.appendChild(back);
+  }
 }
 
 // The human seat number, remembered from the last decision request - no more decision
@@ -1406,7 +1503,7 @@ function handleMessageBody(msg) {
     return;
   }
   if (msg.type === "game_end") {
-    renderGameEnd(msg.event, msg.handEvent, lastKnownMySeat, msg.canStartNewGame);
+    renderGameEnd(msg, lastKnownMySeat);
     return;
   }
   if (msg.type === "hand_end") {

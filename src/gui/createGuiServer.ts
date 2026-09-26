@@ -65,8 +65,11 @@ interface GameHost {
   continueToNextHand(): void;
 }
 
-/** `canStartNewGame`: 게임이 끝났을 때 클라이언트가 "새 대국" 버튼을 보여줄지 (시작 화면이 있는 서버만). */
-function createGameHost(game: GameState, options: GuiServerOptions, broadcast: (payload: string) => void, canStartNewGame: boolean): GameHost {
+/** 시작 화면에서 시작한 대국의 구성 (실제로 쓰인 시드 포함). 종료 화면의 "다시 하기"가 이것을 그대로 /start에 보낸다. */
+export type StartedGameConfig = GuiGameConfig & { seed: string };
+
+/** `startedConfig`: 시작 화면이 있는 서버에서 시작한 대국이면 그 구성. 있으면 종료 화면에 새 대국/다시 하기 버튼이 나온다. */
+function createGameHost(game: GameState, options: GuiServerOptions, broadcast: (payload: string) => void, startedConfig: StartedGameConfig | null): GameHost {
   const frameDelayMs = options.frameDelayMs ?? DEFAULT_FRAME_DELAY_MS;
   const session = new GuiSession(game);
   session.takeFrames(); // 접속 전의 AI 턴은 재생하지 않는다
@@ -101,7 +104,17 @@ function createGameHost(game: GameState, options: GuiServerOptions, broadcast: (
   function currentStateMessage(extra: { cues: AudioCue[]; cueBase?: number }): string {
     const phase = session.getPhase();
     if (phase === "game_end") {
-      return JSON.stringify({ type: "game_end", event: session.getGameEndEvent(), handEvent: session.getHandEndEvent(), characterNames, canStartNewGame, ...extra });
+      // 순위/우마는 엔진의 computeFinalStandings() 결과를 그대로 보낸다 (GUI가 따로 정렬하지 않는다).
+      return JSON.stringify({
+        type: "game_end",
+        event: session.getGameEndEvent(),
+        handEvent: session.getHandEndEvent(),
+        standings: game.computeFinalStandings(),
+        characterNames,
+        canStartNewGame: startedConfig !== null,
+        ...(startedConfig ? { gameConfig: startedConfig } : {}),
+        ...extra,
+      });
     }
     if (phase === "hand_end") {
       return JSON.stringify({ type: "hand_end", event: session.getHandEndEvent(), characterNames, ...extra });
@@ -197,7 +210,7 @@ export interface GuiLobbyOptions {
   defaults?: { mode?: GuiGameMode; seed?: string; saveReplays?: boolean; opponents?: Partial<Record<GuiGameMode, string[]>> };
   replayDir?: string;
   onReplaySaved?: (path: string) => void;
-  onGameStarted?: (config: GuiGameConfig & { seed: string }) => void;
+  onGameStarted?: (config: StartedGameConfig) => void;
 }
 
 export interface GuiLobbyServerHandle {
@@ -224,7 +237,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   const broadcast = (payload: string): void => {
     for (const res of sseClients) res.write(payload);
   };
-  let host: GameHost | null = initial ? createGameHost(initial.game, initial.options, broadcast, false) : null;
+  let host: GameHost | null = initial ? createGameHost(initial.game, initial.options, broadcast, null) : null;
 
   const roster = lobby ? buildCharacterRoster() : [];
   const defaults = lobby?.defaults ?? {};
@@ -275,8 +288,9 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
           }
         : {}),
     };
-    host = createGameHost(game, options, broadcast, true);
-    lobby.onGameStarted?.({ ...config, seed });
+    const started: StartedGameConfig = { ...config, opponents: [...config.opponents], seed };
+    host = createGameHost(game, options, broadcast, started);
+    lobby.onGameStarted?.(started);
     broadcast(`data: ${host.connectMessage()}\n\n`);
   }
 

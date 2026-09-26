@@ -5,6 +5,7 @@ import { CHARACTER_PRESENTATION, buildCharacterRoster } from "../src/gui/charact
 import { createGuiLobbyServer, type GuiLobbyOptions } from "../src/gui/createGuiServer.js";
 import { DEFAULT_OPPONENTS, createGuiGame, parseGuiGameConfig } from "../src/gui/gameSetup.js";
 import { defaultResponse } from "./helpers/yonmaHuman.js";
+import type { GuiSession } from "../src/gui/guiSession.js";
 
 async function readOneSseMessage(reader: ReadableStreamDefaultReader<Uint8Array>, buffer: { text: string }): Promise<any> {
   while (true) {
@@ -148,26 +149,41 @@ describe("시작 화면 서버 (createGuiLobbyServer)", () => {
     expect((await lobby.post("/setup")).status).toBe(400);
   });
 
-  it("게임이 끝나면 새 대국 버튼 정보를 보내고, 시작 화면으로 돌아가면 마지막 구성이 초기값이 된다", async () => {
-    const lobby = await startLobby();
-    cleanup = lobby.close;
-    await lobby.next();
-    expect((await lobby.post("/start", { mode: "sanma", opponents: ["magnum", "inan"], seed: "lobby-full" })).status).toBe(204);
-    await lobby.next();
-
-    // 시간 절약: HTTP 대신 세션에 직접 응답해 게임을 끝낸 뒤, 게임 종료 상태는 새 접속으로 확인한다.
-    const session = lobby.getSession()!;
+  /** 세션에 직접 응답해 게임을 끝낸다 (HTTP로 한 수씩 보내는 것보다 빠르다). */
+  function finishGame(getSession: () => GuiSession | null): void {
+    const session = getSession()!;
     for (let steps = 0; session.getPhase() !== "game_end"; steps++) {
       if (steps > 200000) throw new Error("game did not finish");
       if (session.getPhase() === "hand_end") session.continueToNextHand();
       else session.respond(defaultResponse(session.getCurrentRequest()!));
     }
-    const fresh = await fetch(`${lobby.baseUrl}/events`);
-    const freshReader = fresh.body!.getReader();
-    const ended = await readOneSseMessage(freshReader, { text: "" });
-    await freshReader.cancel();
+  }
+
+  async function connectOnce(baseUrl: string): Promise<any> {
+    const res = await fetch(`${baseUrl}/events`);
+    const reader = res.body!.getReader();
+    const msg = await readOneSseMessage(reader, { text: "" });
+    await reader.cancel();
+    return msg;
+  }
+
+  it("게임이 끝나면 엔진의 최종 순위와 실제 시드를 보내고, 시작 화면으로 돌아가면 마지막 구성이 초기값이 된다", async () => {
+    const lobby = await startLobby();
+    cleanup = lobby.close;
+    await lobby.next();
+    expect((await lobby.post("/start", { mode: "sanma", opponents: ["magnum", "inan"], seed: "lobby-full" })).status).toBe(204);
+    await lobby.next();
+    const game = lobby.getSession()!;
+    finishGame(lobby.getSession);
+
+    const ended = await connectOnce(lobby.baseUrl);
     expect(ended.type).toBe("game_end");
     expect(ended.canStartNewGame).toBe(true);
+    expect(ended.gameConfig).toEqual({ mode: "sanma", opponents: ["magnum", "inan"], seed: "lobby-full", saveReplays: false });
+    expect(ended.standings.map((s: { player: number }) => s.player).sort()).toEqual([0, 1, 2]);
+    expect(ended.standings.map((s: { placement: number }) => s.placement)).toEqual([1, 2, 3]);
+    expect(ended.standings.map((s: { rawScore: number }) => s.rawScore).sort()).toEqual([...ended.event.finalScores].sort());
+    expect(game.getPhase()).toBe("game_end");
 
     expect((await lobby.post("/setup")).status).toBe(204);
     const setup = await lobby.next();
@@ -177,4 +193,30 @@ describe("시작 화면 서버 (createGuiLobbyServer)", () => {
     expect(setup.defaults.seed).toBe("lobby-full");
     expect(lobby.getSession()).toBeNull();
   }, 60_000);
+
+  it("종료 화면에서 같은 시드로 다시 하면 같은 판이, 같은 설정으로 다시 하면 새 시드의 판이 시작된다", async () => {
+    const started: { seed: string }[] = [];
+    const lobby = await startLobby({ onGameStarted: (c) => started.push(c) });
+    cleanup = lobby.close;
+    await lobby.next();
+    const config = { mode: "sanma", opponents: ["josangmin", "hwayoung"], seed: "rematch-seed" };
+    expect((await lobby.post("/start", config)).status).toBe(204);
+    const firstRequest = (await lobby.next()).request;
+    finishGame(lobby.getSession);
+
+    // 같은 시드로 다시: 서버를 다시 켜지 않고 새 게임이 시작되며, 첫 요청(배패 포함)이 원래 게임과 같다
+    expect((await lobby.post("/start", config)).status).toBe(204);
+    const replayed = await lobby.next();
+    expect(replayed.type).toBe("decision");
+    expect(replayed.request).toEqual(firstRequest);
+    expect(started[1]!.seed).toBe("rematch-seed");
+    finishGame(lobby.getSession);
+
+    // 같은 설정으로 다시: 시드를 비우면 새 시드가 만들어진다
+    expect((await lobby.post("/start", { mode: config.mode, opponents: config.opponents })).status).toBe(204);
+    const fresh = await lobby.next();
+    expect(fresh.type).toBe("decision");
+    expect(fresh.characterNames).toEqual([null, "조상민", "화영"]);
+    expect(started[2]!.seed).not.toBe("rematch-seed");
+  }, 120_000);
 });
