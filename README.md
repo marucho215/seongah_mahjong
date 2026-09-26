@@ -93,7 +93,8 @@ server works exactly as before (local mode).
 
 Each entered user has their own lobby, game, event stream and AI speed setting (several tabs of the same browser share
 them). Online play is still in development (see `HANDOFF.md` §10): CustomAI and saved replays are still shared by all
-users, and a long AI computation or replay reproduction for one user can briefly pause the others.
+users. Games and replay reproduction run on engine worker threads, so one user's AI turns or replay do not pause the
+others.
 
 ### Play in the terminal (CLI)
 
@@ -175,8 +176,9 @@ and full human + AI games in both modes.
   seat's replay metadata, so later edits or deletions never change how an old replay reproduces.
 - No character voices or win cut-ins, no additional presentation options. Replays recorded by an older engine version
   usually cannot be reproduced by the viewer (it reports this instead of guessing).
-- Opening a long replay in the viewer re-plays the whole game on the GUI server, which pauses that server (including a
-  game in progress) for a few seconds.
+- Opening a long replay in the viewer re-plays the whole game, which takes a few seconds. `npm run play:gui` runs games
+  and replay reproduction on engine worker threads (`SEONGAH_ENGINE_WORKERS`, default CPU count - 1, 1 to 4), so this no
+  longer pauses games in progress.
 - A refresh restores the current decision, hand-end and game-end screens; an AI-turn animation that was playing is not
   replayed.
 - The GUI always seats the human at seat 0 (opponents are chosen on the start screen; the human's seat is not).

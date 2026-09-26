@@ -6,15 +6,18 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GameState } from "../core/GameState.js";
-import { GuiSession, type WatchFrame } from "./guiSession.js";
+import type { GuiSession, GuiSessionPhase, WatchFrame } from "./guiSession.js";
+import type { GameEvent } from "../core/GameLog.js";
+import { InlineEngineRunner, gameFromSpec, type EngineRunner, type EngineSnapshot, type EngineStart, type GameSpec, type OpponentSpec } from "./engineRunner.js";
+import type { EngineWorkerPool } from "./engineWorkerPool.js";
 import { AudioCueTracker, toPublicAction, type AudioCue, type PublicAction } from "./audioCues.js";
 import type { DecisionResponse } from "../core/decisions.js";
-import { buildGameReplayRecord, replaySeatsFromGame, resolveReplayDir, writeGameReplay, type GameReplayRecord } from "../sim/replayRecorder.js";
+import { resolveReplayDir, writeGameReplay, type GameReplayRecord } from "../sim/replayRecorder.js";
 import { reproduceReplay, type ReplayReproduction } from "../replay/replayReproduction.js";
 import { getCharacterProfile } from "../ai/characterProfiles.js";
 import { buildCharacterRoster } from "./characterRoster.js";
 import { DEFAULT_PLAYBACK_SPEED, PLAYBACK_FRAME_DELAY_MS, parsePlaybackSpeed } from "./playbackSpeed.js";
-import { DEFAULT_OPPONENTS, createGuiGameWithProfiles, parseGuiGameConfig, parseGuiMode, playerCountOf, type GuiGameConfig, type GuiGameMode } from "./gameSetup.js";
+import { DEFAULT_OPPONENTS, parseGuiGameConfig, parseGuiMode, playerCountOf, type GuiGameConfig, type GuiGameMode } from "./gameSetup.js";
 import { CustomAiStore } from "../customai/customAiStore.js";
 import { DEFAULT_SANMA_RULES, MAJSOUL_YONMA_RULES } from "../rules/RuleConfig.js";
 import {
@@ -94,13 +97,19 @@ function holdMultiplier(actions: PublicAction[]): number {
   return 1;
 }
 
-/** 한 게임(GameState 하나)을 GuiSession으로 진행하며 SSE 메시지를 만든다. HTTP 서버는 이것을 게임마다 새로 만든다. */
+/** 한 게임을 엔진 실행기(engineRunner.ts - 같은 스레드 또는 worker)로 진행하며 SSE 메시지를 만든다. HTTP 서버는 이것을 게임마다
+ *  새로 만든다. 엔진 상태는 실행기가 돌려준 스냅샷으로만 알며, 로그는 받은 이벤트를 이어 붙인 사본을 쓴다(인덱스는 원본과 같다). */
 interface GameHost {
-  session: GuiSession;
+  /** 같은 스레드에서 도는 대국이면 그 세션 (테스트/직접 게임용), worker면 null */
+  session: GuiSession | null;
+  phase(): GuiSessionPhase;
   connectMessage(): string;
+  /** 장면 재생 중이거나 엔진이 응답을 처리하는 중 */
   isPlaying(): boolean;
-  respond(response: DecisionResponse): void;
-  continueToNextHand(): void;
+  /** 지금 결정을 요청받은 좌석 (결정 대기가 아니면 null) */
+  currentRequestSeat(): number | null;
+  respond(response: DecisionResponse): Promise<void>;
+  continueToNextHand(): Promise<void>;
   /** 대국 그만두기: 이후 이 호스트는 아무 메시지도 보내지 않는다 (재생 중이던 장면 타이머 포함). 리플레이는 저장하지 않는다. */
   dispose(): void;
 }
@@ -109,60 +118,72 @@ interface GameHost {
 export type StartedGameConfig = GuiGameConfig & { seed: string };
 
 /** `startedConfig`: 시작 화면이 있는 서버에서 시작한 대국이면 그 구성. 있으면 종료 화면에 새 대국/다시 하기 버튼이 나온다. */
-/** `frameDelayMs`: 재생 속도 설정. 서버 단위 값이라 장면마다 새로 읽는다 (재생 중에 바꾸면 다음 장면부터 적용). */
+/** `frameDelayMs`: 재생 속도 설정. 장면마다 새로 읽는다 (재생 중에 바꾸면 다음 장면부터 적용). */
 function createGameHost(
-  game: GameState,
+  runner: EngineRunner,
+  start: EngineStart,
   options: GuiServerOptions,
   broadcast: (payload: string) => void,
   startedConfig: StartedGameConfig | null,
   frameDelayMs: () => number
 ): GameHost {
-  const session = new GuiSession(game);
+  /** 엔진 로그 사본: 스냅샷의 newEvents를 순서대로 이어 붙인다. */
+  const log: GameEvent[] = [];
+  let snapshot: EngineSnapshot = start.initial;
+  log.push(...snapshot.newEvents);
   /** 가장 최근 장면(화료/유국 포함)의 사람 좌석 view. 국/게임 종료 상태를 새로고침으로 다시 받을 때 작탁을 그 상태로 다시 그리는 데 쓴다. */
-  let lastFrameView: WatchFrame["view"] | null = session.takeFrames().at(-1)?.view ?? null; // 접속 전의 AI 턴은 재생하지 않는다
+  let lastFrameView: WatchFrame["view"] | null = snapshot.frames.at(-1)?.view ?? null; // 접속 전의 AI 턴은 재생하지 않는다
   /** 시작 화면이 있는 서버에서 시작한 대국만 도중에 그만두고 로비로 돌아갈 수 있다. */
   const canAbandon = startedConfig !== null;
   let disposed = false;
   let lastRequestView: WatchFrame["view"] | null = null;
 
+  /** 스냅샷을 반영한다: 로그 사본에 이벤트를 붙이고 현재 상태를 바꾼다. 장면(frames)은 호출한 쪽이 쓴다. */
+  function apply(next: EngineSnapshot): WatchFrame[] {
+    log.push(...next.newEvents);
+    snapshot = next;
+    return next.frames;
+  }
+
   let replaySaved = false;
-  function saveReplayIfFinished(): void {
-    if (!options.replay || replaySaved || session.getPhase() !== "game_end") return;
+  async function saveReplayIfFinished(): Promise<void> {
+    if (!options.replay || replaySaved || snapshot.phase !== "game_end") return;
     replaySaved = true;
-    const record = buildGameReplayRecord(game, options.replay.label, 0, replaySeatsFromGame(game));
+    const record = await runner.replayRecord(options.replay.label);
     const path = writeGameReplay(record, options.replay.dir ?? "replays");
     options.replay.onSaved?.(path);
   }
 
-  // Identity-only, presentation-layer detail: `game.characterProfiles` is already public
-  // (see GameState's controller/identity separation) - this just forwards each seat's
-  // display name (or null when that seat has no character profile) so the client never
-  // hardcodes a name and never confuses "who this seat is" with "who controls it".
-  const characterNames: (string | null)[] = game.characterProfiles.map((p) => p?.displayName ?? null);
+  // Identity-only, presentation-layer detail: each seat's display name (or null when that seat has no
+  // character profile) so the client never hardcodes a name and never confuses "who this seat is" with
+  // "who controls it".
+  const characterNames: (string | null)[] = start.characterNames;
 
-  // 효과음 신호: game.log를 서버에서 공개 정보만 담은 AudioCue로 바꿔 보낸다 (audioCues.ts).
+  // 효과음 신호: 로그를 서버에서 공개 정보만 담은 AudioCue로 바꿔 보낸다 (audioCues.ts).
   // 접속 전에 이미 쌓인 신호는 "과거"이므로 다시 재생하지 않는다.
-  const cueTracker = new AudioCueTracker(game.log);
+  const cueTracker = new AudioCueTracker(log);
   cueTracker.sync();
   let lastBroadcastSeq = cueTracker.latestSeq();
 
   /** 장면 재생 중에는 사람이 응답할 수 없다 (클라이언트는 아직 요청을 받지 못했다). */
   let playing = false;
+  /** 엔진이 응답/다음 국을 처리하는 중 (worker 결과를 기다리는 동안 다른 요청을 받지 않는다) */
+  let busy = false;
   let lastWatchMessage: string | null = null;
-  /** 최근 행동 목록을 만들 때 어디까지 읽었는지 (game.log 인덱스) */
-  let actionLogIndex = game.log.length;
+  /** 최근 행동 목록을 만들 때 어디까지 읽었는지 (로그 인덱스) */
+  let actionLogIndex = log.length;
 
   function currentStateMessage(extra: { cues: AudioCue[]; cueBase?: number }): string {
-    const phase = session.getPhase();
+    const phase = snapshot.phase;
     // 종료 화면 뒤에 그릴 작탁: 마지막 장면, 없으면 마지막 결정 요청의 view (사람 좌석 view라 숨은 정보가 없다)
     const view = lastFrameView ?? lastRequestView;
     if (phase === "game_end") {
       // 순위/우마는 엔진의 computeFinalStandings() 결과를 그대로 보낸다 (GUI가 따로 정렬하지 않는다).
       return JSON.stringify({
         type: "game_end",
-        event: session.getGameEndEvent(),
-        handEvent: session.getHandEndEvent(),
-        standings: game.computeFinalStandings(),
+        event: snapshot.gameEndEvent,
+        handEvent: snapshot.handEndEvent,
+        standings: snapshot.standings,
         characterNames,
         ...(view ? { view } : {}),
         canStartNewGame: startedConfig !== null,
@@ -171,19 +192,22 @@ function createGameHost(
       });
     }
     if (phase === "hand_end") {
-      return JSON.stringify({ type: "hand_end", event: session.getHandEndEvent(), ...(view ? { view } : {}), characterNames, canAbandon, ...extra });
+      return JSON.stringify({ type: "hand_end", event: snapshot.handEndEvent, ...(view ? { view } : {}), characterNames, canAbandon, ...extra });
     }
-    const request = session.getCurrentRequest();
+    const request = snapshot.request;
     if (request) lastRequestView = request.view;
     return JSON.stringify({ type: "decision", request, characterNames, canAbandon, ...extra });
   }
 
   /** 새로 접속한 클라이언트: 과거 신호는 보내지 않고, 현재 seq만 기준점(cueBase)으로 알려준다. */
   function connectMessage(): string {
-    // 아직 꺼내지 않은 장면이 있으면(응답 처리 밖에서 세션이 진행된 경우) 새 접속에는 재생하지 않되 마지막 상태로는 반영한다
-    if (!playing) {
-      const pending = session.takeFrames();
-      if (pending.length > 0) lastFrameView = pending.at(-1)!.view;
+    // 같은 스레드의 대국이 서버 밖에서 진행됐으면(테스트가 세션을 직접 조작한 경우) 그 장면은 새 접속에 재생하지 않되 마지막 상태로는 반영한다
+    if (!playing && !busy) {
+      const fresh = runner.pollSync();
+      if (fresh) {
+        const pending = apply(fresh);
+        if (pending.length > 0) lastFrameView = pending.at(-1)!.view;
+      }
     }
     cueTracker.sync();
     // 재생 중에 접속하면 가장 최근 장면을 보여준다 (최종 상태는 재생이 끝난 뒤 브로드캐스트된다).
@@ -199,13 +223,13 @@ function createGameHost(
     // 이 장면 직전까지 새로 생긴 공개 행동들
     const actions: PublicAction[] = [];
     for (; actionLogIndex < frame.logLength; actionLogIndex++) {
-      const a = toPublicAction(game.log[actionLogIndex]!);
+      const a = toPublicAction(log[actionLogIndex]!);
       if (a) actions.push(a);
     }
     // 방금 버려진 패의 주인 (론이면 방총자): 그 패를 강조하는 데 쓴다
     let latestDiscardSeat: number | null = null;
     for (let i = frame.logLength - 1; i >= 0; i--) {
-      const e = game.log[i]!;
+      const e = log[i]!;
       if (e.type === "discard") { latestDiscardSeat = e.player; break; }
       if (e.type === "hand_start") break;
     }
@@ -216,8 +240,7 @@ function createGameHost(
   let lastHold = 0;
 
   /** 응답 처리 뒤 상태를 보낸다. 그 사이 AI 턴이 있었다면 한 수씩 간격을 두고 보여준 다음 최종 상태를 보낸다. */
-  function broadcastAfterAction(): void {
-    const frames = session.takeFrames();
+  function broadcastAfterAction(frames: WatchFrame[]): void {
     if (frames.length > 0) lastFrameView = frames.at(-1)!.view;
     if (frameDelayMs() <= 0 || frames.length === 0) {
       broadcastState();
@@ -249,24 +272,46 @@ function createGameHost(
     broadcast(`data: ${currentStateMessage({ cues })}\n\n`);
   }
 
+  /** 엔진에 한 번 진행을 맡기고, 결과를 반영해 보낸다. 처리 중에는 다른 진행 요청을 받지 않는다. */
+  async function advance(run: () => Promise<EngineSnapshot>): Promise<void> {
+    busy = true;
+    let next: EngineSnapshot;
+    try {
+      next = await run();
+    } finally {
+      busy = false;
+    }
+    if (disposed) return;
+    const frames = apply(next);
+    await saveReplayIfFinished();
+    if (disposed) return;
+    broadcastAfterAction(frames);
+  }
+
   return {
-    session,
+    session: runner.session,
+    // 같은 스레드의 대국은 서버 밖(테스트)에서 진행될 수 있으므로 세션을 바로 읽는다. worker 대국은 마지막 스냅샷이 곧 현재 상태다.
+    phase: () => runner.session?.getPhase() ?? snapshot.phase,
     connectMessage,
-    isPlaying: () => playing,
+    isPlaying: () => playing || busy,
+    currentRequestSeat: () => {
+      if (runner.session) return runner.session.getCurrentRequest()?.seat ?? null;
+      return snapshot.phase === "decision" ? (snapshot.request?.seat ?? null) : null;
+    },
     respond(response) {
-      if (playing) throw new Error("GuiServer: 장면 재생 중에는 응답할 수 없습니다");
-      session.respond(response);
-      saveReplayIfFinished();
-      broadcastAfterAction();
+      if (playing) return Promise.reject(new Error("GuiServer: 장면 재생 중에는 응답할 수 없습니다"));
+      if (busy) return Promise.reject(new Error("GuiServer: 앞의 응답을 처리하는 중입니다"));
+      return advance(() => runner.respond(response));
     },
     continueToNextHand() {
-      if (playing) throw new Error("GuiServer: 장면 재생 중에는 진행할 수 없습니다");
-      session.continueToNextHand();
-      broadcastAfterAction();
+      if (playing) return Promise.reject(new Error("GuiServer: 장면 재생 중에는 진행할 수 없습니다"));
+      if (busy) return Promise.reject(new Error("GuiServer: 앞의 응답을 처리하는 중입니다"));
+      return advance(() => runner.continueToNextHand());
     },
     dispose() {
       disposed = true;
       playing = false;
+      runner.dispose();
     },
   };
 }
@@ -284,6 +329,9 @@ export interface GuiLobbyOptions {
   /** 온라인 입장 게이트. 지정하면 초대 코드와 닉네임으로 입장한 브라우저만 로비/대국/API를 쓸 수 있다 (accessGate.ts).
    *  생략하면 지금까지처럼 누구나 쓰는 로컬 모드다. */
   access?: AccessGate;
+  /** 대국과 리플레이 재현을 돌릴 엔진 worker 풀 (engineWorkerPool.ts). 생략하면 같은 스레드에서 돌린다(테스트용).
+   *  풀은 호출한 쪽이 만들고 닫는다. */
+  engine?: EngineWorkerPool;
 }
 
 export interface GuiLobbyServerHandle {
@@ -323,6 +371,8 @@ interface Room {
   frameDelayMs: number;
   /** 이 사용자가 앉아 있는 대국. 없으면 로비. */
   table: Table | null;
+  /** 엔진이 새 대국을 만드는 중 (worker 응답 대기) */
+  starting: boolean;
 }
 
 /** 대국 하나. 사람 좌석마다 그 좌석을 가진 사용자가 연결된다 (seatUsers[seat], AI 좌석은 null).
@@ -365,7 +415,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     const cached = reproductionCache.get(name);
     if (cached && cached.mtimeMs === st.mtimeMs) return cached.body;
     const record = JSON.parse(await readFile(filePath, "utf-8")) as GameReplayRecord;
-    const reproduction: ReplayReproduction = reproduceReplay(record);
+    const reproduction: ReplayReproduction = lobby?.engine ? await lobby.engine.reproduce(record) : reproduceReplay(record);
     const seats = Array.isArray(record.meta?.seats) ? record.meta.seats : [];
     const body = JSON.stringify({
       name,
@@ -397,6 +447,11 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     }
     return getCharacterProfile(id);
   }
+  /** 대국 상대 id -> 엔진에 넘길 구성. 등록 캐릭터는 id 그대로, CustomAI는 지금 파일에서 읽어 검증한 프로필이 그 대국의 스냅샷이 된다. */
+  function opponentSpecOf(id: string): OpponentSpec {
+    return isCustomAiCharacterId(id) ? { profile: resolveOpponentProfile(id) } : { characterId: id };
+  }
+
   const defaults = lobby?.defaults ?? {};
   const initialFrameDelayMs = (initial ? initial.options.frameDelayMs : lobby?.frameDelayMs) ?? DEFAULT_FRAME_DELAY_MS;
 
@@ -419,6 +474,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
         },
         frameDelayMs: initialFrameDelayMs,
         table: null,
+        starting: false,
       };
       rooms.set(userId, room);
     }
@@ -430,27 +486,37 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
 
   /** 대국을 만들고 사람 좌석에 대국을 연 사용자를 앉힌다 (로비 대국은 seat 0만 사람이다. 직접 만든 게임을 여는 createGuiServer는
    *  사람 좌석이 여럿일 수 있고, 모두 로컬 사용자가 둔다). 메시지는 사람 좌석의 사용자 로비로만 간다. */
-  function openTable(room: Room, game: GameState, options: GuiServerOptions, startedConfig: StartedGameConfig | null): Table {
-    const seatUsers: (string | null)[] = game.controllers.map((c) => (c === "human" ? room.userId : null));
+  function openTable(room: Room, runner: EngineRunner, start: EngineStart, options: GuiServerOptions, startedConfig: StartedGameConfig | null): Table {
+    const seatUsers: (string | null)[] = start.controllers.map((c) => (c === "human" ? room.userId : null));
     const deliver = (payload: string): void => {
       for (const userId of new Set(seatUsers)) if (userId !== null) sendToRoom(roomOf(userId), payload);
     };
     // 재생 속도는 대국을 시작한 사용자의 설정을 장면마다 읽는다.
-    const table: Table = { host: createGameHost(game, options, deliver, startedConfig, () => room.frameDelayMs), seatUsers };
+    const table: Table = { host: createGameHost(runner, start, options, deliver, startedConfig, () => room.frameDelayMs), seatUsers };
+    leaveTable(room);
     room.table = table;
     return table;
   }
 
-  /** 대국 응답: 지금 결정을 요청받은 좌석의 사용자만 보낼 수 있다. */
-  function respondAt(room: Room, response: DecisionResponse): void {
-    const table = room.table;
-    if (!table) throw new Error("GuiServer: 진행 중인 게임이 없습니다");
-    const request = table.host.session.getCurrentRequest();
-    if (request && table.seatUsers[request.seat] !== room.userId) throw new Error("GuiServer: 이 결정은 다른 좌석의 차례입니다");
-    table.host.respond(response);
+  /** 사용자가 대국을 떠난다 (그만두기, 끝난 대국에서 로비로, 새 대국). 대국을 버려 worker의 메모리도 비운다. */
+  function leaveTable(room: Room): void {
+    room.table?.host.dispose();
+    room.table = null;
   }
 
-  if (initial) openTable(roomOf(LOCAL_USER_ID), initial.game, initial.options, null);
+  /** 대국 응답: 지금 결정을 요청받은 좌석의 사용자만 보낼 수 있다. */
+  async function respondAt(room: Room, response: DecisionResponse): Promise<void> {
+    const table = room.table;
+    if (!table) throw new Error("GuiServer: 진행 중인 게임이 없습니다");
+    const seat = table.host.currentRequestSeat();
+    if (seat !== null && table.seatUsers[seat] !== room.userId) throw new Error("GuiServer: 이 결정은 다른 좌석의 차례입니다");
+    await table.host.respond(response);
+  }
+
+  if (initial) {
+    const { runner, start } = InlineEngineRunner.open(initial.game);
+    openTable(roomOf(LOCAL_USER_ID), runner, start, initial.options, null);
+  }
 
   function setupMessage(room: Room): string {
     const { lastSetup, lobbyScreen } = room;
@@ -492,11 +558,12 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
 
   /** 이 사용자가 진행 중인(끝나지 않았거나 장면 재생 중인) 대국에 앉아 있는지 */
   function inActiveGame(room: Room): boolean {
+    if (room.starting) return true;
     const host = room.table?.host;
-    return host !== undefined && (host.isPlaying() || host.session.getPhase() !== "game_end");
+    return host !== undefined && (host.isPlaying() || host.phase() !== "game_end");
   }
 
-  function startGame(room: Room, config: GuiGameConfig): void {
+  async function startGame(room: Room, config: GuiGameConfig): Promise<void> {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
     const seed = config.seed ?? `gui-${Date.now()}`;
@@ -506,7 +573,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       seed: config.seed ?? "",
       saveReplays: config.saveReplays,
     };
-    const game = createGuiGameWithProfiles(config.mode, seed, config.opponents.map(resolveOpponentProfile));
+    const spec: GameSpec = { mode: config.mode, seed, opponents: config.opponents.map(opponentSpecOf) };
     const options: GuiServerOptions = {
       ...(config.saveReplays
         ? {
@@ -519,7 +586,14 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
         : {}),
     };
     const started: StartedGameConfig = { ...config, opponents: [...config.opponents], seed };
-    const table = openTable(room, game, options, started);
+    room.starting = true;
+    let opened: { runner: EngineRunner; start: EngineStart };
+    try {
+      opened = lobby.engine ? await lobby.engine.openGame(spec) : InlineEngineRunner.open(gameFromSpec(spec));
+    } finally {
+      room.starting = false;
+    }
+    const table = openTable(room, opened.runner, opened.start, options, started);
     lobby.onGameStarted?.(started, room.userId);
     sendToRoom(room, `data: ${table.host.connectMessage()}\n\n`);
   }
@@ -527,7 +601,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   function returnToSetup(room: Room): void {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     if (inActiveGame(room)) throw new Error("GuiServer: 게임이 끝난 뒤에만 시작 화면으로 돌아갈 수 있습니다");
-    room.table = null;
+    leaveTable(room);
     room.lobbyScreen = "setup"; // 마지막으로 사용한 모드(lastSetup.mode)의 설정 화면으로 돌아간다
     sendToRoom(room, `data: ${setupMessage(room)}\n\n`);
   }
@@ -538,9 +612,8 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     const host = room.table?.host;
     if (!host) throw new Error("GuiServer: 진행 중인 대국이 없습니다");
-    if (host.session.getPhase() === "game_end") throw new Error("GuiServer: 이미 끝난 대국입니다");
-    host.dispose();
-    room.table = null;
+    if (host.phase() === "game_end") throw new Error("GuiServer: 이미 끝난 대국입니다");
+    leaveTable(room);
     room.lobbyScreen = "setup";
     sendToRoom(room, `data: ${setupMessage(room)}\n\n`);
   }
@@ -558,7 +631,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     } else {
       throw new Error('screen은 "hub" 또는 "setup"이어야 합니다');
     }
-    room.table = null;
+    leaveTable(room);
     sendToRoom(room, `data: ${setupMessage(room)}\n\n`);
   }
 
@@ -624,12 +697,12 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     req.on("end", () => onBody(body));
   }
 
-  function reply(res: import("node:http").ServerResponse, action: () => void): void {
+  function reply(res: import("node:http").ServerResponse, action: () => void | Promise<void>): void {
+    const fail = (err: unknown) => res.writeHead(400, { "Content-Type": "text/plain" }).end(String(err instanceof Error ? err.message : err));
     try {
-      action();
-      res.writeHead(204).end();
+      Promise.resolve(action()).then(() => res.writeHead(204).end(), fail);
     } catch (err) {
-      res.writeHead(400, { "Content-Type": "text/plain" }).end(String(err instanceof Error ? err.message : err));
+      fail(err);
     }
   }
 
@@ -720,7 +793,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     if (req.method === "POST" && url.pathname === "/continue") {
       reply(res, () => {
         if (!room.table) throw new Error("GuiServer: 진행 중인 게임이 없습니다");
-        room.table.host.continueToNextHand();
+        return room.table.host.continueToNextHand();
       });
       return;
     }
@@ -783,5 +856,6 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     res.writeHead(405).end("Method not allowed");
   });
 
+  // 같은 스레드에서 도는 대국만 세션을 돌려준다 (worker 대국은 null)
   return { server, getSession: (userId = LOCAL_USER_ID) => rooms.get(userId)?.table?.host.session ?? null };
 }

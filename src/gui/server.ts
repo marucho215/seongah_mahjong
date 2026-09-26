@@ -5,10 +5,14 @@
  * 마지막 모드의 설정 화면으로 돌아가 새 대국을 할 수 있다.
  *
  * 온라인 입장 게이트: `--invite-code <코드>`(또는 환경 변수 SEONGAH_INVITE_CODE)를 주면 그 코드와 닉네임으로 입장한
- * 브라우저만 쓸 수 있다. 세션은 server-data/sessions.json에 저장된다 (accessGate.ts). */
+ * 브라우저만 쓸 수 있다. 세션은 server-data/sessions.json에 저장된다 (accessGate.ts).
+ *
+ * 대국과 리플레이 재현은 엔진 worker 풀에서 돌린다 (engineWorkerPool.ts). worker 수는 환경 변수 SEONGAH_ENGINE_WORKERS로 바꿀 수 있다
+ * (기본: CPU 수 - 1, 1~4개). */
 import { parseGameArgs } from "./gameSetup.js";
 import { createGuiLobbyServer } from "./createGuiServer.js";
 import { AccessGate } from "./accessGate.js";
+import { EngineWorkerPool, defaultEngineWorkerCount } from "./engineWorkerPool.js";
 
 const PORT = Number(process.env.PORT) || 3000;
 const args = process.argv.slice(2);
@@ -17,13 +21,15 @@ if (inviteIndex >= 0 && !args[inviteIndex + 1]) throw new Error("--invite-code �
 const inviteCode = inviteIndex >= 0 ? args[inviteIndex + 1]! : process.env.SEONGAH_INVITE_CODE;
 const parsed = parseGameArgs(inviteIndex >= 0 ? args.filter((_, i) => i !== inviteIndex && i !== inviteIndex + 1) : args);
 const access = inviteCode ? new AccessGate({ inviteCode }) : undefined;
+const engine = new EngineWorkerPool(process.env.SEONGAH_ENGINE_WORKERS ? Number(process.env.SEONGAH_ENGINE_WORKERS) : defaultEngineWorkerCount());
 
 const { server } = createGuiLobbyServer({
   defaults: { mode: parsed.mode, saveReplays: parsed.saveReplays, ...(parsed.seed !== undefined ? { seed: parsed.seed } : {}) },
   onGameStarted: (config) => console.log(`Game started - Mode: ${config.mode}, Seed: ${config.seed}, Opponents: ${config.opponents.join(", ")}`),
   onReplaySaved: (path) => console.log(`Replay saved: ${path}`),
   ...(access ? { access } : {}),
+  engine,
 });
 server.listen(PORT, () => {
-  console.log(`Seongah Majak GUI: http://localhost:${PORT}${access ? " (초대 코드 입장)" : ""}`);
+  console.log(`Seongah Majak GUI: http://localhost:${PORT}${access ? " (초대 코드 입장)" : ""}, 엔진 worker ${engine.size}개`);
 });
