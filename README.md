@@ -50,8 +50,8 @@ with the last choices pre-filled - no server restart needed.
 GUI features: one shared 4-position table for sanma and yonma, click-to-discard with riichi confirmation, action bar
 for every decision (chi options are drawn as tiles), the AI's discards/calls/riichi/wins replayed one at a time,
 a short "recent actions" list, an AI playback speed setting (slow / normal / fast / instant - it only changes how
-fast the already-decided AI turns are shown, never the game itself), riichi wait display with the number of copies you have not seen yet (public
-information only, never the real wall), furiten indicator, sound effects, result overlay, and session recovery on
+fast the already-decided AI turns are shown, never the game itself), your current shanten, your waits whenever you are tenpai (riichi or not) with the number of copies you have not
+seen yet (public information only, never the real wall), furiten indicator, sound effects, result overlay, and session recovery on
 browser refresh/reconnect. Tile art: `src/gui/public/assets/mahjong/ATTRIBUTION.md`.
 
 ### Play in the terminal (CLI)

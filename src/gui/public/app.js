@@ -533,11 +533,28 @@ function renderMySeat(view, options) {
     const previewWaits = riichiLegal ? waitsForTile(options.riichiWaits, t.id) : null;
     if (previewWaits) {
       img.addEventListener("mouseenter", () => showWaits(zone, "리치하면 대기", previewWaits, view.furiten));
-      img.addEventListener("mouseleave", () => showWaits(zone, "대기", view.waits, view.furiten));
+      img.addEventListener("mouseleave", () => showHandStatus(zone, view));
     }
     hand.appendChild(img);
   }
-  showWaits(zone, "대기", view.waits, view.furiten);
+  showHandStatus(zone, view);
+}
+
+/** 샹텐 문구: 엔진이 계산한 view.handStatus.shanten을 그대로 읽는다 (-1 = 화료형). */
+function shantenLabel(shanten) {
+  if (shanten < 0) return "화료형";
+  if (shanten === 0) return "텐파이";
+  return `${shanten}샹텐`;
+}
+
+/** 내 손 상태 줄: 샹텐 + (텐파이면) 대기패/미확인 장수/후리텐. 리치 여부와 무관하며 모두 엔진 계산 결과다. */
+function showHandStatus(zone, view) {
+  const status = view.handStatus;
+  if (!status) {
+    showWaits(zone, "대기", view.waits, view.furiten);
+    return;
+  }
+  showWaits(zone, "대기", status.tenpaiWaits, view.furiten, shantenLabel(status.shanten));
 }
 
 function waitsForTile(riichiWaits, tileId) {
@@ -545,15 +562,23 @@ function waitsForTile(riichiWaits, tileId) {
   return entry ? entry.waits : null;
 }
 
-/** 대기패 줄: "대기: [패] [패]". 후리텐이면 원인과 함께 표시한다 (view.furiten, 엔진이 계산한 값). 대기가 없으면 숨긴다. */
-function showWaits(zone, label, waits, furiten) {
+/** 대기패 줄: "[샹텐] 대기: [패] [패]". 후리텐이면 원인과 함께 표시한다 (view.furiten, 엔진이 계산한 값).
+ *  `status`(샹텐 문구)가 있으면 대기가 없어도 그 문구만 보여주고, 둘 다 없으면 숨긴다. */
+function showWaits(zone, label, waits, furiten, status) {
   const box = zone.querySelector(".waits");
   box.innerHTML = "";
-  if (!waits || waits.length === 0) {
+  const hasWaits = !!waits && waits.length > 0;
+  if (!hasWaits && !status) {
     box.classList.add("hidden");
     return;
   }
   box.classList.remove("hidden");
+  if (status) {
+    const s = el("span", "hand-status");
+    s.textContent = status;
+    box.appendChild(s);
+  }
+  if (!hasWaits) return;
   const text = el("span", "waits-label");
   text.textContent = label + ":";
   box.appendChild(text);

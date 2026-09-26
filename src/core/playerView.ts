@@ -5,6 +5,8 @@ import { tileToRef } from "../yaku/doraBreakdown.js";
 import { meldToSnapshot } from "../yaku/winSnapshot.js";
 import { NO_FURITEN, type FuritenSnapshot } from "../actions/furiten.js";
 import { seatDistance } from "./seats.js";
+import { tilesToCounts } from "./tileIndex.js";
+import { minShanten } from "../shanten/shanten.js";
 
 /** Position, within the visible river (`discards`, called-away tiles excluded), of the tile
  *  to draw sideways because it declared riichi - null when no riichi declaration. If the
@@ -99,6 +101,8 @@ export interface PlayerView {
   /** 리치 중인 이 좌석의 현재 대기패 (종류만). 엔진의 기존 대기 계산(computeWinningTiles)을 그대로 쓰며, 자기 손패에서만
    *  나온다 - 남은 장수처럼 상대 손패/벽에 의존하는 정보는 담지 않는다. 리치가 아니면 빈 배열. */
   waits: WaitInfo[];
+  /** 이 좌석 손의 현재 상태. 모두 자기 손패/멘츠에서만 계산하며, 미확인 장수는 `waits`와 같은 공개 정보 기준이다. */
+  handStatus: HandStatus;
   opponents: PlayerViewOpponent[];
   doraIndicators: TileRef[];
   scores: number[];
@@ -110,12 +114,24 @@ export interface PlayerView {
   wallRemainingLive: number;
 }
 
+/** 리치 여부와 무관한 현재 손 상태 (GUI 표시용, 엔진 계산 결과). `waits`(리치 중 대기)의 의미는 바꾸지 않는다. */
+export interface HandStatus {
+  /** 엔진 minShanten(일반형/칠대자/국사 중 최소). 쯔모 직후처럼 손이 3n+2장이면 표준 정의대로 "한 장 버린 뒤의 최소 샹텐"이며,
+   *  -1은 화료형이다. */
+  shanten: number;
+  /** 마지막 타패/울기 뒤(3n+1장 상태)의 대기패. 텐파이가 아니면 빈 배열. 쯔모 직후에도 그 직전의 대기를 유지한다
+   *  (리치 중 `waits`, 후리텐 판정과 같은 엔진 대기 캐시). */
+  tenpaiWaits: WaitInfo[];
+}
+
 export interface BuildPlayerViewOptions {
   seat: number;
   /** Defaults to "not furiten" when omitted. */
   furiten?: FuritenSnapshot;
   /** 리치 중인 이 좌석의 대기패. 생략하면 빈 배열. */
   waits?: readonly TileKind[];
+  /** 리치 여부와 무관한 이 좌석의 현재 대기패 (HandStatus.tenpaiWaits). 생략하면 빈 배열. */
+  tenpaiWaits?: readonly TileKind[];
   hands: readonly Hand[];
   doraIndicators: readonly Tile[];
   scores: readonly number[];
@@ -128,7 +144,7 @@ export interface BuildPlayerViewOptions {
 }
 
 export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
-  const { seat, hands, doraIndicators, scores, furiten, waits, ...rest } = options;
+  const { seat, hands, doraIndicators, scores, furiten, waits, tenpaiWaits, ...rest } = options;
   const own = hands[seat]!;
   const opponents: PlayerViewOpponent[] = hands
     .map((hand, i) => ({ hand, seat: i }))
@@ -158,5 +174,9 @@ export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
     ...rest,
   };
   // 대기패의 미확인 장수는 방금 만든 view의 공개 정보만으로 센다
-  return { ...base, waits: withUnseenCounts(base, waits ?? []) };
+  const handStatus: HandStatus = {
+    shanten: minShanten(tilesToCounts(own.concealed), own.melds.length),
+    tenpaiWaits: withUnseenCounts(base, tenpaiWaits ?? []),
+  };
+  return { ...base, waits: withUnseenCounts(base, waits ?? []), handStatus };
 }

@@ -31,7 +31,9 @@
 - **PlayerView로 숨은 정보 차단** (`src/core/playerView.ts`): 요청에 실리는 view에는 그 좌석의 손패만 있고 상대는
   `concealedCount`(개수)만 있다. 대기패 장수(`WaitInfo.unseenCount`)는 view에 든 공개 정보만으로 `4 - 보이는 장수`를 센다
   (패산/상대 손패 미사용). view에 새 필드를 추가할 때는 상대 정보가 새지 않는지 테스트(`tests/riichiWaits.test.ts`,
-  `tests/humanPlay.test.ts`)로 고정한다.
+  `tests/humanPlay.test.ts`)로 고정한다. `view.waits`는 "리치 중 대기"이고, 리치 여부와 무관한 현재 손 상태는 별도 필드
+  `view.handStatus`(`shanten`: 엔진 minShanten, `tenpaiWaits`: 엔진 대기 캐시 + 같은 공개 정보 기준 장수)에 담는다
+  (`tests/handStatus.test.ts`). GUI는 이 값을 표시만 하며, 유효패/추천 타패/위험패는 아직 없다.
 - **presentation은 엔진 결과와 분리**: `GameState.frameObserver`는 표시 전용 콜백(타패/울기/리치/화료 시점의 view)이고,
   게임 진행·로그·결과에 영향이 없다. 서버(`createGuiServer`)가 장면을 시간 간격으로 재생하고, 효과음은 `game.log`를 공개
   정보만 담은 `AudioCue`로 바꿔 보낸다(`src/gui/audioCues.ts`, 재접속 시 과거 소리를 재생하지 않는다).

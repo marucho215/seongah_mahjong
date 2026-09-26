@@ -959,6 +959,7 @@ export class GameState {
           hands[seat]!.discards.map((d) => d.tile.kind)
         ),
         waits: hands[seat]!.riichi ? cachedWinningTiles[seat]! : [],
+        tenpaiWaits: cachedWinningTiles[seat]!,
         hands,
         doraIndicators: wall.doraIndicators(),
         scores: this.scores,
