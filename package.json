@@ -1,6 +1,6 @@
 {
   "name": "sanma-riichi-engine",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Riichi mahjong simulation engine (sanma and yonma) with CharacterAI opponents and a human-play GUI/CLI",
   "type": "module",
   "scripts": {

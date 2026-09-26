@@ -1,8 +1,8 @@
-# Seongah Mahjong — 인수인계 (v1.0.0)
+# Seongah Mahjong — 인수인계 (v1.1.0)
 
-최종 갱신: v1.0.0 마감 시점. README는 사용자/실행 안내, 이 문서는 개발자와 다음 세션을 위한 구조·상태 설명이다.
+최종 갱신: v1.1.0 마감 시점. README는 사용자/실행 안내, 이 문서는 개발자와 다음 세션을 위한 구조·상태 설명이다.
 
-## 1. 현재 상태 (1.0)
+## 1. 현재 상태 (1.1)
 
 - 엔진: Mahjong Soul 계열 **산마/4마** deterministic 시뮬레이션. `playHand()` / `playGame()` 완주, scoring, 후로,
   리치, 깡, 유국(유국만관 포함), 국 진행, CharacterAI(산마/4마), 결정적 replay와 AI decision trace.
@@ -15,9 +15,9 @@
 - **GUI 흐름 (1.1)**: 로비(대국 방식 선택 → 같은 화면의 좌석/CustomAI/시드/리플레이 설정) → 대국(AI 진행 속도, 자동 쯔모기리/
   울기 패스/자동 화료, 샹텐·텐파이 대기 표시, 대국 그만두기) → 국 결과(손패/도라 내역/판·부·등급/점수 이동) → 최종 결과(엔진 순위,
   같은 설정/같은 시드로 다시, 설정 바꾸기). 리플레이 뷰어(`/replay.html`), CustomAI 편집기. 변경 내역은 `RELEASE_NOTES.md`.
-- 마지막 전체 회귀: 72 files / 694 tests 통과, `tsc -p . --noEmit` clean (숫자는 계속 변하므로 새 기준은 새 실행으로
-  확인할 것). 전체 스위트는 약 15~17분 걸린다.
-- 체크포인트 태그: `human-play-*` 중간 태그들과 `human-play-complete-v1`, 최종 `v1.0.0`.
+- 마지막 전체 회귀: 81 files / 737 tests 통과, `tsc -p . --noEmit` clean (숫자는 계속 변하므로 새 기준은 새 실행으로
+  확인할 것). 전체 스위트는 약 8분 걸린다. GUI 스모크(`npm run test:e2e`) 2 tests 통과.
+- 체크포인트 태그: `human-play-*` 중간 태그들과 `human-play-complete-v1`, `v1.0.0`, 최종 `v1.1.0`.
 
 ## 2. 중요한 설계 결정
 

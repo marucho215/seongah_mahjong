@@ -7,7 +7,7 @@ The implementation targets the behavior covered by this repository's tests; it d
 with every live-service rule or option. Player count, tile/wall layout, scoring totals, calls (chi/kita) and
 round length are selected through `RuleConfig`.
 
-Version 1.0.0. Developer-facing structure and status: [HANDOFF.md](HANDOFF.md).
+Version 1.1.0 ([release notes](RELEASE_NOTES.md)). Developer-facing structure and status: [HANDOFF.md](HANDOFF.md).
 
 ## What is supported
 
