@@ -11,6 +11,7 @@ import { AudioCueTracker, toPublicAction, type AudioCue, type PublicAction } fro
 import type { DecisionResponse } from "../core/decisions.js";
 import { buildGameReplayRecord, replaySeatsFromGame, writeGameReplay } from "../sim/replayRecorder.js";
 import { buildCharacterRoster } from "./characterRoster.js";
+import { DEFAULT_PLAYBACK_SPEED, PLAYBACK_FRAME_DELAY_MS, parsePlaybackSpeed } from "./playbackSpeed.js";
 import { DEFAULT_OPPONENTS, createGuiGame, parseGuiGameConfig, playerCountOf, type GuiGameConfig, type GuiGameMode } from "./gameSetup.js";
 
 export const PUBLIC_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "public");
@@ -40,11 +41,11 @@ export interface GuiServerOptions {
    *  파일: <dir>/<label>_game0.json (dir 기본 "replays" = 프로젝트 루트 기준). 서버가 게임 도중 종료되면 저장되지 않는다. */
   replay?: { label: string; dir?: string; onSaved?: (path: string) => void };
   /** 일반 타패 한 장면을 보여주는 기본 시간(ms). 울기/리치/화료는 이것의 배수만큼 더 오래 보여준다.
-   *  0이면 장면 재생 없이 곧바로 다음 상태만 보낸다. */
+   *  0이면 장면 재생 없이 곧바로 다음 상태만 보낸다. 클라이언트가 POST /speed로 바꿀 수 있다. */
   frameDelayMs?: number;
 }
 
-export const DEFAULT_FRAME_DELAY_MS = 400;
+export const DEFAULT_FRAME_DELAY_MS = PLAYBACK_FRAME_DELAY_MS[DEFAULT_PLAYBACK_SPEED];
 
 /** 장면 종류별 유지 시간 배수: 타패 x1 / 울기·북 x1.5 / 리치 x2.2 / 쯔모 x2.5 / 론 x3 (론은 결과창 전에 충분히 보여준다). */
 function holdMultiplier(actions: PublicAction[]): number {
@@ -69,8 +70,14 @@ interface GameHost {
 export type StartedGameConfig = GuiGameConfig & { seed: string };
 
 /** `startedConfig`: 시작 화면이 있는 서버에서 시작한 대국이면 그 구성. 있으면 종료 화면에 새 대국/다시 하기 버튼이 나온다. */
-function createGameHost(game: GameState, options: GuiServerOptions, broadcast: (payload: string) => void, startedConfig: StartedGameConfig | null): GameHost {
-  const frameDelayMs = options.frameDelayMs ?? DEFAULT_FRAME_DELAY_MS;
+/** `frameDelayMs`: 재생 속도 설정. 서버 단위 값이라 장면마다 새로 읽는다 (재생 중에 바꾸면 다음 장면부터 적용). */
+function createGameHost(
+  game: GameState,
+  options: GuiServerOptions,
+  broadcast: (payload: string) => void,
+  startedConfig: StartedGameConfig | null,
+  frameDelayMs: () => number
+): GameHost {
   const session = new GuiSession(game);
   session.takeFrames(); // 접속 전의 AI 턴은 재생하지 않는다
 
@@ -149,7 +156,7 @@ function createGameHost(game: GameState, options: GuiServerOptions, broadcast: (
       if (e.type === "hand_start") break;
     }
     const message = JSON.stringify({ type: "watch", view: frame.view, actor: frame.actor, latestDiscardSeat, actions, characterNames, cues });
-    lastHold = frameDelayMs * holdMultiplier(actions);
+    lastHold = frameDelayMs() * holdMultiplier(actions);
     return message;
   }
   let lastHold = 0;
@@ -157,7 +164,7 @@ function createGameHost(game: GameState, options: GuiServerOptions, broadcast: (
   /** 응답 처리 뒤 상태를 보낸다. 그 사이 AI 턴이 있었다면 한 수씩 간격을 두고 보여준 다음 최종 상태를 보낸다. */
   function broadcastAfterAction(): void {
     const frames = session.takeFrames();
-    if (frameDelayMs <= 0 || frames.length === 0) {
+    if (frameDelayMs() <= 0 || frames.length === 0) {
       broadcastState();
       return;
     }
@@ -237,7 +244,9 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   const broadcast = (payload: string): void => {
     for (const res of sseClients) res.write(payload);
   };
-  let host: GameHost | null = initial ? createGameHost(initial.game, initial.options, broadcast, null) : null;
+  let frameDelayMs = (initial ? initial.options.frameDelayMs : lobby?.frameDelayMs) ?? DEFAULT_FRAME_DELAY_MS;
+  const currentFrameDelayMs = (): number => frameDelayMs;
+  let host: GameHost | null = initial ? createGameHost(initial.game, initial.options, broadcast, null, currentFrameDelayMs) : null;
 
   const roster = lobby ? buildCharacterRoster() : [];
   const defaults = lobby?.defaults ?? {};
@@ -277,7 +286,6 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     };
     const game = createGuiGame(config.mode, seed, config.opponents);
     const options: GuiServerOptions = {
-      ...(lobby.frameDelayMs !== undefined ? { frameDelayMs: lobby.frameDelayMs } : {}),
       ...(config.saveReplays
         ? {
             replay: {
@@ -289,7 +297,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
         : {}),
     };
     const started: StartedGameConfig = { ...config, opponents: [...config.opponents], seed };
-    host = createGameHost(game, options, broadcast, started);
+    host = createGameHost(game, options, broadcast, started, currentFrameDelayMs);
     lobby.onGameStarted?.(started);
     broadcast(`data: ${host.connectMessage()}\n\n`);
   }
@@ -352,6 +360,16 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
 
     if (req.method === "POST" && url.pathname === "/start") {
       readBody(req, (body) => reply(res, () => startGame(parseGuiGameConfig(JSON.parse(body)))));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/speed") {
+      readBody(req, (body) =>
+        reply(res, () => {
+          const { speed } = JSON.parse(body) as { speed?: unknown };
+          frameDelayMs = PLAYBACK_FRAME_DELAY_MS[parsePlaybackSpeed(speed)];
+        })
+      );
       return;
     }
 

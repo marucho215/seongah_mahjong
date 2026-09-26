@@ -18,8 +18,14 @@
   <!-- 최근 공개 행동 몇 개만 작게 (AI 턴 장면 재생 중 상황 파악용) -->
   <div id="recent-feed" class="hidden"></div>
 
-  <!-- 효과음 설정: 음소거 + 마스터 볼륨 (audioManager.js가 연결) -->
+  <!-- 재생 설정: AI 진행 속도 (app.js가 연결) + 효과음 음소거/마스터 볼륨 (audioManager.js가 연결) -->
   <div id="audio-controls">
+    <select class="speed-select" aria-label="AI 진행 속도">
+      <option value="slow">느림</option>
+      <option value="normal">보통</option>
+      <option value="fast">빠름</option>
+      <option value="instant">즉시</option>
+    </select>
     <button type="button" class="audio-mute">소리 켬</button>
     <input type="range" class="audio-volume" min="0" max="1" step="0.05" value="0.8" aria-label="볼륨" />
   </div>

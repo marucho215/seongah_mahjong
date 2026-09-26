@@ -299,4 +299,62 @@ describe("GUI HTTP/SSE server (createGuiServer)", () => {
     if (next.type === "hand_end") expect(next.event).toBeDefined();
     await reader.cancel();
   }, 30000);
+
+  /** 첫 타패를 낼 때까지 응답하고(다른 선택은 거절), 그 사이 받은 메시지 종류와 마지막 상태를 돌려준다. */
+  async function playToFirstDiscard(baseUrl: string, getSession: () => ReturnType<typeof createGuiServer>["session"]) {
+    const stream = await fetch(`${baseUrl}/events`);
+    const reader = stream.body!.getReader();
+    const buffer = { text: "" };
+    await readOneSseMessage(reader, buffer);
+    const kinds: string[] = [];
+    let last: any;
+    let discarded = false;
+    for (let guard = 0; guard < 6 && !discarded; guard++) {
+      const request = getSession().getCurrentRequest()!;
+      discarded = request.type === "discard";
+      const answer =
+        request.type === "discard"
+          ? { type: "discard", tileId: request.legalTileIds[0], declareRiichi: false }
+          : { type: request.type, declare: false };
+      expect((await fetch(`${baseUrl}/respond`, { method: "POST", body: JSON.stringify(answer) })).status).toBe(204);
+      do {
+        last = await readOneSseMessage(reader, buffer);
+        kinds.push(last.type);
+      } while (last.type === "watch");
+    }
+    await reader.cancel();
+    return { kinds, last };
+  }
+
+  it("AI 진행 속도는 장면 재생 간격만 바꾸고, 게임 진행과 결과는 같다", async () => {
+    const seed = "gui-speed-parity";
+    const replayed = newHumanGame(seed);
+    const a = await startServer(replayed, 15);
+    const withFrames = await playToFirstDiscard(a.baseUrl, a.getSession);
+    await a.close();
+
+    const instantGame = newHumanGame(seed);
+    const b = await startServer(instantGame, 15);
+    cleanup = b.close;
+    expect((await fetch(`${b.baseUrl}/speed`, { method: "POST", body: JSON.stringify({ speed: "instant" }) })).status).toBe(204);
+    const instant = await playToFirstDiscard(b.baseUrl, b.getSession);
+
+    expect(withFrames.kinds).toContain("watch");
+    expect(instant.kinds).not.toContain("watch");
+    expect(instant.last.request ?? instant.last.event).toEqual(withFrames.last.request ?? withFrames.last.event);
+    expect(JSON.stringify(instantGame.log)).toBe(JSON.stringify(replayed.log));
+  });
+
+  it("알 수 없는 재생 속도는 400으로 거절한다", async () => {
+    const { baseUrl, close } = await startServer(newHumanGame("gui-speed-invalid"));
+    cleanup = close;
+    for (const body of [{ speed: "turbo" }, { speed: 3 }, {}]) {
+      const res = await fetch(`${baseUrl}/speed`, { method: "POST", body: JSON.stringify(body) });
+      expect(res.status).toBe(400);
+      await res.text();
+    }
+    for (const speed of ["slow", "normal", "fast", "instant"]) {
+      expect((await fetch(`${baseUrl}/speed`, { method: "POST", body: JSON.stringify({ speed }) })).status).toBe(204);
+    }
+  });
 });

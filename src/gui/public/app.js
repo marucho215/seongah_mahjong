@@ -1144,6 +1144,47 @@ function placeActionBar() {
 window.addEventListener("resize", placeActionBar);
 AudioManager.mountControls();
 
+// --- AI 진행 속도: 서버가 이미 계산된 AI 장면을 보내는 간격만 바꾼다 (게임 진행/결과와 무관).
+// 선택값은 이 브라우저에만 저장하고, 접속할 때 서버에 알린다. ---
+
+const SPEED_STORAGE_KEY = "seongah.playbackSpeed";
+const SPEED_VALUES = ["slow", "normal", "fast", "instant"];
+
+function loadSpeed() {
+  try {
+    const v = localStorage.getItem(SPEED_STORAGE_KEY);
+    return SPEED_VALUES.includes(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSpeed(v) {
+  try {
+    localStorage.setItem(SPEED_STORAGE_KEY, v);
+  } catch {
+    // 저장소를 못 쓰는 환경이면 이번 접속에서만 유지된다
+  }
+}
+
+function postSpeed(v) {
+  fetch("/speed", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ speed: v }) });
+}
+
+function mountSpeedControl() {
+  const select = document.querySelector("#audio-controls .speed-select");
+  if (!select) return;
+  const stored = loadSpeed();
+  select.value = stored ?? "normal";
+  if (stored) postSpeed(stored);
+  select.addEventListener("change", () => {
+    saveSpeed(select.value);
+    postSpeed(select.value);
+  });
+}
+
+mountSpeedControl();
+
 function handleMessage(msg) {
   handleMessageBody(msg);
   // 접속 직후 메시지의 cueBase 이하는 과거 신호라 재생하지 않는다.

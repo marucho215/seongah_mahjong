@@ -85,6 +85,8 @@
   `setup` 메시지 → `POST /start`(구성) → 게임 → game_end. game_end 메시지에는 엔진 `computeFinalStandings()` 결과(`standings`)와
   이번 대국 구성(`gameConfig`, 실제 시드 포함)이 실린다. 종료 화면의 "같은 설정으로 다시"(시드 생략)와 "같은 시드로 다시"는
   그 구성으로 다시 `POST /start`, "설정 바꾸기"는 `POST /setup`으로 시작 화면에 돌아간다. 게임마다 GameHost를 새로 만든다.
+  AI 진행 속도는 `POST /speed`(`src/gui/playbackSpeed.ts`: slow 700 / normal 400 / fast 150 / instant 0ms)로 서버 단위 장면 간격만
+  바꾼다. AI 판단은 사람 응답 때 이미 끝나 있고 장면은 그 스냅샷이므로 결과/RNG와 무관하다(테스트로 로그 동일성 확인).
 - `src/gui/public/`: 바닐라 JS 클라이언트 (`app.js`, `audioManager.js`, `style.css`, `index.html`). 4-position 작탁 하나로
   산마/4마를 함께 그린다(좌석 번호 하드코딩 없이 내 좌석 기준 상대 위치). 개발 중 프런트 파일은 `Cache-Control: no-store`.
 - `src/cli/humanPlayDriver.ts`(요청별 입력 처리), `src/cli/humanPlayCli.ts`(진입점, 한 국만 진행)
