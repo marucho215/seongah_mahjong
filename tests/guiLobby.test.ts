@@ -22,6 +22,10 @@ async function readOneSseMessage(reader: ReadableStreamDefaultReader<Uint8Array>
 
 async function startLobby(options: GuiLobbyOptions = {}) {
   const handle = createGuiLobbyServer({ frameDelayMs: 0, ...options });
+  // 한 게임을 끝내는 데 수 초가 걸리므로, 그동안 쉬던 keep-alive 연결을 서버가 유휴 제한(기본 5초)으로 닫는 순간과
+  // 테스트의 다음 fetch가 그 연결을 재사용하는 순간이 겹치면 ECONNRESET이 난다. 테스트 서버에서만 유휴 제한을 끈다
+  // (close()에서 closeAllConnections()로 모든 연결을 정리한다).
+  handle.server.keepAliveTimeout = 0;
   await new Promise<void>((resolve) => handle.server.listen(0, resolve));
   const baseUrl = `http://localhost:${(handle.server.address() as AddressInfo).port}`;
   const stream = await fetch(`${baseUrl}/events`);
