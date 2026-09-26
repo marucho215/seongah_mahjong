@@ -35,18 +35,38 @@ npm install
 ### Play in the browser (GUI)
 
 ```bash
-npm run play:gui                           # opens the start screen
-npm run play:gui -- my-seed --mode yonma --save-replays   # same, with these values pre-filled
+npm run play:gui                                   # start the GUI server, then open the lobby in a browser
+npm run play:gui -- my-seed --save-replays         # same, with the seed / replay-saving options pre-filled
 ```
 
-Open the printed `http://localhost:3000` (set `PORT` to change it). The browser opens on the game lobby, where you first pick
-sanma or yonma (nothing starts yet); the rest of the settings then appear on the same screen for the chosen mode (one
-settings screen for both modes), with "대국 방식 바꾸기" to go back and pick the other mode. There you choose a character for each opponent seat (every registered character is listed with a one-line playstyle
-description and a few short tags), optionally set a seed and replay saving, then start. Command-line arguments only pre-fill that
-screen. You sit at seat 0. A game runs all hands; after the last hand's result, "최종 결과 보기" shows the final
-standings (placement, score and pt from the engine, end reason, and the seed actually used). From there you can replay
-with the same opponents and a new seed, replay the exact same game with the same seed, or return to the start screen
-with the last choices pre-filled - no server restart needed.
+#### Entering the lobby and starting a game
+
+1. Run `npm run play:gui` and open the printed `http://localhost:3000` (set `PORT` to change the port).
+2. The page opens on the game lobby. Under **"대국 방식"**, click **산마** (3 players) or **4마** (4 players). Each row
+   shows the player count, starting score and whether chi / kita exist. Picking a mode never starts a game by itself.
+   The character list on the right can be browsed but not assigned until a mode is picked.
+3. The same screen then shows the settings for that mode (the settings screen is shared by both modes; only the number
+   of seats differs):
+   - **좌석**: click a seat (하가 / 대면 / 상가), then click a character card to seat it. The same character can sit in
+     only one seat. "무작위로 채우기" fills the seats randomly.
+   - **CustomAI**: create, edit, duplicate or delete your own AIs; saved CustomAIs appear at the end of the character
+     list and can be seated like any other character.
+   - **옵션**: seed (leave empty for a random one) and "게임이 끝나면 리플레이 저장".
+   - **"대국 방식 바꾸기"** goes back to step 2 to pick the other mode.
+4. Click **"대국 시작"**. You sit at seat 0 and the game runs all hands.
+5. After the last hand, **"최종 결과 보기"** shows the final standings (placement, score and pt from the engine, end
+   reason, and the seed actually used). From there:
+   - **"같은 설정으로 다시"**: same mode and opponents, new seed.
+   - **"같은 시드로 다시"**: the exact same game again.
+   - **"설정 바꾸기"**: back to the settings of the mode you last played, with the last choices pre-filled; "대국 방식
+     바꾸기" from there returns to the mode choice.
+   No server restart is needed between games.
+
+The lobby screen state lives on the server, so a refresh or a second tab shows the same screen. If a game is already in
+progress on the server, opening the page (or refreshing) resumes that game instead of showing the lobby; the lobby comes
+back once that game ends and you choose "설정 바꾸기". Command-line arguments only pre-fill the settings screen (seed,
+`--save-replays`); the mode is always chosen in the lobby (`--mode` is still accepted but does not skip that choice).
+The lobby also links to the replay viewer ("저장된 리플레이 보기").
 
 GUI features: one shared 4-position table for sanma and yonma, click-to-discard with riichi confirmation, action bar
 for every decision (chi options are drawn as tiles), the AI's discards/calls/riichi/wins replayed one at a time,
