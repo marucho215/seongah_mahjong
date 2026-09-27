@@ -34,6 +34,78 @@
 npm install
 ```
 
+### 서버 실행
+
+GUI(로비, 대국, AI 관전, 리플레이 뷰어, CustomAI)는 모두 서버 하나(`npm run play:gui`)로 돈다. 쓰는 방식에 따라 세 가지로 켠다.
+아래 예시는 Windows PowerShell 기준이다(macOS/Linux 셸이면 `$env:NAME = "값"` 대신 `NAME=값 npm run play:gui`).
+
+**1. 혼자 쓰기 (로컬 모드)**
+
+```powershell
+npm run play:gui
+```
+
+창에 `Seongah Majak GUI: http://localhost:3000, 엔진 worker N개`가 나오면 브라우저로 http://localhost:3000 을 연다.
+입장 절차 없이 바로 로비가 나온다. 리플레이는 `replays/`, CustomAI는 `custom-ai/`에 저장된다(프로젝트 폴더 기준).
+
+**2. 같은 와이파이의 다른 기기(휴대폰 등)에서 쓰기**
+
+서버는 기본으로 모든 네트워크 주소에서 연결을 받는다. 같은 네트워크의 기기에서 `http://<이 PC의 IP>:3000`을 연다
+(IP는 PowerShell의 `ipconfig`에서 "IPv4 주소"). 처음 켤 때 Windows 방화벽이 묻으면 "개인 네트워크"만 허용한다.
+이때 같은 네트워크의 누구나 들어올 수 있으므로, 여럿이 쓰는 네트워크라면 아래 3번처럼 초대 코드를 건다.
+휴대폰에서는 대국 화면을 가로로 쓴다.
+
+**3. 인터넷으로 초대하기 (초대 코드 모드)**
+
+```powershell
+$env:SEONGAH_INVITE_CODE = "길고-맞히기-어려운-코드"
+$env:HOST = "127.0.0.1"
+npm run play:gui
+```
+
+초대 코드를 주면 모든 페이지가 먼저 초대 코드와 닉네임을 묻고, 사람마다 로비·대국·CustomAI·리플레이를 따로 가진다(아래
+"초대 코드 입장"). 인터넷 주소는 다른 PowerShell 창에서 Tailscale Funnel로 연다.
+
+```powershell
+tailscale funnel 3000
+```
+
+나온 `https://….ts.net` 주소와 초대 코드를 따로 알려 준다. Tailscale 설치, 절전 설정, 업데이트, 문제 해결까지의 단계별
+안내는 [docs/ONLINE_HOSTING.md](docs/ONLINE_HOSTING.md)에 있다. 초대 코드는 명령줄로도 줄 수 있다:
+`npm run play:gui -- --invite-code <코드>`.
+
+**끄기와 다시 켜기**
+
+서버 창에서 `Ctrl + C`. 서버를 끄면 **진행 중이던 대국과 AI 여러 판 관전 결과는 사라진다**(서버 메모리에만 있다). 저장된
+리플레이, CustomAI, 초대 코드 모드의 입장 상태(`server-data/sessions.json`)는 남는다. 코드를 받은 뒤(`git pull`)에는
+`npm install` 후 다시 켠다. 화면 파일(`src/gui/public/`의 html/js/css)은 캐시하지 않으므로, 화면만 바뀌었으면 서버를 다시 켜고
+브라우저를 새로고침하면 된다.
+
+**환경 변수**
+
+| 변수 | 기본값 | 뜻 |
+|---|---|---|
+| `PORT` | `3000` | 받을 포트 |
+| `HOST` | 모든 주소 | 받을 주소. `127.0.0.1`이면 이 PC(와 터널)에서만 들어올 수 있다 |
+| `SEONGAH_INVITE_CODE` | 없음(로컬 모드) | 초대 코드. 주면 초대 코드 모드가 된다 |
+| `SEONGAH_MAX_GAMES` | `8` | 초대 코드 모드의 서버 전체 동시 대국 수(AI 관전 포함) |
+| `SEONGAH_ENGINE_WORKERS` | CPU 수 - 1 (1~4) | 대국/AI 관전/리플레이 재현을 돌리는 엔진 worker 수 |
+
+PowerShell에서 `$env:`로 정한 값은 그 창에서만 유지된다. 창을 새로 열면 다시 정한다.
+
+**명령줄 인자**: `npm run play:gui -- <시드> --save-replays`는 로비 설정 화면의 초기값(시드, 리플레이 저장)만 채운다.
+대국 방식은 항상 로비에서 고른다.
+
+**데이터 위치**
+
+| | 로컬 모드 | 초대 코드 모드 |
+|---|---|---|
+| 리플레이 | `replays/` | `server-data/users/<사용자 id>/replays/` (사람당 최근 50개) |
+| CustomAI | `custom-ai/` | `server-data/users/<사용자 id>/custom-ai/` (사람당 20개) |
+| 입장 세션 | 없음 | `server-data/sessions.json` (토큰 해시만) |
+
+`replays/`, `custom-ai/`, `server-data/`는 git에 올라가지 않는다(`.gitignore`).
+
 ### 브라우저에서 두기 (GUI)
 
 ```bash
@@ -99,9 +171,9 @@ GUI 기능:
   로비와 리플레이 뷰어는 세로로도 쓸 수 있다.
 - 패 그림 출처: `src/gui/public/assets/mahjong/ATTRIBUTION.md`.
 
-#### 초대 코드 입장 (1.2 개발 중)
+#### 초대 코드 입장
 
-`npm run play:gui -- --invite-code <코드>`(또는 환경 변수 `SEONGAH_INVITE_CODE`)로 켜면 입장 게이트가 생긴다. 모든 페이지가
+초대 코드를 주고 서버를 켜면(위 "서버 실행" 3번) 입장 게이트가 생긴다. 모든 페이지가
 먼저 초대 코드와 닉네임(12자 이하)을 묻고, 입장한 브라우저만 로비, 대국, 리플레이, CustomAI를 쓸 수 있다. 계정이나 비밀번호는
 없다. 서버는 브라우저마다 세션 쿠키를 주고(`server-data/sessions.json`에 해시로 저장하므로 서버를 다시 켜도 유지된다), 같은
 브라우저로 다시 입장하면 닉네임만 바뀐다. 초대 코드를 틀린 시도는 접속지별로 횟수를 제한한다. 초대 코드 없이 켜면 서버는
@@ -117,14 +189,9 @@ GUI 기능:
 - 30분 동안 요청이 없는 대국은 정리한다(리플레이로 저장하지 않고, 로비에 안내가 나온다).
 - 한 사람당 CustomAI 20개, 리플레이는 최근 50개, 동시에 여는 탭 5개, 요청 빈도 제한.
 
-리플레이 뷰어에는 원본 리플레이 파일을 받는 "파일 내려받기" 링크가 있다(버그 제보에 쓴다). 온라인 플레이는 아직 개발 중이다
-(`HANDOFF.md` §10 참고).
-
-Windows 노트북에서 무료로 온라인 호스팅하는 방법(Tailscale Funnel, 단계별 안내)은
-[docs/ONLINE_HOSTING.md](docs/ONLINE_HOSTING.md)를 본다.
-- 서버 환경 변수: `PORT`, `HOST`(예: `127.0.0.1`이면 로컬/터널 연결만 받음), `SEONGAH_INVITE_CODE`, `SEONGAH_MAX_GAMES`,
-  `SEONGAH_ENGINE_WORKERS`.
-- 이벤트 스트림은 25초마다 연결 유지 주석을 보내서, 터널이나 프록시가 조용한 연결을 끊지 않게 한다.
+리플레이 뷰어에는 원본 리플레이 파일을 받는 "파일 내려받기" 링크가 있다(버그 제보에 쓴다). 한 대국에는 사람 1명과 AI만 앉는다
+(사람끼리 대전은 이후 과제, `HANDOFF.md` §10). 이벤트 스트림은 25초마다 연결 유지 주석을 보내서, 터널이나 프록시가 조용한
+연결을 끊지 않게 한다. 켜는 법과 환경 변수는 위 "서버 실행", 인터넷 호스팅 단계별 안내는 [docs/ONLINE_HOSTING.md](docs/ONLINE_HOSTING.md).
 
 ### 터미널에서 두기 (CLI)
 
