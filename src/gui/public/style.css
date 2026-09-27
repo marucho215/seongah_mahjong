@@ -588,8 +588,33 @@ body {
   background: #ff8a80;
 }
 
-/* 자동 옵션이 하나라도 켜져 있으면 평소처럼 흐리게 두지 않는다 (켜진 상태가 늘 보이게) */
-#audio-controls:has(.auto-toggle.is-on) { opacity: 1; }
+/* 자동 옵션이 하나라도 켜져 있으면 평소처럼 흐리게 두지 않는다 (켜진 상태가 늘 보이게). 표시 전용인 플레이 보조 토글은 제외 */
+#audio-controls:has(.auto-toggle[data-auto].is-on) { opacity: 1; }
+
+/* 플레이 보조 토글: 자동 옵션과 구분되게 다른 켜짐 색을 쓴다 */
+#audio-controls .auto-toggle[data-assist].is-on {
+  background: #8fd3ff;
+  border-color: #8fd3ff;
+}
+
+/* 위험도 표시: 내 손패 아래 등급 글자 (낮음/주의/높음). 색만으로 구분하지 않도록 글자를 함께 쓴다 */
+.tile-risk {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+.tile-risk .risk-badge {
+  font-size: 10px;
+  line-height: 1;
+  margin-top: 2px;
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tile-risk.risk-low .risk-badge { background: #2e7d32; color: #fff; }
+.tile-risk.risk-caution .risk-badge { background: #f9a825; color: #1b1b1b; }
+.tile-risk.risk-high .risk-badge { background: #c62828; color: #fff; }
 
 #audio-controls .abandon-button {
   font: inherit;

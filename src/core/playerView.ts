@@ -7,6 +7,7 @@ import { NO_FURITEN, type FuritenSnapshot } from "../actions/furiten.js";
 import { seatDistance } from "./seats.js";
 import { tilesToCounts } from "./tileIndex.js";
 import { minShanten } from "../shanten/shanten.js";
+import { discardRiskLevel, type DiscardRiskLevel } from "../ai/discardDanger.js";
 
 /** Position, within the visible river (`discards`, called-away tiles excluded), of the tile
  *  to draw sideways because it declared riichi - null when no riichi declaration. If the
@@ -103,6 +104,10 @@ export interface PlayerView {
   waits: WaitInfo[];
   /** 이 좌석 손의 현재 상태. 모두 자기 손패/멘츠에서만 계산하며, 미확인 장수는 `waits`와 같은 공개 정보 기준이다. */
   handStatus: HandStatus;
+  /** 자기 손패 종류별, 리치한 상대에 대한 타패 위험도 (GUI "위험도 표시"용, 표시 전용). CharacterAI와 같은 현물/스지 규칙
+   *  (src/ai/discardDanger.ts)을 쓰고, 입력은 리치한 상대들의 강(울어 간 패 포함, 모두 공개 정보)과 자기 손패 종류뿐이다.
+   *  리치한 상대가 없으면 빈 배열. */
+  discardRisk: DiscardRisk[];
   opponents: PlayerViewOpponent[];
   doraIndicators: TileRef[];
   scores: number[];
@@ -122,6 +127,12 @@ export interface HandStatus {
   /** 마지막 타패/울기 뒤(3n+1장 상태)의 대기패. 텐파이가 아니면 빈 배열. 쯔모 직후에도 그 직전의 대기를 유지한다
    *  (리치 중 `waits`, 후리텐 판정과 같은 엔진 대기 캐시). */
   tenpaiWaits: WaitInfo[];
+}
+
+/** 타패 후보 한 종류의 위험도 (상대적 표시용 등급이며 "안전하다"는 판정이 아니다). */
+export interface DiscardRisk {
+  kind: TileKind;
+  level: DiscardRiskLevel;
 }
 
 export interface BuildPlayerViewOptions {
@@ -178,5 +189,16 @@ export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
     shanten: minShanten(tilesToCounts(own.concealed), own.melds.length),
     tenpaiWaits: withUnseenCounts(base, tenpaiWaits ?? []),
   };
-  return { ...base, waits: withUnseenCounts(base, waits ?? []), handStatus };
+  return { ...base, waits: withUnseenCounts(base, waits ?? []), handStatus, discardRisk: discardRiskFor(seat, hands) };
+}
+
+/** 리치한 상대들의 강(버림패 종류 전체 - 울어 간 패도 그 상대가 버린 공개 패다)만으로 자기 손패 종류별 위험도를 매긴다.
+ *  상대 손패나 패산은 읽지 않는다. */
+function discardRiskFor(seat: number, hands: readonly Hand[]): DiscardRisk[] {
+  const riichiRivers = hands
+    .filter((hand, i) => i !== seat && hand.riichi)
+    .map((hand) => hand.discards.map((d) => d.tile.kind));
+  if (riichiRivers.length === 0) return [];
+  const kinds = [...new Set(hands[seat]!.concealed.map((t) => t.kind))];
+  return kinds.map((kind) => ({ kind, level: discardRiskLevel(kind, riichiRivers) }));
 }

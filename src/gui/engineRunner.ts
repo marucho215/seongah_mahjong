@@ -12,7 +12,7 @@ import type { CharacterProfile } from "../ai/characterProfile.js";
 import { getCharacterProfile } from "../ai/characterProfiles.js";
 import { buildGameReplayRecord, replaySeatsFromGame, type GameReplayRecord } from "../sim/replayRecorder.js";
 import { GuiSession, type GuiSessionPhase, type WatchFrame } from "./guiSession.js";
-import { createGuiGameWithProfiles, type GuiGameMode } from "./gameSetup.js";
+import { createAiWatchGame, createGuiGameWithProfiles, type GuiGameMode } from "./gameSetup.js";
 
 /** 상대 좌석: 등록 캐릭터는 id만 넘기고(실행하는 쪽이 같은 프로필 표에서 찾는다), CustomAI는 대국 시작 시점의 프로필 스냅샷을 넘긴다. */
 export type OpponentSpec = { characterId: string } | { profile: CharacterProfile };
@@ -27,6 +27,22 @@ export interface GameSpec {
 export function gameFromSpec(spec: GameSpec): GameState {
   const profiles = spec.opponents.map((o) => ("profile" in o ? o.profile : getCharacterProfile(o.characterId)));
   return createGuiGameWithProfiles(spec.mode, spec.seed, profiles);
+}
+
+/** AI 관전 대국 구성 (모든 좌석이 AI, 순수 데이터). 좌석 표기는 OpponentSpec과 같다. */
+export interface AiWatchSpec {
+  mode: GuiGameMode;
+  seed: string;
+  seats: OpponentSpec[];
+}
+
+/** AI끼리 한 게임을 끝까지 진행하고 리플레이 기록을 만든다. 사람 좌석이 없으므로 GuiSession 없이 시뮬레이션과 같은
+ *  playGame()을 쓴다(결정 요청이나 표시용 장면이 생기지 않는다). 같은 스레드와 worker가 모두 이 함수를 부른다. */
+export function runAiWatchGame(spec: AiWatchSpec, label: string): GameReplayRecord {
+  const profiles = spec.seats.map((o) => ("profile" in o ? o.profile : getCharacterProfile(o.characterId)));
+  const game = createAiWatchGame(spec.mode, spec.seed, profiles);
+  game.playGame();
+  return buildGameReplayRecord(game, label, 0, replaySeatsFromGame(game));
 }
 
 type HandEndEvent = Extract<GameEvent, { type: "hand_end" }>;

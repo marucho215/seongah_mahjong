@@ -153,9 +153,13 @@ describe("사용자별 저장 (CustomAI, 리플레이)", () => {
     await new Promise((r) => setTimeout(r, 20));
     expect((await a.post("/setup")).status).toBe(204);
     await a.playGame({ ...SANMA, seed: "keep-new", saveReplays: true });
-    await new Promise((r) => setTimeout(r, 200)); // 정리는 저장 직후 비동기로 한다
-    expect(readdirSync(join(a.userDir, "replays"))).toEqual(["human-sanma-keep-new_game0.json"]);
-  }, 120_000);
+    // 정리는 저장 직후 비동기로 한다: 파일이 1개가 될 때까지 50ms 간격으로 최대 5초 확인하고, 그 안에 안 되면 실패한다
+    const replayDir = join(a.userDir, "replays");
+    for (let waited = 0; readdirSync(replayDir).length !== 1 && waited < 5_000; waited += 50) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(readdirSync(replayDir)).toEqual(["human-sanma-keep-new_game0.json"]);
+  }, 300_000); // 대국 두 판을 끝까지 두므로 전체 스위트 병렬 부하에서는 120초를 넘길 수 있다
 });
 
 describe("자원 제한 (온라인 서버)", () => {

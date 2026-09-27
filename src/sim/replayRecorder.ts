@@ -2,8 +2,9 @@
  * event log (GameLog.ts) and aiDecisionLog verbatim - does not reinterpret or duplicate
  * any rule logic. One JSON file per game (simpler and more crash-safe than a shared
  * JSONL file for a run that may be interrupted partway through). */
+import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GameState, FinalStanding } from "../core/GameState.js";
 import type { GameEvent, AiDecisionEntry } from "../core/GameLog.js";
@@ -96,10 +97,24 @@ export function buildGameReplayRecord(
  *  ever called when replay-saving is opted into - callers should skip building/calling
  *  this entirely when the flag is off, so a plain (non-saving) run pays no extra cost.
  *  Returns the absolute path actually written to. */
+/** 사용자가 정한 텍스트(시드 등)를 리플레이 파일 이름 조각으로 바꾼다. 리플레이 목록은 영문/숫자/._- 이름만 받으므로
+ *  (GUI 서버 REPLAY_FILE_NAME), 이 문자만 쓴 maxLength 이하 텍스트는 그대로 두고(기존 파일 이름 유지), 그 밖에는 허용되지 않는
+ *  문자를 "_"로 바꿔 자른 뒤 원문 해시 8자리를 붙인다 - 서로 다른 한글 시드가 같은 이름("__")으로 덮어쓰지 않게 한다.
+ *  파일 이름에만 쓰며, 리플레이 안의 시드(meta.gameSeed)는 원문 그대로다. */
+export function replayFileNamePart(text: string, maxLength = 100): string {
+  if (text.length <= maxLength && /^[A-Za-z0-9._-]*$/.test(text)) return text;
+  const hash = createHash("sha256").update(text, "utf8").digest("hex").slice(0, 8);
+  return `${text.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, maxLength)}-${hash}`;
+}
+
 export function writeGameReplay(record: GameReplayRecord, dir: string): string {
   const resolvedDir = resolveReplayDir(dir);
-  mkdirSync(resolvedDir, { recursive: true });
   const fileName = `${record.meta.simulationLabel}_game${record.meta.gameIndex}.json`;
+  // 라벨에 경로 문자가 섞이면 폴더 밖이나 없는 하위 폴더를 가리킨다 - 사용자 입력(시드)은 replayFileNamePart로 먼저 정리한다
+  if (basename(fileName) !== fileName || fileName.includes("/") || fileName.includes("\\")) {
+    throw new Error(`replay label must not contain path separators: ${JSON.stringify(record.meta.simulationLabel)}`);
+  }
+  mkdirSync(resolvedDir, { recursive: true });
   const filePath = join(resolvedDir, fileName);
   writeFileSync(filePath, JSON.stringify(record, null, 2), "utf-8");
   return filePath;

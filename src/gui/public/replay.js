@@ -73,10 +73,13 @@ async function loadList() {
     opt.value = f.name;
     select.appendChild(opt);
   }
-  const wanted = new URLSearchParams(location.search).get("file");
+  const params = new URLSearchParams(location.search);
+  const wanted = params.get("file");
   if (wanted && files.some((f) => f.name === wanted)) {
     select.value = wanted;
-    loadReplay(wanted);
+    // autoplay=1: 로비의 AI 관전이 방금 저장한 대국을 열 때. 재현이 끝나면 첫 국부터 자동 재생한다.
+    await loadReplay(wanted);
+    if (params.get("autoplay") === "1" && data && !playTimer) togglePlay();
   }
 }
 

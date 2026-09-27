@@ -497,8 +497,14 @@ function renderTable(view, turnSeat, emphasis) {
 }
 
 /** My concealed hand (sorted, with the just-drawn tile set apart) and my extracted kita. */
+/** 마지막으로 그린 내 자리 (플레이 보조 토글을 바꾸면 같은 상태로 다시 그린다) */
+let lastMySeat = null;
+
 function renderMySeat(view, options) {
+  lastMySeat = { view, options };
   const zone = zoneEl("bottom");
+  // 위험도 표시: 엔진이 공개 정보만으로 매긴 view.discardRisk를 그대로 쓴다 (리치한 상대가 없으면 비어 있다)
+  const riskByKind = assist.risk ? new Map((view.discardRisk || []).map((r) => [r.kind, r.level])) : new Map();
 
   const kita = zone.querySelector(".kita");
   kita.innerHTML = "";
@@ -535,9 +541,22 @@ function renderMySeat(view, options) {
       img.addEventListener("mouseenter", () => showWaits(zone, "리치하면 대기", previewWaits, view.furiten));
       img.addEventListener("mouseleave", () => showHandStatus(zone, view));
     }
-    hand.appendChild(img);
+    const risk = riskByKind.get(t.kind);
+    hand.appendChild(risk ? withRiskBadge(img, risk) : img);
   }
   showHandStatus(zone, view);
+}
+
+const RISK_LABEL = { low: "낮음", caution: "주의", high: "높음" };
+
+/** 패 아래에 위험도 등급을 붙인다. 등급은 리치한 상대에 대한 상대적인 표시이며 "안전"을 뜻하지 않는다. */
+function withRiskBadge(img, level) {
+  const box = el("span", `tile-risk risk-${level}`);
+  const badge = el("span", "risk-badge");
+  badge.textContent = RISK_LABEL[level];
+  img.title = `${img.title} - 위험도 ${RISK_LABEL[level]} (리치한 상대의 버림패 기준, 현물·스지만 봄)`;
+  box.append(img, badge);
+  return box;
 }
 
 /** 샹텐 문구: 엔진이 계산한 view.handStatus.shanten을 그대로 읽는다 (-1 = 화료형). */
@@ -554,7 +573,8 @@ function showHandStatus(zone, view) {
     showWaits(zone, "대기", view.waits, view.furiten);
     return;
   }
-  showWaits(zone, "대기", status.tenpaiWaits, view.furiten, shantenLabel(status.shanten));
+  // 샹텐 표시 토글은 "N샹텐 / 텐파이" 문구만 켜고 끈다. 텐파이 대기패와 후리텐 표시는 토글과 관계없이 그대로 보인다.
+  showWaits(zone, "대기", status.tenpaiWaits, view.furiten, assist.shanten ? shantenLabel(status.shanten) : undefined);
 }
 
 function waitsForTile(riichiWaits, tileId) {
@@ -1369,6 +1389,7 @@ mountSpeedControl();
 //                  (리치 후의 쯔모기리는 엔진이 요청 없이 처리하므로 여기로 오지 않는다) ---
 
 const autoPlay = { tsumogiri: false, passCalls: false, autoWin: false };
+// (플레이 보조 토글 assist는 아래 "플레이 보조" 절에 있다)
 const AUTO_LABEL = { tsumogiri: "자동 쯔모기리", passCalls: "울기 자동 패스", autoWin: "자동 화료" };
 let pendingRequest = null;
 
@@ -1400,7 +1421,7 @@ function maybeAutoRespond() {
 }
 
 function mountAutoPlayControls() {
-  for (const btn of document.querySelectorAll("#audio-controls .auto-toggle")) {
+  for (const btn of document.querySelectorAll("#audio-controls .auto-toggle[data-auto]")) {
     const key = btn.dataset.auto;
     btn.addEventListener("click", () => {
       autoPlay[key] = !autoPlay[key];
@@ -1412,6 +1433,52 @@ function mountAutoPlayControls() {
 }
 
 mountAutoPlayControls();
+
+// --- 플레이 보조 (표시 전용): 샹텐 표시, 위험도 표시. 엔진이 view에 담아 준 값을 보여 줄지만 정하며, 응답·게임 결과·
+// 리플레이에는 아무 영향이 없다. 설정은 이 브라우저에 저장해 다음 대국에도 유지한다 (기본: 샹텐 켬, 위험도 끔). ---
+
+const ASSIST_STORAGE_KEY = "seongah.playAssist";
+const ASSIST_DEFAULTS = { shanten: true, risk: false };
+
+function loadAssist() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(ASSIST_STORAGE_KEY) || "{}");
+    const out = { ...ASSIST_DEFAULTS };
+    for (const key of Object.keys(ASSIST_DEFAULTS)) if (typeof stored[key] === "boolean") out[key] = stored[key];
+    return out;
+  } catch {
+    return { ...ASSIST_DEFAULTS };
+  }
+}
+
+function saveAssist() {
+  try {
+    localStorage.setItem(ASSIST_STORAGE_KEY, JSON.stringify(assist));
+  } catch {
+    // 저장소를 못 쓰는 환경이면 이번 접속에서만 유지된다
+  }
+}
+
+const assist = loadAssist();
+
+function mountAssistControls() {
+  for (const btn of document.querySelectorAll("#audio-controls .auto-toggle[data-assist]")) {
+    const key = btn.dataset.assist;
+    const sync = () => {
+      btn.setAttribute("aria-pressed", String(assist[key]));
+      btn.classList.toggle("is-on", assist[key]);
+    };
+    sync();
+    btn.addEventListener("click", () => {
+      assist[key] = !assist[key];
+      saveAssist();
+      sync();
+      if (lastMySeat) renderMySeat(lastMySeat.view, lastMySeat.options);
+    });
+  }
+}
+
+mountAssistControls();
 
 // --- 대국 그만두기: 서버가 canAbandon을 보낸 대국 중에만 보인다. 확인 후 로비(그 모드의 설정 화면)로 돌아가며,
 // 중단한 대국의 리플레이는 저장되지 않는다. ---
@@ -1470,29 +1537,42 @@ function opponentSeatLabel(index, playerCount) {
   return "대면";
 }
 
+/** AI 관전 좌석 i(= seat i)의 자리 이름: 첫 국의 자풍 (seat 0이 첫 친). */
+const WATCH_SEAT_LABEL = ["동가", "남가", "서가", "북가"];
+
+const isWatchSetup = () => setupState.purpose === "watch";
+
+/** 설정 화면의 좌석 slot 이름: 사람 대국은 나를 기준으로 한 상대 자리, 관전은 첫 국의 자풍. */
+function slotLabel(index) {
+  return isWatchSetup() ? WATCH_SEAT_LABEL[index] : opponentSeatLabel(index, setupState.playerCounts[setupState.mode]);
+}
+
 function initSetupState(msg) {
   const prev = setupState;
   const known = new Set(msg.roster.map((c) => c.characterId));
   // 목록만 새로 온 경우(CustomAI 추가/수정/삭제)에는 지금 고른 구성을 유지하고, 사라진 상대만 서버 초기값으로 바꾼다.
-  const keepOpponents = (mode) => {
-    if (!prev) return [...msg.defaults.opponents[mode]];
-    const mine = prev.opponents[mode].map((id) => (known.has(id) ? id : null));
-    const spare = msg.defaults.opponents[mode].filter((id) => !mine.includes(id));
+  const keepSeats = (field, mode) => {
+    if (!prev) return [...msg.defaults[field][mode]];
+    const mine = prev[field][mode].map((id) => (known.has(id) ? id : null));
+    const spare = msg.defaults[field][mode].filter((id) => !mine.includes(id));
     return mine.map((id) => id ?? spare.shift());
   };
+  const keepOpponents = (mode) => keepSeats("opponents", mode);
   setupState = {
     roster: msg.roster,
     playerCounts: msg.playerCounts,
     screen: msg.screen,
+    purpose: msg.purpose ?? "play", // 설정 화면의 용도(사람 대국 / AI 관전)도 서버가 정한다
     modes: msg.modes,
     mode: msg.mode, // 어느 모드의 설정 화면인지는 서버가 정한다 (허브에서 고른 모드)
     opponents: { sanma: keepOpponents("sanma"), yonma: keepOpponents("yonma") },
+    watchSeats: { sanma: keepSeats("watchSeats", "sanma"), yonma: keepSeats("watchSeats", "yonma") },
     seed: prev ? prev.seed : msg.defaults.seed,
     saveReplays: prev ? prev.saveReplays : msg.defaults.saveReplays,
     pending: false,
     error: "",
     notice: msg.notice ?? "", // 서버 안내 (예: 오래 응답이 없어 대국을 정리함)
-    activeSlot: prev ? prev.activeSlot : 0,
+    activeSlot: prev && prev.purpose === (msg.purpose ?? "play") ? prev.activeSlot : 0,
     sort: prev ? prev.sort : "registered",
     customAi: prev ? prev.customAi : { schema: null, entries: [], error: "" },
     editor: prev ? prev.editor : null,
@@ -1503,8 +1583,9 @@ function rosterEntry(characterId) {
   return setupState.roster.find((c) => c.characterId === characterId) ?? null;
 }
 
+/** 지금 설정 화면에서 고르는 AI 좌석들: 사람 대국이면 상대 좌석(seat 1..), 관전이면 모든 좌석(seat 0..). */
 function currentOpponents() {
-  return setupState.opponents[setupState.mode];
+  return (isWatchSetup() ? setupState.watchSeats : setupState.opponents)[setupState.mode];
 }
 
 /** 활성 좌석에 캐릭터를 앉힌다. 이미 다른 좌석에 있으면 두 좌석을 맞바꾼다. */
@@ -1523,7 +1604,7 @@ function randomizeOpponents() {
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  setupState.opponents[setupState.mode] = pool.slice(0, currentOpponents().length);
+  (isWatchSetup() ? setupState.watchSeats : setupState.opponents)[setupState.mode] = pool.slice(0, currentOpponents().length);
 }
 
 function sortedRoster() {
@@ -1535,22 +1616,23 @@ function sortedRoster() {
 
 function renderSetupSeats() {
   const list = el("ol", "setup-seats");
-  const me = el("li", "setup-seat is-me");
-  const meWhere = el("span", "seat-where");
-  meWhere.textContent = "나";
-  const meName = el("span", "seat-name");
-  meName.textContent = "플레이어";
-  me.append(meWhere, meName);
-  list.appendChild(me);
+  if (!isWatchSetup()) {
+    const me = el("li", "setup-seat is-me");
+    const meWhere = el("span", "seat-where");
+    meWhere.textContent = "나";
+    const meName = el("span", "seat-name");
+    meName.textContent = "플레이어";
+    me.append(meWhere, meName);
+    list.appendChild(me);
+  }
 
   const opponents = currentOpponents();
-  const n = setupState.playerCounts[setupState.mode];
   opponents.forEach((id, i) => {
     const entry = rosterEntry(id);
     const li = el("li");
     const btn = el("button", "setup-seat" + (i === setupState.activeSlot ? " is-active" : ""), { type: "button", "aria-pressed": String(i === setupState.activeSlot) });
     const where = el("span", "seat-where");
-    where.textContent = opponentSeatLabel(i, n);
+    where.textContent = slotLabel(i);
     const name = el("span", "seat-name");
     name.textContent = entry ? entry.displayName : id;
     const tagLine = el("span", "seat-tags");
@@ -1569,7 +1651,6 @@ function renderSetupSeats() {
 /** `browseOnly`: 허브에서는 목록을 보기만 한다 (좌석 표시 없음, 눌러도 앉히지 않음). */
 function renderCharacterCard(entry, browseOnly = false) {
   const opponents = currentOpponents();
-  const n = setupState.playerCounts[setupState.mode];
   const seatIndex = browseOnly ? -1 : opponents.indexOf(entry.characterId);
   const card = el("button", "character-card" + (seatIndex >= 0 ? " is-seated" : ""), { type: "button" });
   card.disabled = browseOnly;
@@ -1585,7 +1666,7 @@ function renderCharacterCard(entry, browseOnly = false) {
   }
   if (seatIndex >= 0) {
     const tag = el("span", "card-seat");
-    tag.textContent = opponentSeatLabel(seatIndex, n);
+    tag.textContent = slotLabel(seatIndex);
     head.appendChild(tag);
   }
   const summary = el("p", "card-summary");
@@ -1625,7 +1706,7 @@ function postLobby(body) {
 
 /** 대국 방식 줄: 좌석 줄(setup-seat)과 같은 모양으로 "인원 | 이름 | 규칙 요약"을 보여준다. 규칙 요약은 서버가 RuleConfig에서 보낸 값이다.
  *  허브에서는 두 모드를 모두 보여주고 누르면 그 모드의 설정으로 간다. 설정 화면에서는 고른 모드 한 줄만 선택 상태로 보인다. */
-function renderModeRows(isHub) {
+function renderModeRows(isHub, purpose) {
   const list = el("ol", "setup-seats");
   for (const [mode, label] of MODE_OPTIONS) {
     if (!isHub && mode !== setupState.mode) continue;
@@ -1644,7 +1725,7 @@ function renderModeRows(isHub) {
     if (isHub) {
       row.addEventListener("click", () => {
         AudioManager.play("ui.confirm");
-        postLobby({ screen: "setup", mode }).catch((err) => {
+        postLobby({ screen: "setup", mode, purpose }).catch((err) => {
           setupState.error = err instanceof Error ? err.message : String(err);
           renderSetup();
         });
@@ -1681,6 +1762,7 @@ fetch("/api/me")
 function renderSetup() {
   // 허브(모드 선택 전)와 설정 화면은 같은 화면이다. 허브에서는 대국 방식만 고를 수 있고, 나머지 설정은 모드를 고른 뒤에 나온다.
   const isHub = setupState.screen === "hub";
+  const watching = !isHub && isWatchSetup();
   const root = document.getElementById("setup-screen");
   const scrollTop = root.querySelector(".setup-roster-list")?.scrollTop ?? 0;
   root.innerHTML = "";
@@ -1691,11 +1773,13 @@ function renderSetup() {
   const side = el("aside", "setup-side");
   const header = el("header", "setup-header");
   const h1 = el("h1");
-  h1.textContent = "새 대국";
+  h1.textContent = watching ? "AI끼리 관전" : "새 대국";
   const lead = el("p", "setup-lead");
   lead.textContent = isHub
     ? "대국 방식을 고르면 좌석과 상대를 정할 수 있습니다."
-    : "좌석을 고르고 캐릭터를 눌러 앉힙니다. 같은 캐릭터는 한 좌석에만 앉을 수 있습니다.";
+    : watching
+      ? "모든 좌석에 AI를 앉힙니다. 대국을 끝까지 진행한 뒤 리플레이 뷰어에서 자동 재생합니다."
+      : "좌석을 고르고 캐릭터를 눌러 앉힙니다. 같은 캐릭터는 한 좌석에만 앉을 수 있습니다.";
   const replayLink = el("a", "setup-replay-link", { href: "/replay.html", target: "_blank", rel: "noopener" });
   replayLink.textContent = "저장된 리플레이 보기";
   header.append(h1, lead, replayLink);
@@ -1707,7 +1791,7 @@ function renderSetup() {
   }
   side.appendChild(header);
 
-  const modeChildren = [renderModeRows(isHub)];
+  const modeChildren = [renderModeRows(isHub, "play")];
   if (!isHub) {
     const back = el("button", "setup-link-button", { type: "button" });
     back.textContent = "대국 방식 바꾸기";
@@ -1719,7 +1803,14 @@ function renderSetup() {
     });
     modeChildren.push(back);
   }
-  side.appendChild(setupSection("대국 방식", ...modeChildren));
+  if (isHub) {
+    side.appendChild(setupSection("대국 방식", ...modeChildren));
+    const watchLead = el("p", "setup-lead");
+    watchLead.textContent = "사람 없이 AI끼리 한 게임을 두고, 결과를 리플레이로 봅니다.";
+    side.appendChild(setupSection("AI끼리 관전", watchLead, renderModeRows(true, "watch")));
+  } else {
+    side.appendChild(setupSection(watching ? "관전할 대국 방식" : "대국 방식", ...modeChildren));
+  }
 
   if (!isHub) {
   const randomBtn = el("button", "setup-link-button", { type: "button" });
@@ -1746,12 +1837,14 @@ function renderSetup() {
   const replayText = el("span");
   replayText.textContent = "게임이 끝나면 리플레이 저장";
   replayLabel.append(replayInput, replayText);
-  side.appendChild(setupSection("옵션", seedLabel, replayLabel));
+  // 관전 대국은 결과를 리플레이로 보므로 항상 저장한다 (저장 옵션 없음)
+  side.appendChild(watching ? setupSection("옵션", seedLabel) : setupSection("옵션", seedLabel, replayLabel));
 
   const start = el("button", "setup-start", { type: "button" });
-  start.textContent = setupState.pending ? "시작하는 중..." : "대국 시작";
+  if (watching) start.textContent = setupState.pending ? "AI 대국을 진행하는 중..." : "관전 시작";
+  else start.textContent = setupState.pending ? "시작하는 중..." : "대국 시작";
   start.disabled = setupState.pending;
-  start.addEventListener("click", startGameFromSetup);
+  start.addEventListener("click", watching ? startWatchFromSetup : startGameFromSetup);
   side.appendChild(start);
   }
   if (setupState.error) {
@@ -1764,10 +1857,9 @@ function renderSetup() {
   const rosterPane = el("section", "setup-roster");
   const rosterHead = el("div", "setup-roster-head");
   const rh = el("h2", "setup-heading");
-  const n = setupState.playerCounts[setupState.mode];
   rh.textContent = `캐릭터 ${setupState.roster.length}명`;
   const target = el("span", "setup-roster-target");
-  target.textContent = isHub ? "대국 방식을 고르면 좌석에 앉힐 수 있습니다" : `${opponentSeatLabel(setupState.activeSlot, n)} 좌석에 앉힐 캐릭터`;
+  target.textContent = isHub ? "대국 방식을 고르면 좌석에 앉힐 수 있습니다" : `${slotLabel(setupState.activeSlot)} 좌석에 앉힐 캐릭터`;
   const sort = el("select", "setup-select", { "aria-label": "정렬" });
   for (const [value, label] of SORT_OPTIONS) {
     const opt = el("option", "", { value });
@@ -1995,6 +2087,26 @@ async function startGameFromSetup() {
     const res = await fetch("/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(await res.text());
     // 성공하면 서버가 첫 상태를 보내며, 그 메시지가 시작 화면을 닫는다.
+  } catch (err) {
+    setupState.pending = false;
+    setupState.error = err instanceof Error ? err.message : String(err);
+    renderSetup();
+  }
+}
+
+/** AI 관전: 서버가 AI끼리 한 게임을 끝까지 진행해 리플레이로 저장하면, 그 리플레이를 뷰어에서 자동 재생으로 연다. */
+async function startWatchFromSetup() {
+  if (!setupState || setupState.pending) return;
+  AudioManager.play("ui.confirm");
+  setupState.pending = true;
+  setupState.error = "";
+  renderSetup();
+  const body = { mode: setupState.mode, seats: currentOpponents(), seed: setupState.seed };
+  try {
+    const res = await fetch("/watch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(await res.text());
+    const { file } = await res.json();
+    location.href = `/replay.html?file=${encodeURIComponent(file)}&autoplay=1`;
   } catch (err) {
     setupState.pending = false;
     setupState.error = err instanceof Error ? err.message : String(err);

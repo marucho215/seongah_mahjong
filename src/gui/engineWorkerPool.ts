@@ -8,7 +8,7 @@ import { createRequire } from "node:module";
 import type { DecisionResponse } from "../core/decisions.js";
 import type { GameReplayRecord } from "../sim/replayRecorder.js";
 import type { ReplayReproduction } from "../replay/replayReproduction.js";
-import type { EngineRunner, EngineSnapshot, EngineStart, GameSpec } from "./engineRunner.js";
+import type { AiWatchSpec, EngineRunner, EngineSnapshot, EngineStart, GameSpec } from "./engineRunner.js";
 
 export type EngineRequest =
   | { id: number; op: "create"; gameId: number; spec: GameSpec }
@@ -16,7 +16,8 @@ export type EngineRequest =
   | { id: number; op: "continue"; gameId: number }
   | { id: number; op: "replay"; gameId: number; label: string }
   | { id: number; op: "dispose"; gameId: number }
-  | { id: number; op: "reproduce"; record: GameReplayRecord };
+  | { id: number; op: "reproduce"; record: GameReplayRecord }
+  | { id: number; op: "watch"; spec: AiWatchSpec; label: string };
 
 export type EngineReply = { id: number; ok: true; result: unknown } | { id: number; ok: false; error: string };
 
@@ -164,12 +165,22 @@ export class EngineWorkerPool {
   }
 
   /** 리플레이를 현재 엔진으로 재현한다 (replayReproduction.ts, worker에서). */
-  async reproduce(record: GameReplayRecord): Promise<ReplayReproduction> {
+  reproduce(record: GameReplayRecord): Promise<ReplayReproduction> {
+    return this.oneShot<ReplayReproduction>({ op: "reproduce", record });
+  }
+
+  /** AI끼리 한 게임을 끝까지 진행해 리플레이 기록을 받는다 (engineRunner.ts runAiWatchGame, worker에서). */
+  runAiWatch(spec: AiWatchSpec, label: string): Promise<GameReplayRecord> {
+    return this.oneShot<GameReplayRecord>({ op: "watch", spec, label });
+  }
+
+  /** 대국 상태를 남기지 않는 단발 작업: 한가한 worker에서 돌리고, 도는 동안만 그 worker의 부하로 센다. */
+  private async oneShot<T>(body: RequestBody): Promise<T> {
     const worker = this.leastLoaded();
     const generation = worker.generation;
     worker.load++;
     try {
-      return await worker.call<ReplayReproduction>({ op: "reproduce", record });
+      return await worker.call<T>(body);
     } finally {
       if (worker.generation === generation) worker.load = Math.max(0, worker.load - 1);
     }

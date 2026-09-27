@@ -39,7 +39,11 @@
   (패산/상대 손패 미사용). view에 새 필드를 추가할 때는 상대 정보가 새지 않는지 테스트(`tests/riichiWaits.test.ts`,
   `tests/humanPlay.test.ts`)로 고정한다. `view.waits`는 "리치 중 대기"이고, 리치 여부와 무관한 현재 손 상태는 별도 필드
   `view.handStatus`(`shanten`: 엔진 minShanten, `tenpaiWaits`: 엔진 대기 캐시 + 같은 공개 정보 기준 장수)에 담는다
-  (`tests/handStatus.test.ts`). GUI는 이 값을 표시만 하며, 유효패/추천 타패/위험패는 아직 없다.
+  (`tests/handStatus.test.ts`). GUI는 이 값을 표시만 하며, 유효패/추천 타패는 없다.
+  `view.discardRisk`(플레이 보조 "위험도 표시")는 리치한 상대가 있을 때 자기 손패 종류별 등급(`low|caution|high`)이다. CharacterAI와
+  같은 현물/스지 규칙(`src/ai/discardDanger.ts`, characterAI.ts에서 동작 변경 없이 옮김)을 쓰고, 입력은 리치한 상대의 강 전체
+  (`Hand.discards`, 울어 간 패 포함 - `view.opponents[].discards`는 울어 간 패를 빼므로 GUI에서 다시 계산하면 현물을 놓친다)와
+  자기 손패뿐이다(`tests/discardRisk.test.ts`). view는 리플레이에 복사되지 않으므로(`summarizeHumanDecision`) 리플레이 바이트와 무관하다.
 - **presentation은 엔진 결과와 분리**: `GameState.frameObserver`는 표시 전용 콜백(타패/울기/리치/화료 시점의 view)이고,
   게임 진행·로그·결과에 영향이 없다. 서버(`createGuiServer`)가 장면을 시간 간격으로 재생하고, 효과음은 `game.log`를 공개
   정보만 담은 `AudioCue`로 바꿔 보낸다(`src/gui/audioCues.ts`, 재접속 시 과거 소리를 재생하지 않는다).
@@ -101,6 +105,21 @@
 - 향후 replay schema 개선 후보 (이번에는 확장하지 않음): 치 이벤트의 멘츠 구성 패(지금은 울은 패 종류만 있음), 배패/쯔모의 적5
   정보(지금은 종류만 있음), AI 판단 기록과 이벤트의 직접 연결 필드(지금은 handIndex/player만 있음). 이것들이 있으면 재시뮬레이션
   없이도(또는 엔진이 바뀐 뒤의 옛 기록도) 복원할 수 있다.
+
+### AI 관전 (GUI 로비)
+
+- 로비 상태에 용도(`Room.lobbyPurpose`: `play|watch`)와 모드별 관전 좌석(`lastSetup.watchSeats`, 기본 `DEFAULT_WATCH_SEATS`)이 있다.
+  `POST /lobby {screen:"setup", mode, purpose:"watch"}`로 관전 설정 화면에 가고(용도를 생략하면 사람 대국), `POST /watch
+  {mode, seats, seed?}`(`parseAiWatchConfig`: 좌석 수 = 인원, 같은 캐릭터 중복 불가)가 한 게임을 끝까지 돌려 사용자 리플레이 폴더에
+  저장하고 `{file}`을 돌려준다. 클라이언트는 `/replay.html?file=<파일>&autoplay=1`로 이동하고, 뷰어는 재현이 끝나면 자동 재생한다.
+- 엔진: `engineRunner.ts runAiWatchGame`(GuiSession 없이 `createAiWatchGame` + `playGame()`), worker op `watch`,
+  `EngineWorkerPool.runAiWatch`. GameState/frameObserver/정보 공개 경계는 바꾸지 않았다. 등록 캐릭터 좌석은 `characterAI`,
+  CustomAI 좌석은 `customAI`로, 같은 시드와 좌석이면 `npm run sim`과 같은 대국이다(`tests/aiWatch.test.ts`).
+- 리플레이 파일 이름의 시드 부분은 `replayFileNamePart`(`src/sim/replayRecorder.ts`)로 만든다: 영문/숫자/._-만 쓴 시드는
+  그대로(기존 이름 유지), 그 밖에는 허용되지 않는 문자를 `_`로 바꾸고 원문 해시 8자리를 붙인다(한글 시드끼리 덮어쓰지 않게).
+  사람 대국(GUI `human-<모드>-…`, CLI `human-cli-<모드>-…`)과 관전(`watch-…`)이 같이 쓰며, `meta.gameSeed`는 원문이다.
+  `writeGameReplay`는 경로 문자가 섞인 라벨을 거절한다(`tests/replayFileName.test.ts`).
+- 진행 중에는 `room.starting`으로 동시 대국 한 판으로 센다. 파일 이름은 `watch-<모드>-<시드의 영문/숫자/._- 부분>-<시각>_game0.json`.
 
 ### 사람 플레이 (CLI/GUI)
 
@@ -218,6 +237,9 @@
   장면은 다시 재생하지 않는다.
 - GUI는 사람을 seat 0에 앉힌다. 상대는 시작 화면에서 고르며 기본값은 산마: 제갈 미나·제갈 나희, 4마: +변아리. 사람 좌석 선택은 없다.
 - CLI는 한 국만 진행한다.
+- AI 관전은 한 게임을 끝까지 돌린 뒤에 보여 준다(보통 10~30초, 뷰어 재현 시간 별도). 진행 중 취소와 진행률 표시는 없고,
+  진행 중 새로고침하면 로비는 평소 설정 화면으로 보인다(대국은 서버에서 계속 돌고 리플레이 목록에 저장된다).
+- 위험도 표시는 CharacterAI와 같은 현물/스지만 본다: 리치한 상대가 없으면 표시하지 않고, 자패와 스지가 아닌 수패는 모두 "높음"이다.
 - 전체 회귀가 약 8분이라, 작업 중에는 관련 파일만 돌리고 묶음 작업이 끝난 뒤 push 직전에만 전체를 돌린다.
 - 루트의 `*-full-regression.log`, `validation-phaseC-partial-baseline.md`는 과거 검증 기록이다. 새 기준 로그는 덮어쓰지 말고
   새 이름으로 남길 것.
@@ -282,6 +304,11 @@
 시각 언어는 유지한다.
 
 ### 그 밖의 후보 (우선순위 없음)
+
+- AI 관전 후속: 여러 판 연속 실행, 캐릭터별 통계/승률 집계, 진행 중 취소/진행률.
+- 위험도 표시 확장(각각 새 계산이라 별도 설계와 승인 필요): 리치 뒤 다른 사람이 버렸는데 론하지 않은 패(동순·리치 후 후리텐에 의한
+  현물), 보이는 장수에 따른 노찬스/원찬스·자패 보정, 리치하지 않은 상대(울음/다마)의 위험 추정. CharacterAI에도 넣을지는 AI 튜닝과
+  분리해서 정한다.
 
 - 게임 종료 화면에서 저장된 리플레이로 바로 가는 링크.
 - 리치 입력 UX(확인창 대신 리치 버튼), 대국 통계(화료/방총/리치 횟수).

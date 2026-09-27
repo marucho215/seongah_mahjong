@@ -1,4 +1,5 @@
-/* GUI 핵심 흐름 스모크 테스트 (최소 범위): 로비 → 대국 방식 선택 → 설정 → 대국 시작 → 그만두기 / 종료 → 설정 바꾸기.
+/* GUI 핵심 흐름 스모크 테스트 (최소 범위): 로비 → 대국 방식 선택 → 설정 → 대국 시작 → 그만두기 / 종료 → 설정 바꾸기,
+ * 그리고 로비의 AI끼리 관전 → 리플레이 뷰어 자동 재생.
  * 규칙/AI는 단위 테스트가 다루고, 여기서는 화면 흐름이 끊기지 않는지만 본다. 서버는 테스트 안에서 임시 폴더로 띄운다. */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -36,7 +37,9 @@ afterEach(async () => {
   expect(errors).toEqual([]);
 });
 
-const modeRow = (name: string) => page.locator(".setup-seats button.setup-seat", { hasText: name });
+// 허브에는 사람 대국과 AI 관전에 같은 모드 이름이 두 번 나온다 - 섹션 제목으로 구분한다
+const modeRow = (name: string) => page.locator("section:has(> h2:text-is('대국 방식')) button.setup-seat", { hasText: name });
+const watchRow = (name: string) => page.locator("section:has(> h2:text-is('AI끼리 관전')) button.setup-seat", { hasText: name });
 const seatLabels = () => page.locator("section:has(> h2:text('좌석')) .setup-seat .seat-where").allTextContents();
 
 describe("GUI 스모크", () => {
@@ -88,4 +91,16 @@ describe("GUI 스모크", () => {
     await modeRow("산마").waitFor();
     expect(await modeRow("4마").count()).toBe(1);
   });
+
+  it("AI끼리 관전: 허브 → 산마 관전 설정(3좌석 모두 AI) → 관전 시작 → 리플레이 뷰어 자동 재생", async () => {
+    await watchRow("산마").click();
+    await page.getByText("관전 시작").waitFor();
+    expect(await seatLabels()).toEqual(["동가", "남가", "서가"]);
+    expect(await page.locator(".setup-side input[type=checkbox]").count()).toBe(0); // 관전은 항상 저장하므로 저장 옵션이 없다
+
+    await page.locator(".setup-side .setup-start").click();
+    await page.waitForURL(/\/replay\.html\?file=watch-sanma-.*_game0\.json&autoplay=1$/, { timeout: 120_000 });
+    await page.locator("#rv-play", { hasText: "정지" }).waitFor({ timeout: 120_000 }); // 재현이 끝나면 스스로 재생을 시작한다
+    expect(handle.getSession()).toBeNull(); // 사람 대국 화면(세션)은 쓰지 않는다
+  }, 240_000);
 });

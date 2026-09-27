@@ -15,6 +15,7 @@ import { meldsToGroups } from "../yaku/meldConvert.js";
 import { SeededRng } from "../core/rng.js";
 import { pickNonRedRepresentative, shouldDeclareKita } from "./simpleAI.js";
 import type { CharacterProfile } from "./characterProfile.js";
+import { dangerOf } from "./discardDanger.js";
 
 /**
  * CharacterAI is an additive personality layer built ON TOP of the same primitives
@@ -144,21 +145,6 @@ const UKEIRE_TILE_COUNT_WEIGHT = 0.02;
  *  physical copies (SLOT_COUNT's own convention - see tileIndex.ts). Used only to size the
  *  fast-path safety margin below, never in real scoring. */
 const MAX_COPIES_PER_KIND = 4;
-
-/** rank distance used for suji: a same-suit discard at rank+-3 makes a ryanmen-based deal-in less likely. */
-function isSuji(kind: TileKind, discardedKinds: TileKind[]): boolean {
-  if (kind[0] === "z") return false;
-  const { suit, rank } = parseKind(kind);
-  const sujiPartner = rank <= 6 ? `${suit}${rank + 3}` : null;
-  const sujiPartner2 = rank >= 4 ? `${suit}${rank - 3}` : null;
-  return (sujiPartner !== null && discardedKinds.includes(sujiPartner)) || (sujiPartner2 !== null && discardedKinds.includes(sujiPartner2));
-}
-
-function dangerOf(kind: TileKind, riverKinds: TileKind[], useSuji: boolean): number {
-  if (riverKinds.includes(kind)) return 0; // genbutsu
-  if (useSuji && isSuji(kind, riverKinds)) return 0.35;
-  return 1;
-}
 
 function isIsolatedTile(kind: TileKind, counts: number[]): boolean {
   if (kind[0] === "z") return counts[parseKind(kind).rank - 1 + 27]! <= 1;

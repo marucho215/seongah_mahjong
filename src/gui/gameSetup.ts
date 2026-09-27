@@ -70,6 +70,55 @@ export function parseGuiGameConfig(input: unknown, resolveProfile: (id: string) 
   return { mode, opponents, ...(seed !== undefined ? { seed } : {}), saveReplays: raw.saveReplays === true };
 }
 
+/** AI 관전 대국의 기본 좌석 (seat 0부터 전부 AI). 로비 관전 설정 화면의 초기값. */
+export const DEFAULT_WATCH_SEATS: Record<GuiGameMode, readonly string[]> = {
+  sanma: ["jegalmina", "jegalnahui", "byeonari"],
+  yonma: ["jegalmina", "jegalnahui", "byeonari", "seiyamouri"],
+};
+
+/** 로비 "AI끼리 관전"에서 고른 구성. 모든 좌석이 AI다. seed가 없으면 호출자가 새로 만든다. */
+export interface AiWatchConfig {
+  mode: GuiGameMode;
+  seats: string[];
+  seed?: string;
+}
+
+function parseSeed(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") throw new Error("시드는 문자열이어야 합니다");
+  const trimmed = value.trim();
+  if (trimmed.length > MAX_SEED_LENGTH) throw new Error(`시드는 ${MAX_SEED_LENGTH}자 이하여야 합니다`);
+  return trimmed === "" ? undefined : trimmed;
+}
+
+/** 관전 구성 검증: 좌석 수는 모드 인원과 같고, 대국과 같은 이유로 같은 캐릭터를 두 좌석에 앉힐 수 없다. */
+export function parseAiWatchConfig(input: unknown, resolveProfile: (id: string) => CharacterProfile = getCharacterProfile): AiWatchConfig {
+  if (typeof input !== "object" || input === null) throw new Error("관전 설정이 비어 있습니다");
+  const raw = input as Record<string, unknown>;
+  const mode = parseGuiMode(typeof raw.mode === "string" ? raw.mode : String(raw.mode));
+  if (!Array.isArray(raw.seats)) throw new Error("좌석 목록(seats)이 필요합니다");
+  const expected = playerCountOf(mode);
+  if (raw.seats.length !== expected) throw new Error(`좌석은 ${expected}개여야 합니다`);
+  const seats = raw.seats.map((id) => {
+    if (typeof id !== "string") throw new Error("좌석 characterId는 문자열이어야 합니다");
+    return resolveProfile(id).characterId;
+  });
+  if (new Set(seats).size !== seats.length) throw new Error("같은 캐릭터를 두 좌석에 앉힐 수 없습니다");
+  const seed = parseSeed(raw.seed);
+  return { mode, seats, ...(seed !== undefined ? { seed } : {}) };
+}
+
+/** 사람 없이 모든 좌석이 AI인 판. 등록 캐릭터 좌석은 시뮬레이션(`npm run sim`)과 같은 characterAI, CustomAI 좌석은 customAI다. */
+export function createAiWatchGame(mode: GuiGameMode, seed: string, profiles: readonly CharacterProfile[]): GameState {
+  if (profiles.length !== playerCountOf(mode)) throw new Error(`${mode}: 좌석은 ${playerCountOf(mode)}개여야 합니다`);
+  return new GameState({
+    rules: mode === "yonma" ? MAJSOUL_YONMA_RULES : DEFAULT_SANMA_RULES,
+    seed,
+    characterProfiles: [...profiles],
+    controllers: profiles.map((p) => (isCustomAiCharacterId(p.characterId) ? ("customAI" as const) : ("characterAI" as const))),
+  });
+}
+
 export function createGuiGame(mode: GuiGameMode, seed: string, opponents: readonly string[] = DEFAULT_OPPONENTS[mode]): GameState {
   return createGuiGameWithProfiles(mode, seed, opponents.map((id) => getCharacterProfile(id)));
 }

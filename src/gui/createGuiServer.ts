@@ -8,16 +8,26 @@ import { fileURLToPath } from "node:url";
 import type { GameState } from "../core/GameState.js";
 import type { GuiSession, GuiSessionPhase, WatchFrame } from "./guiSession.js";
 import type { GameEvent } from "../core/GameLog.js";
-import { InlineEngineRunner, gameFromSpec, type EngineRunner, type EngineSnapshot, type EngineStart, type GameSpec, type OpponentSpec } from "./engineRunner.js";
+import { InlineEngineRunner, gameFromSpec, runAiWatchGame, type AiWatchSpec, type EngineRunner, type EngineSnapshot, type EngineStart, type GameSpec, type OpponentSpec } from "./engineRunner.js";
 import type { EngineWorkerPool } from "./engineWorkerPool.js";
 import { AudioCueTracker, toPublicAction, type AudioCue, type PublicAction } from "./audioCues.js";
 import type { DecisionResponse } from "../core/decisions.js";
-import { resolveReplayDir, writeGameReplay, type GameReplayRecord } from "../sim/replayRecorder.js";
+import { replayFileNamePart, resolveReplayDir, writeGameReplay, type GameReplayRecord } from "../sim/replayRecorder.js";
 import { reproduceReplay, type ReplayReproduction } from "../replay/replayReproduction.js";
 import { getCharacterProfile } from "../ai/characterProfiles.js";
 import { buildCharacterRoster } from "./characterRoster.js";
 import { DEFAULT_PLAYBACK_SPEED, PLAYBACK_FRAME_DELAY_MS, parsePlaybackSpeed } from "./playbackSpeed.js";
-import { DEFAULT_OPPONENTS, parseGuiGameConfig, parseGuiMode, playerCountOf, type GuiGameConfig, type GuiGameMode } from "./gameSetup.js";
+import {
+  DEFAULT_OPPONENTS,
+  DEFAULT_WATCH_SEATS,
+  parseAiWatchConfig,
+  parseGuiGameConfig,
+  parseGuiMode,
+  playerCountOf,
+  type AiWatchConfig,
+  type GuiGameConfig,
+  type GuiGameMode,
+} from "./gameSetup.js";
 import { CustomAiStore } from "../customai/customAiStore.js";
 import { DEFAULT_SANMA_RULES, MAJSOUL_YONMA_RULES } from "../rules/RuleConfig.js";
 import {
@@ -400,7 +410,17 @@ export function createGuiLobbyServer(options: GuiLobbyOptions = {}): GuiLobbySer
 /** 입장 게이트가 없는 서버(로컬 모드)의 유일한 사용자 id. */
 export const LOCAL_USER_ID = "local";
 
-type LobbySetup = { mode: GuiGameMode; opponents: Record<GuiGameMode, string[]>; seed: string; saveReplays: boolean };
+type LobbySetup = {
+  mode: GuiGameMode;
+  opponents: Record<GuiGameMode, string[]>;
+  /** AI 관전 좌석 (seat 0부터 전부 AI) */
+  watchSeats: Record<GuiGameMode, string[]>;
+  seed: string;
+  saveReplays: boolean;
+};
+
+/** 로비 설정 화면의 용도: 사람이 앉는 대국(play) 또는 AI끼리 관전(watch). */
+type LobbyPurpose = "play" | "watch";
 
 /** 한 사용자의 로비 (1.2 2단계). 로컬 모드에서는 서버에 하나(LOCAL_USER_ID)뿐이고, 입장 게이트가 있으면 입장한 사용자마다
  *  하나씩 생긴다. 같은 사용자의 새로고침/다른 탭은 같은 로비를 본다. 서로 다른 사용자의 로비와 대국은 섞이지 않는다. */
@@ -409,6 +429,8 @@ interface Room {
   sseClients: Set<import("node:http").ServerResponse>;
   /** 로비 화면: 처음에는 모드를 고르는 허브, 모드를 고르면 그 모드의 대국 설정. */
   lobbyScreen: "hub" | "setup";
+  /** 설정 화면이 사람 대국용인지 AI 관전용인지 (허브에서 고른 항목) */
+  lobbyPurpose: LobbyPurpose;
   /** 시작 화면에 채워 둘 값: 처음에는 CLI 기본값, 한 판을 한 뒤에는 마지막으로 고른 구성 */
   lastSetup: LobbySetup;
   /** AI 진행 속도 (사용자 설정) */
@@ -526,12 +548,14 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
         userId,
         sseClients: new Set(),
         lobbyScreen: "hub",
+        lobbyPurpose: "play",
         lastSetup: {
           mode: defaults.mode ?? "sanma",
           opponents: {
             sanma: [...(defaults.opponents?.sanma ?? DEFAULT_OPPONENTS.sanma)],
             yonma: [...(defaults.opponents?.yonma ?? DEFAULT_OPPONENTS.yonma)],
           },
+          watchSeats: { sanma: [...DEFAULT_WATCH_SEATS.sanma], yonma: [...DEFAULT_WATCH_SEATS.yonma] },
           seed: defaults.seed ?? "",
           saveReplays: defaults.saveReplays ?? false,
         },
@@ -592,15 +616,20 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     const roster = currentRoster(room);
     // 마지막 구성에 이제 없는 상대(삭제된 CustomAI 등)가 있으면 그 좌석만 기본 상대 중 남는 캐릭터로 바꿔 보여준다 (화면 초기값일 뿐).
     const known = new Set(roster.map((r) => r.characterId));
-    const defaults = { ...lastSetup, opponents: { ...lastSetup.opponents } };
+    const defaults = { ...lastSetup, opponents: { ...lastSetup.opponents }, watchSeats: { ...lastSetup.watchSeats } };
+    const refill = (ids: readonly string[], fallback: readonly string[]): string[] => {
+      const picked = ids.map((id) => (known.has(id) ? id : null));
+      const spare = [...fallback, ...officialRoster.map((r) => r.characterId)].filter((id) => !picked.includes(id));
+      return picked.map((id) => id ?? spare.shift()!);
+    };
     for (const mode of ["sanma", "yonma"] as const) {
-      const picked = defaults.opponents[mode].map((id) => (known.has(id) ? id : null));
-      const spare = [...DEFAULT_OPPONENTS[mode], ...officialRoster.map((r) => r.characterId)].filter((id) => !picked.includes(id));
-      defaults.opponents[mode] = picked.map((id) => id ?? spare.shift()!);
+      defaults.opponents[mode] = refill(defaults.opponents[mode], DEFAULT_OPPONENTS[mode]);
+      defaults.watchSeats[mode] = refill(defaults.watchSeats[mode], DEFAULT_WATCH_SEATS[mode]);
     }
     return JSON.stringify({
       type: "setup",
       screen: lobbyScreen,
+      purpose: room.lobbyPurpose,
       mode: lastSetup.mode,
       ...(room.notice ? { notice: room.notice } : {}),
       roster,
@@ -643,17 +672,20 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     room.notice = null;
     const seed = config.seed ?? `gui-${Date.now()}`;
     room.lastSetup = {
+      ...room.lastSetup,
       mode: config.mode,
       opponents: { ...room.lastSetup.opponents, [config.mode]: [...config.opponents] },
       seed: config.seed ?? "",
       saveReplays: config.saveReplays,
     };
+    room.lobbyPurpose = "play"; // 끝난 뒤 "설정 바꾸기"는 사람 대국 설정 화면으로 돌아간다
     const spec: GameSpec = { mode: config.mode, seed, opponents: config.opponents.map((id) => opponentSpecOf(room, id)) };
     const options: GuiServerOptions = {
       ...(config.saveReplays
         ? {
             replay: {
-              label: `human-${config.mode}-${seed}`,
+              // 파일 이름에는 목록이 받는 문자만 쓴다 (시드는 기록 안에 원문 그대로 남는다)
+              label: `human-${config.mode}-${replayFileNamePart(seed)}`,
               dir: room.replayDir,
               onSaved: (path: string) => {
                 lobby.onReplaySaved?.(path);
@@ -674,6 +706,34 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     const table = openTable(room, opened.runner, opened.start, options, started);
     lobby.onGameStarted?.(started, room.userId);
     sendToRoom(room, `data: ${table.host.connectMessage()}\n\n`);
+  }
+
+  /** AI 관전: 모든 좌석이 AI인 게임을 엔진(worker)에서 끝까지 진행하고, 그 리플레이를 이 사용자의 리플레이 폴더에 저장한다.
+   *  사람이 두는 대국 화면은 쓰지 않는다 - 결과는 리플레이 뷰어로 본다. 진행하는 동안은 대국 한 판으로 센다(동시 대국 제한).
+   *  저장한 파일 이름을 돌려준다. */
+  async function watchGame(room: Room, config: AiWatchConfig): Promise<string> {
+    if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
+    if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
+    if (limits && openGameCount() - (room.table ? 1 : 0) >= limits.maxOpenGames) {
+      throw new Error(`지금은 서버에서 진행 중인 대국이 많습니다 (최대 ${limits.maxOpenGames}판). 잠시 뒤 다시 시도해 주세요`);
+    }
+    room.notice = null;
+    const seed = config.seed ?? `watch-${Date.now()}`;
+    room.lastSetup = { ...room.lastSetup, mode: config.mode, watchSeats: { ...room.lastSetup.watchSeats, [config.mode]: [...config.seats] }, seed: config.seed ?? "" };
+    const spec: AiWatchSpec = { mode: config.mode, seed, seats: config.seats.map((id) => opponentSpecOf(room, id)) };
+    // 같은 시드를 다른 좌석으로 다시 봐도 앞 기록을 덮어쓰지 않게 시각을 붙인다
+    const label = `watch-${config.mode}-${replayFileNamePart(seed, 40)}-${Date.now()}`;
+    room.starting = true;
+    let record: GameReplayRecord;
+    try {
+      record = lobby.engine ? await lobby.engine.runAiWatch(spec, label) : runAiWatchGame(spec, label);
+    } finally {
+      room.starting = false;
+    }
+    const path = writeGameReplay(record, room.replayDir);
+    lobby.onReplaySaved?.(path);
+    await pruneReplays(room.replayDir).catch(() => {});
+    return `${label}_game0.json`;
   }
 
   function returnToSetup(room: Room): void {
@@ -700,12 +760,14 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   function moveLobby(room: Room, input: unknown): void {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
-    const raw = (typeof input === "object" && input !== null ? input : {}) as { screen?: unknown; mode?: unknown };
+    const raw = (typeof input === "object" && input !== null ? input : {}) as { screen?: unknown; mode?: unknown; purpose?: unknown };
     room.notice = null;
     if (raw.screen === "hub") {
       room.lobbyScreen = "hub";
     } else if (raw.screen === "setup") {
+      if (raw.purpose !== undefined && raw.purpose !== "play" && raw.purpose !== "watch") throw new Error('purpose는 "play" 또는 "watch"여야 합니다');
       room.lastSetup = { ...room.lastSetup, mode: parseGuiMode(typeof raw.mode === "string" ? raw.mode : String(raw.mode)) };
+      room.lobbyPurpose = raw.purpose ?? "play";
       room.lobbyScreen = "setup";
     } else {
       throw new Error('screen은 "hub" 또는 "setup"이어야 합니다');
@@ -962,6 +1024,16 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
 
     if (req.method === "POST" && url.pathname === "/start") {
       readBody(req, res, (body) => reply(res, () => startGame(room, parseGuiGameConfig(JSON.parse(body), (id) => resolveOpponentProfile(room, id)))));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/watch") {
+      readBody(req, res, (body) => {
+        Promise.resolve()
+          .then(() => watchGame(room, parseAiWatchConfig(JSON.parse(body), (id) => resolveOpponentProfile(room, id))))
+          .then((file) => res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }).end(JSON.stringify({ file })))
+          .catch((err) => res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" }).end(String(err instanceof Error ? err.message : err)));
+      });
       return;
     }
 

@@ -6,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import { CHARACTER_PROFILES } from "../src/ai/characterProfiles.js";
 import { CHARACTER_PRESENTATION, buildCharacterRoster } from "../src/gui/characterRoster.js";
 import { createGuiLobbyServer, type GuiLobbyOptions } from "../src/gui/createGuiServer.js";
-import { DEFAULT_OPPONENTS, createGuiGame, parseGuiGameConfig } from "../src/gui/gameSetup.js";
+import { DEFAULT_OPPONENTS, DEFAULT_WATCH_SEATS, createGuiGame, parseGuiGameConfig } from "../src/gui/gameSetup.js";
 import { defaultResponse } from "./helpers/yonmaHuman.js";
 import type { GuiSession } from "../src/gui/guiSession.js";
 
@@ -125,9 +125,11 @@ describe("시작 화면 서버 (createGuiLobbyServer)", () => {
     expect(msg.defaults).toEqual({
       mode: "yonma",
       opponents: { sanma: [...DEFAULT_OPPONENTS.sanma], yonma: [...DEFAULT_OPPONENTS.yonma] },
+      watchSeats: { sanma: [...DEFAULT_WATCH_SEATS.sanma], yonma: [...DEFAULT_WATCH_SEATS.yonma] },
       seed: "cli-seed",
       saveReplays: true,
     });
+    expect(msg.purpose).toBe("play");
     expect(lobby.getSession()).toBeNull();
     expect((await lobby.post("/respond", { type: "discard", tileId: 0, declareRiichi: false })).status).toBe(400);
     expect((await lobby.post("/continue")).status).toBe(400);

@@ -69,7 +69,8 @@ async function enterAs(nickname: string): Promise<Page> {
   return page;
 }
 
-const modeRow = (page: Page, name: string) => page.locator(".setup-seats button.setup-seat", { hasText: name });
+// 허브에는 사람 대국과 AI 관전에 같은 모드 이름이 두 번 나온다 - 섹션 제목으로 구분한다
+const modeRow = (page: Page, name: string) => page.locator("section:has(> h2:text-is('대국 방식')) button.setup-seat", { hasText: name });
 
 async function startMode(page: Page, name: string): Promise<void> {
   await modeRow(page, name).click();
