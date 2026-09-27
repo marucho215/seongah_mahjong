@@ -128,4 +128,37 @@ describe("온라인 스모크 (두 사용자 동시 접속)", () => {
     await a.getByText("대국 방식 바꾸기").waitFor();
     expect(await a.locator(".setup-seats div.setup-seat .seat-name").textContent()).toBe("산마");
   });
+
+  it("공개 모드(초대 코드 없음): 입장 화면에 초대 코드 칸이 없고, 닉네임만으로 입장해 AI와 대국을 시작한다", async () => {
+    const publicDir = mkdtempSync(join(tmpdir(), "online-public-"));
+    const open = createGuiLobbyServer({
+      frameDelayMs: 0,
+      access: new AccessGate({ dataDir: publicDir }),
+      userDataDir: join(publicDir, "users"),
+      limits: ONLINE_LIMITS,
+      engine: pool,
+    });
+    open.server.keepAliveTimeout = 0;
+    await new Promise<void>((resolve) => open.server.listen(0, resolve));
+    const openUrl = `http://localhost:${(open.server.address() as AddressInfo).port}`;
+    try {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 820 } });
+      contexts.push(context);
+      const page = await context.newPage();
+      page.on("pageerror", (e) => errors.push(`public: ${e.message}`));
+      await page.goto(`${openUrl}/`);
+      await page.waitForURL(`${openUrl}/join.html`);
+      await page.locator(".join-lead", { hasText: "닉네임을 정하면" }).waitFor();
+      expect(await page.locator("input[name=inviteCode]").isVisible()).toBe(false);
+      await page.fill("input[name=nickname]", "지나가던 손님");
+      await page.click(".setup-start");
+      await page.waitForURL(`${openUrl}/`);
+      await page.locator(".setup-nickname", { hasText: "지나가던 손님" }).waitFor();
+      await startMode(page, "산마");
+    } finally {
+      open.server.closeAllConnections();
+      await new Promise<void>((resolve) => open.server.close(() => resolve()));
+      rmSync(publicDir, { recursive: true, force: true });
+    }
+  });
 });

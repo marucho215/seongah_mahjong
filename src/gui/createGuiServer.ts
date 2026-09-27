@@ -345,8 +345,8 @@ export interface GuiLobbyOptions {
   customAiDir?: string;
   onReplaySaved?: (path: string) => void;
   onGameStarted?: (config: StartedGameConfig, userId: string) => void;
-  /** 온라인 입장 게이트. 지정하면 초대 코드와 닉네임으로 입장한 브라우저만 로비/대국/API를 쓸 수 있다 (accessGate.ts).
-   *  생략하면 지금까지처럼 누구나 쓰는 로컬 모드다. */
+  /** 온라인 입장 게이트. 지정하면 입장한 브라우저(공개 모드: 닉네임만, 비공개 모드: 초대 코드 + 닉네임)만 로비/대국/API를
+   *  쓸 수 있고 사용자마다 로비/저장이 나뉜다 (accessGate.ts). 생략하면 입장 없이 로비 하나를 쓰는 로컬 모드다. */
   access?: AccessGate;
   /** 대국과 리플레이 재현을 돌릴 엔진 worker 풀 (engineWorkerPool.ts). 생략하면 같은 스레드에서 돌린다(테스트용).
    *  풀은 호출한 쪽이 만들고 닫는다. */
@@ -1038,6 +1038,11 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       return true;
     }
     const user = access.userOf(req);
+    // 입장 화면이 초대 코드 칸을 보일지 정한다 (입장 전에도 열린다)
+    if (req.method === "GET" && pathname === "/api/join-info") {
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }).end(JSON.stringify({ inviteRequired: access.inviteRequired }));
+      return true;
+    }
     if (req.method === "GET" && pathname === "/api/me") {
       if (user) res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }).end(JSON.stringify({ nickname: user.nickname }));
       else res.writeHead(401, { "Content-Type": "text/plain; charset=utf-8" }).end("입장이 필요합니다");

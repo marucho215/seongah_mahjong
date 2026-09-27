@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { createGuiLobbyServer } from "../src/gui/createGuiServer.js";
-import { AccessGate, JOIN_FAILURE_LIMIT, SESSION_COOKIE, parseNickname } from "../src/gui/accessGate.js";
+import type { IncomingMessage } from "node:http";
+import { AccessGate, JOIN_FAILURE_LIMIT, NEW_USERS_PER_CLIENT, NEW_USERS_PER_WINDOW, NEW_USER_WINDOW_MS, SESSION_COOKIE, clientKeyOf, parseNickname } from "../src/gui/accessGate.js";
 
 const INVITE = "mahjong-2026";
 const cleanups: (() => Promise<void> | void)[] = [];
@@ -190,5 +191,90 @@ describe("온라인 입장 게이트 (초대 코드 + 닉네임)", () => {
     expect((await fetch(`${baseUrl}/api/me`)).status).toBe(404);
     expect((await fetch(`${baseUrl}/join`, { method: "POST", body: "{}" })).status).toBe(405);
     expect(existsSync(join(dataDir, "sessions.json"))).toBe(false);
+  });
+});
+
+describe("공개 모드 입장 (초대 코드 없이 닉네임만)", () => {
+  const publicGate = (dataDir: string, options: { maxUsers?: number; now?: () => number } = {}) => new AccessGate({ dataDir, ...options });
+
+  it("입장 정보 API는 입장 전에도 열리고, 초대 코드가 필요한지 알려 준다", async () => {
+    const open = await startGated(tempDir(), publicGate(tempDir()));
+    expect(await (await open.request("/api/join-info")).json()).toEqual({ inviteRequired: false });
+    const closed = await startGated(tempDir());
+    expect(await (await closed.request("/api/join-info")).json()).toEqual({ inviteRequired: true });
+  });
+
+  it("닉네임만으로 입장해 로비를 쓰고, 입장 전에는 비공개 모드처럼 막는다", async () => {
+    const dataDir = tempDir();
+    const s = await startGated(dataDir, publicGate(dataDir));
+    expect((await s.request("/")).status).toBe(302); // 입장 화면으로
+    expect((await s.request("/events")).status).toBe(401);
+    expect((await s.join({ nickname: "" })).status).toBe(400);
+    const res = await s.join({ nickname: "손님" });
+    expect(res.status).toBe(200);
+    const cookie = cookieOf(res);
+    expect(await (await s.request("/api/me", { cookie })).json()).toEqual({ nickname: "손님" });
+    const first = await firstSseMessage(await s.request("/events", { cookie }));
+    expect([first.type, first.screen]).toEqual(["setup", "hub"]);
+    // 초대 코드를 보내도 무시한다 (틀린 코드여도 입장)
+    expect((await s.join({ nickname: "다른 손님", inviteCode: "anything" })).status).toBe(200);
+  });
+
+  it("비공개 모드에서 입장한 브라우저는 공개 모드로 바꿔 켜도 같은 사용자로 들어간다 (세션 파일 공용)", async () => {
+    const dataDir = tempDir();
+    const closed = await startGated(dataDir);
+    const cookie = cookieOf(await closed.join({ inviteCode: INVITE, nickname: "기존" }));
+    const open = await startGated(dataDir, publicGate(dataDir));
+    expect(await (await open.request("/api/me", { cookie })).json()).toEqual({ nickname: "기존" });
+  });
+
+  it(`접속지별로 한 시간에 새 사용자 ${NEW_USERS_PER_CLIENT}명까지 (다른 접속지와 이미 입장한 브라우저는 영향 없음)`, async () => {
+    let now = 5_000_000;
+    const dataDir = tempDir();
+    const s = await startGated(dataDir, publicGate(dataDir, { now: () => now }));
+    const joinFrom = (ip: string, cookie?: string) =>
+      s.request("/join", { method: "POST", body: JSON.stringify({ nickname: "a" }), headers: { "X-Forwarded-For": `${ip}, 10.0.0.1` }, ...(cookie ? { cookie } : {}) });
+    let firstCookie = "";
+    for (let i = 0; i < NEW_USERS_PER_CLIENT; i++) {
+      const res = await joinFrom("198.51.100.7");
+      expect(res.status).toBe(200);
+      if (i === 0) firstCookie = cookieOf(res);
+    }
+    const blocked = await joinFrom("198.51.100.7");
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get("set-cookie")).toBeNull();
+    expect((await joinFrom("198.51.100.7", firstCookie)).status).toBe(200); // 이미 입장한 브라우저의 닉네임 바꾸기는 새 사용자가 아니다
+    expect((await joinFrom("198.51.100.8")).status).toBe(200);
+    now += NEW_USER_WINDOW_MS;
+    expect((await joinFrom("198.51.100.7")).status).toBe(200);
+  });
+
+  it(`원래 접속지를 알 수 없으면(헤더 없는 루프백) 접속지별 제한 대신 서버 전체 한 시간 ${NEW_USERS_PER_WINDOW}명 제한만 적용한다`, async () => {
+    const dataDir = tempDir();
+    const s = await startGated(dataDir, publicGate(dataDir));
+    for (let i = 0; i < NEW_USERS_PER_WINDOW; i++) expect((await s.join({ nickname: `u${i}` })).status).toBe(200);
+    expect((await s.join({ nickname: "over" })).status).toBe(429);
+  });
+
+  it("서버 전체 사용자 수 상한에 닿으면 새 입장만 막는다 (503)", async () => {
+    const dataDir = tempDir();
+    const s = await startGated(dataDir, publicGate(dataDir, { maxUsers: 2 }));
+    const a = cookieOf(await s.join({ nickname: "a" }));
+    expect((await s.join({ nickname: "b" })).status).toBe(200);
+    const full = await s.join({ nickname: "c" });
+    expect(full.status).toBe(503);
+    expect(await full.text()).toMatch(/사용자 수 상한/);
+    expect((await s.join({ nickname: "a2" }, a)).status).toBe(200);
+    expect(await (await s.request("/api/me", { cookie: a })).json()).toEqual({ nickname: "a2" });
+  });
+});
+
+describe("입장 제한에 쓰는 접속지 (clientKeyOf)", () => {
+  const req = (remoteAddress: string, headers: Record<string, string> = {}) => ({ socket: { remoteAddress }, headers }) as unknown as IncomingMessage;
+  it("루프백(같은 PC의 터널/프록시)에서 온 요청만 원래 접속지 헤더를 믿는다", () => {
+    expect(clientKeyOf(req("127.0.0.1", { "x-forwarded-for": "203.0.113.9, 10.0.0.1" }))).toBe("203.0.113.9");
+    expect(clientKeyOf(req("::1", { "cf-connecting-ip": "203.0.113.10" }))).toBe("203.0.113.10");
+    expect(clientKeyOf(req("127.0.0.1"))).toBeNull(); // 모든 사람이 한 접속지로 보이므로 접속지별 제한에 쓰지 않는다
+    expect(clientKeyOf(req("198.51.100.3", { "x-forwarded-for": "1.2.3.4", "cf-connecting-ip": "5.6.7.8" }))).toBe("198.51.100.3"); // 위조 가능
   });
 });
