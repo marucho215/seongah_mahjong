@@ -1316,6 +1316,13 @@ function renderFinalResultStep() {
     }
   }
 
+  // 이 대국을 리플레이로 저장했으면 뷰어로 바로 간다 (새 탭: 종료 화면과 "다시 하기" 버튼은 그대로 남는다)
+  if (msg.replayFile) {
+    const link = el("a", "final-replay-link", { href: `/replay.html?file=${encodeURIComponent(msg.replayFile)}`, target: "_blank", rel: "noopener" });
+    link.textContent = "이 대국 리플레이 보기";
+    panel.appendChild(link);
+  }
+
   if (msg.handEvent) {
     const back = el("button", "link-button");
     back.textContent = "마지막 국 결과 다시 보기";
@@ -1506,6 +1513,26 @@ function mountAbandonButton() {
 
 mountAbandonButton();
 
+// --- 휴대폰: 조작 막대 접기. "메뉴" 버튼은 좁거나 낮은 화면에서만 보이고(style.css), 그때 나머지 조작은 버튼을 눌러야 펼쳐진다.
+// 막대 밖을 누르면 닫는다 (작탁을 가리지 않게). ---
+
+function mountControlsToggle() {
+  const bar = document.getElementById("audio-controls");
+  const toggle = bar && bar.querySelector(".controls-toggle");
+  if (!toggle) return;
+  const setOpen = (open) => {
+    bar.classList.toggle("is-open", open);
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.textContent = open ? "닫기" : "메뉴";
+  };
+  toggle.addEventListener("click", () => setOpen(!bar.classList.contains("is-open")));
+  document.addEventListener("click", (e) => {
+    if (bar.classList.contains("is-open") && !bar.contains(e.target)) setOpen(false);
+  });
+}
+
+mountControlsToggle();
+
 function handleMessage(msg) {
   handleMessageBody(msg);
   // 접속 직후 메시지의 cueBase 이하는 과거 신호라 재생하지 않는다.
@@ -1569,6 +1596,10 @@ function initSetupState(msg) {
     watchSeats: { sanma: keepSeats("watchSeats", "sanma"), yonma: keepSeats("watchSeats", "yonma") },
     seed: prev ? prev.seed : msg.defaults.seed,
     saveReplays: prev ? prev.saveReplays : msg.defaults.saveReplays,
+    // AI 관전 판 수(1이면 한 판 관전 → 뷰어 자동 재생)와 여러 판일 때 판마다 리플레이 저장. 처음과 새로고침 뒤에는 서버가 기억한 마지막 값
+    watchGames: prev ? prev.watchGames : (msg.defaults.watchGames ?? 1),
+    watchSaveReplays: prev ? prev.watchSaveReplays : (msg.defaults.watchSaveReplays ?? false),
+    watchBatch: msg.watchBatch ?? null, // 여러 판 관전 상태는 서버가 들고 있다 (새로고침해도 이어서 보인다)
     pending: false,
     error: "",
     notice: msg.notice ?? "", // 서버 안내 (예: 오래 응답이 없어 대국을 정리함)
@@ -1789,6 +1820,16 @@ function renderSetup() {
     notice.textContent = setupState.notice;
     header.appendChild(notice);
   }
+  const batch = setupState.watchBatch;
+  if (batch && batch.status === "running" && !(watching && setupState.mode === batch.mode)) {
+    const line = el("p", "setup-notice");
+    line.append(`AI 연속 관전 진행 중 (${batch.done}/${batch.total}판) · `);
+    const open = el("button", "setup-link-button", { type: "button" });
+    open.textContent = "보기";
+    open.addEventListener("click", () => postLobby({ screen: "setup", mode: batch.mode, purpose: "watch" }).catch(() => {}));
+    line.appendChild(open);
+    header.appendChild(line);
+  }
   side.appendChild(header);
 
   const modeChildren = [renderModeRows(isHub, "play")];
@@ -1838,13 +1879,43 @@ function renderSetup() {
   replayText.textContent = "게임이 끝나면 리플레이 저장";
   replayLabel.append(replayInput, replayText);
   // 관전 대국은 결과를 리플레이로 보므로 항상 저장한다 (저장 옵션 없음)
-  side.appendChild(watching ? setupSection("옵션", seedLabel) : setupSection("옵션", seedLabel, replayLabel));
+  if (watching) {
+    // 판 수: 1판이면 지금처럼 끝까지 둔 뒤 뷰어로 자동 재생, 2판 이상이면 연속 관전(통계). 리플레이 저장은 연속 관전에서만 고른다
+    const gamesLabel = el("label", "setup-field");
+    const gamesText = el("span", "field-label");
+    gamesText.textContent = `판 수 (1~${WATCH_BATCH_MAX})`;
+    const gamesInput = el("input", "setup-input", { type: "number", min: "1", max: String(WATCH_BATCH_MAX), step: "1", inputmode: "numeric" });
+    gamesInput.value = String(setupState.watchGames);
+    gamesInput.addEventListener("change", () => {
+      const n = Math.round(Number(gamesInput.value));
+      setupState.watchGames = Number.isFinite(n) ? Math.min(WATCH_BATCH_MAX, Math.max(1, n)) : 1;
+      renderSetup();
+    });
+    gamesLabel.append(gamesText, gamesInput);
+    const children = [seedLabel, gamesLabel];
+    if (setupState.watchGames > 1) {
+      const saveLabel = el("label", "setup-check");
+      const saveInput = el("input", "", { type: "checkbox" });
+      saveInput.checked = setupState.watchSaveReplays;
+      saveInput.addEventListener("change", () => (setupState.watchSaveReplays = saveInput.checked));
+      const saveText = el("span");
+      saveText.textContent = "각 판 리플레이 저장 (끄면 통계만 남깁니다)";
+      saveLabel.append(saveInput, saveText);
+      children.push(saveLabel);
+    }
+    side.appendChild(setupSection("옵션", ...children));
+  } else {
+    side.appendChild(setupSection("옵션", seedLabel, replayLabel));
+  }
 
+  const batchRunning = !!(setupState.watchBatch && setupState.watchBatch.status === "running");
   const start = el("button", "setup-start", { type: "button" });
-  if (watching) start.textContent = setupState.pending ? "AI 대국을 진행하는 중..." : "관전 시작";
+  if (watching && setupState.watchGames > 1) start.textContent = setupState.pending ? "시작하는 중..." : `${setupState.watchGames}판 연속 관전 시작`;
+  else if (watching) start.textContent = setupState.pending ? "AI 대국을 진행하는 중..." : "관전 시작";
   else start.textContent = setupState.pending ? "시작하는 중..." : "대국 시작";
-  start.disabled = setupState.pending;
-  start.addEventListener("click", watching ? startWatchFromSetup : startGameFromSetup);
+  start.disabled = setupState.pending || batchRunning;
+  if (batchRunning) start.title = "AI 연속 관전이 끝나거나 취소한 뒤 시작할 수 있습니다";
+  start.addEventListener("click", !watching ? startGameFromSetup : setupState.watchGames > 1 ? startWatchBatchFromSetup : startWatchFromSetup);
   side.appendChild(start);
   }
   if (setupState.error) {
@@ -1880,6 +1951,9 @@ function renderSetup() {
   rosterPane.append(rosterHead, grid);
 
   layout.append(side, rosterPane);
+  const showBatch = watching && !!setupState.watchBatch;
+  root.classList.toggle("has-watch-batch", showBatch); // 결과 영역 + 설정 화면을 세로로 나눈다 (style.css)
+  if (showBatch) root.appendChild(renderWatchBatchPanel(setupState.watchBatch));
   root.appendChild(layout);
   grid.scrollTop = scrollTop;
   if (setupState.editor) root.appendChild(renderCustomAiEditor());
@@ -2114,6 +2188,134 @@ async function startWatchFromSetup() {
   }
 }
 
+const WATCH_BATCH_MAX = 20;
+
+async function startWatchBatchFromSetup() {
+  if (!setupState || setupState.pending) return;
+  AudioManager.play("ui.confirm");
+  setupState.pending = true;
+  setupState.error = "";
+  renderSetup();
+  const body = { mode: setupState.mode, seats: currentOpponents(), seed: setupState.seed, games: setupState.watchGames, saveReplays: setupState.watchSaveReplays };
+  try {
+    const res = await fetch("/watch/batch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(await res.text());
+  } catch (err) {
+    setupState.error = err instanceof Error ? err.message : String(err);
+  }
+  setupState.pending = false; // 진행 상황은 서버가 watch_batch 메시지로 보낸다
+  renderSetup();
+}
+
+async function postWatchBatch(path) {
+  try {
+    const res = await fetch(path, { method: "POST" });
+    if (!res.ok) throw new Error(await res.text());
+  } catch (err) {
+    setupState.error = err instanceof Error ? err.message : String(err);
+    renderSetup();
+  }
+}
+
+const WATCH_BATCH_STATUS_KO = { running: "진행 중", done: "완료", cancelled: "취소됨", failed: "실패" };
+const percent = (x) => `${(x * 100).toFixed(1)}%`;
+const signed = (x, digits = 1) => (x > 0 ? "+" : "") + x.toFixed(digits);
+
+/** AI 연속 관전 결과: 진행률, 취소/지우기, 좌석별 통계 표, 판 목록. 숫자는 모두 서버(watchStats.ts)가 계산한 값이다. */
+function renderWatchBatchPanel(batch) {
+  const panel = el("section", "watch-batch");
+  const head = el("div", "watch-batch-head");
+  const title = el("h2", "setup-heading");
+  title.textContent = `AI 연속 관전 · ${MODE_KO[batch.mode] ?? batch.mode} · 시드 ${batch.seed}`;
+  const status = el("p", "watch-batch-status");
+  let text = `${WATCH_BATCH_STATUS_KO[batch.status] ?? batch.status} · ${batch.done}/${batch.total}판`;
+  if (batch.status === "running" && batch.cancelRequested) text += " · 지금 판이 끝나면 멈춥니다";
+  if (batch.status === "failed" && batch.error) text += ` · ${batch.error}`;
+  status.textContent = text;
+  const bar = el("div", "watch-batch-bar", { role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(batch.total), "aria-valuenow": String(batch.done) });
+  const fill = el("div", "watch-batch-fill");
+  fill.style.width = `${(batch.done / batch.total) * 100}%`;
+  bar.appendChild(fill);
+  const actions = el("div", "watch-batch-actions");
+  if (batch.status === "running") {
+    const cancel = el("button", "secondary-button", { type: "button" });
+    cancel.textContent = batch.cancelRequested ? "취소 요청됨" : "취소";
+    cancel.disabled = batch.cancelRequested;
+    cancel.title = "지금 도는 판이 끝나면 멈춥니다. 끝난 판의 결과는 남습니다";
+    cancel.addEventListener("click", () => postWatchBatch("/watch/batch/cancel"));
+    actions.appendChild(cancel);
+  } else {
+    const clear = el("button", "secondary-button", { type: "button" });
+    clear.textContent = "결과 지우기";
+    clear.title = "저장한 리플레이 파일은 지우지 않습니다";
+    clear.addEventListener("click", () => postWatchBatch("/watch/batch/clear"));
+    actions.appendChild(clear);
+  }
+  head.append(title, actions);
+  panel.append(head, status, bar);
+
+  if (batch.done > 0) {
+    // 좌석별 통계 (좁은 화면에서는 가로로 스크롤)
+    const n = batch.seatNames.length;
+    const wrap = el("div", "watch-batch-scroll");
+    const table = el("table", "watch-batch-table");
+    const thead = el("thead");
+    const hr = el("tr");
+    const headers = ["좌석", "캐릭터", "평균 순위", "1위율", ...Array.from({ length: n }, (_, k) => `${k + 1}위`), "평균 pt", "합계 pt", "평균 점수", "화료율", "방총율", "리치율"];
+    for (const h of headers) {
+      const th = el("th");
+      th.textContent = h;
+      hr.appendChild(th);
+    }
+    thead.appendChild(hr);
+    const tbody = el("tbody");
+    for (const st of batch.stats) {
+      const tr = el("tr");
+      const cells = [
+        WATCH_SEAT_LABEL[st.seat],
+        batch.seatNames[st.seat],
+        st.averagePlacement.toFixed(2),
+        percent(st.firstRate),
+        ...st.placementCounts.map(String),
+        signed(st.averagePoints),
+        signed(st.totalPoints),
+        formatPoints(Math.round(st.averageRawScore)),
+        percent(st.winRate),
+        percent(st.dealInRate),
+        percent(st.riichiRate),
+      ];
+      for (const c of cells) {
+        const td = el("td");
+        td.textContent = c;
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.append(thead, tbody);
+    wrap.appendChild(table);
+    const note = el("p", "watch-batch-note");
+    note.textContent = "화료율·방총율·리치율은 국 수 대비입니다. 판 수가 적으면 우연의 영향이 큽니다.";
+    panel.append(wrap, note);
+
+    // 판 목록: 판별 좌석 순위, 저장했으면 리플레이 링크
+    const list = el("ol", "watch-batch-games");
+    for (const g of batch.games) {
+      const li = el("li");
+      const ranks = g.placements.map((p, seat) => `${batch.seatNames[seat]} ${p}위`).join(" · ");
+      li.append(`${g.index + 1}판 (${g.seed}, ${g.hands}국): ${ranks}`);
+      if (g.replayFile) {
+        li.append(" · ");
+        const a = el("a", "setup-replay-link", { href: `/replay.html?file=${encodeURIComponent(g.replayFile)}`, target: "_blank", rel: "noopener" });
+        a.textContent = "리플레이";
+        li.appendChild(a);
+      }
+      list.appendChild(li);
+    }
+    panel.appendChild(list);
+  }
+  return panel;
+}
+
 function showSetup(msg) {
   initSetupState(msg);
   document.body.classList.add("is-setup");
@@ -2162,6 +2364,13 @@ function clearRecentFeed() {
 }
 
 function handleMessageBody(msg) {
+  if (msg.type === "watch_batch") {
+    if (setupState) {
+      setupState.watchBatch = msg.batch;
+      renderSetup();
+    }
+    return;
+  }
   awaitingServer = false; // 서버가 새 상태를 보냈으니 다음 응답을 보낼 수 있다
   updateAbandonButton(msg);
   if (msg.type === "setup") {

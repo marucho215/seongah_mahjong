@@ -126,6 +126,8 @@ describe("시작 화면 서버 (createGuiLobbyServer)", () => {
       mode: "yonma",
       opponents: { sanma: [...DEFAULT_OPPONENTS.sanma], yonma: [...DEFAULT_OPPONENTS.yonma] },
       watchSeats: { sanma: [...DEFAULT_WATCH_SEATS.sanma], yonma: [...DEFAULT_WATCH_SEATS.yonma] },
+      watchGames: 1,
+      watchSaveReplays: false,
       seed: "cli-seed",
       saveReplays: true,
     });

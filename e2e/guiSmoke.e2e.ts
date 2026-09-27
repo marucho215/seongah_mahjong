@@ -103,4 +103,36 @@ describe("GUI 스모크", () => {
     await page.locator("#rv-play", { hasText: "정지" }).waitFor({ timeout: 120_000 }); // 재현이 끝나면 스스로 재생을 시작한다
     expect(handle.getSession()).toBeNull(); // 사람 대국 화면(세션)은 쓰지 않는다
   }, 240_000);
+
+  it("휴대폰: 세로 로비는 가로로 넘치지 않고, 대국은 세로면 돌려 달라는 안내, 가로면 조작 막대가 메뉴로 접힌다", async () => {
+    const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const mobile = await phone.newPage();
+    mobile.on("pageerror", (e) => errors.push(e.message));
+    try {
+      await mobile.goto(page.url());
+      const overflowX = () => mobile.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      const row = mobile.locator("section:has(> h2:text-is('대국 방식')) button.setup-seat", { hasText: "4마" });
+      await row.waitFor();
+      expect(await overflowX()).toBe(0);
+      await row.tap();
+      await mobile.getByText("대국 방식 바꾸기").waitFor();
+      expect(await overflowX()).toBe(0);
+
+      await mobile.locator(".setup-side .setup-start").tap();
+      await mobile.locator("#zone-bottom .hand img").first().waitFor({ state: "attached" });
+      await mobile.locator("#rotate-hint").waitFor({ state: "visible" });
+      expect(await overflowX()).toBe(0); // 작탁이 넘쳐 페이지가 넓어지지(축소되지) 않는다
+
+      await mobile.setViewportSize({ width: 844, height: 390 });
+      await mobile.locator("#rotate-hint").waitFor({ state: "hidden" });
+      await mobile.locator("#zone-bottom .hand img").first().waitFor({ state: "visible" });
+      expect(await mobile.locator("#audio-controls .speed-select").isVisible()).toBe(false); // 접혀 있다
+      await mobile.locator(".controls-toggle").tap();
+      await mobile.locator("#audio-controls .speed-select").waitFor({ state: "visible" });
+      await mobile.locator("#table").tap({ position: { x: 20, y: 200 } }); // 막대 밖을 누르면 닫힌다
+      await mobile.locator("#audio-controls .speed-select").waitFor({ state: "hidden" });
+    } finally {
+      await phone.close();
+    }
+  }, 120_000);
 });

@@ -108,6 +108,26 @@ export function parseAiWatchConfig(input: unknown, resolveProfile: (id: string) 
   return { mode, seats, ...(seed !== undefined ? { seed } : {}) };
 }
 
+/** AI 관전 여러 판 연속 실행의 판 수 상한 (한 판 10~30초라 20판이면 최대 10분 정도). */
+export const MAX_WATCH_BATCH_GAMES = 20;
+
+/** 여러 판 연속 관전 구성: 한 판 관전 구성 + 판 수 + 판마다 리플레이 저장 여부(기본 저장 안 함, 통계만). */
+export interface AiWatchBatchConfig extends AiWatchConfig {
+  games: number;
+  saveReplays: boolean;
+}
+
+export function parseAiWatchBatchConfig(input: unknown, resolveProfile: (id: string) => CharacterProfile = getCharacterProfile): AiWatchBatchConfig {
+  const base = parseAiWatchConfig(input, resolveProfile);
+  const raw = input as Record<string, unknown>;
+  const games = raw.games;
+  if (typeof games !== "number" || !Number.isInteger(games) || games < 1 || games > MAX_WATCH_BATCH_GAMES) {
+    throw new Error(`판 수는 1~${MAX_WATCH_BATCH_GAMES} 사이의 정수여야 합니다`);
+  }
+  if (raw.saveReplays !== undefined && typeof raw.saveReplays !== "boolean") throw new Error("saveReplays는 true/false여야 합니다");
+  return { ...base, games, saveReplays: raw.saveReplays === true };
+}
+
 /** 사람 없이 모든 좌석이 AI인 판. 등록 캐릭터 좌석은 시뮬레이션(`npm run sim`)과 같은 characterAI, CustomAI 좌석은 customAI다. */
 export function createAiWatchGame(mode: GuiGameMode, seed: string, profiles: readonly CharacterProfile[]): GameState {
   if (profiles.length !== playerCountOf(mode)) throw new Error(`${mode}: 좌석은 ${playerCountOf(mode)}개여야 합니다`);

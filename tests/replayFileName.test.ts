@@ -31,7 +31,7 @@ describe("사람 대국 리플레이 파일 이름 (GUI 로비)", () => {
   });
 
   /** 시드를 정해 산마 한 게임을 HTTP/SSE로 끝까지 두고, 저장된 경로를 돌려준다. */
-  async function playAndSave(seed: string) {
+  async function playAndSave(seed: string, saveReplays = true) {
     const root = mkdtempSync(join(tmpdir(), "replay-name-"));
     const replayDir = join(root, "replays");
     const saved: string[] = [];
@@ -51,32 +51,53 @@ describe("사람 대국 리플레이 파일 이름 (GUI 로비)", () => {
     const post = (path: string, body?: unknown) => fetch(`${base}${path}`, { method: "POST", ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
 
     await readOneSseMessage(reader, buffer);
-    expect((await post("/start", { mode: "sanma", opponents: ["jegalmina", "jegalnahui"], seed, saveReplays: true })).status).toBe(204);
+    expect((await post("/start", { mode: "sanma", opponents: ["jegalmina", "jegalnahui"], seed, saveReplays })).status).toBe(204);
+    let gameEnd: any;
     for (let guard = 0; ; guard++) {
       if (guard > 5000) throw new Error("game did not end");
       const m = await readOneSseMessage(reader, buffer);
-      if (m.type === "game_end") break;
+      if (m.type === "game_end") {
+        gameEnd = m;
+        break;
+      }
       const res = m.type === "hand_end" ? await post("/continue") : m.type === "decision" ? await post("/respond", defaultResponse(m.request)) : null;
       if (res && res.status !== 204) throw new Error(`${m.type} -> ${res.status}: ${await res.text()}`);
     }
     const list = (await (await fetch(`${base}/api/replays`)).json()) as { name: string }[];
-    return { root, replayDir, saved, listed: list.map((f) => f.name) };
+    // 새로 접속해도(새로고침) 종료 화면이 같은 링크 정보를 받는다
+    const again = await fetch(`${base}/events`);
+    const againReader = again.body!.getReader();
+    const reconnect = await readOneSseMessage(againReader, { text: "" });
+    await againReader.cancel();
+    return { root, replayDir, saved, listed: list.map((f) => f.name), gameEnd, reconnect };
   }
 
-  it("영문/숫자/._-만 쓴 시드는 지금까지와 같은 파일 이름이다", async () => {
-    const { saved, listed } = await playAndSave("ascii-seed_1.0");
+  it("영문/숫자/._-만 쓴 시드는 지금까지와 같은 파일 이름이다 (종료 화면에는 그 리플레이로 가는 파일 이름이 실린다)", async () => {
+    const { saved, listed, gameEnd, reconnect } = await playAndSave("ascii-seed_1.0");
+    expect(gameEnd.replayFile).toBe(basename(saved[0]!));
+    expect(reconnect.type).toBe("game_end");
+    expect(reconnect.replayFile).toBe(basename(saved[0]!));
     expect(listed).toEqual(["human-sanma-ascii-seed_1.0_game0.json"]);
     expect(basename(saved[0]!)).toBe("human-sanma-ascii-seed_1.0_game0.json");
   }, 120_000);
 
+  it("리플레이를 저장하지 않은 대국의 종료 화면에는 리플레이 링크 정보가 없다", async () => {
+    const { saved, listed, gameEnd } = await playAndSave("no-save", false);
+    expect(saved).toEqual([]);
+    expect(listed).toEqual([]);
+    expect(gameEnd.type).toBe("game_end");
+    expect(gameEnd).not.toHaveProperty("replayFile");
+  }, 120_000);
+
   for (const seed of ["한글 시드", "a/b", "..\\escape"]) {
     it(`시드 ${JSON.stringify(seed)}: 사용자 리플레이 폴더 바로 아래에 저장되고, 목록에 나오며, 기록 안의 시드는 그대로다`, async () => {
-      const { root, replayDir, saved, listed } = await playAndSave(seed);
+      const { root, replayDir, saved, listed, gameEnd } = await playAndSave(seed);
       expect(saved).toHaveLength(1);
       const path = saved[0]!;
       expect(dirname(resolve(path))).toBe(resolve(replayDir));
       expect(readdirSync(root)).toEqual(["replays"]); // 폴더 밖에 아무것도 쓰지 않았다
       expect(listed).toEqual([basename(path)]);
+      expect(gameEnd.replayFile).toBe(basename(path)); // 종료 화면 링크도 정리된 파일 이름을 쓴다
       const record = JSON.parse(readFileSync(path, "utf-8"));
       expect(record.meta.gameSeed).toBe(seed);
     }, 120_000);

@@ -3,7 +3,7 @@
  * play:gui` entry point) just calls this and listens; no behavior lives only in server.ts. */
 import { createServer, type Server } from "node:http";
 import { readFile, readdir, rm, stat } from "node:fs/promises";
-import { extname, join, resolve } from "node:path";
+import { basename, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GameState } from "../core/GameState.js";
 import type { GuiSession, GuiSessionPhase, WatchFrame } from "./guiSession.js";
@@ -13,6 +13,7 @@ import type { EngineWorkerPool } from "./engineWorkerPool.js";
 import { AudioCueTracker, toPublicAction, type AudioCue, type PublicAction } from "./audioCues.js";
 import type { DecisionResponse } from "../core/decisions.js";
 import { replayFileNamePart, resolveReplayDir, writeGameReplay, type GameReplayRecord } from "../sim/replayRecorder.js";
+import { aggregateWatchStats, summarizeWatchGame, type WatchGameSummary } from "../sim/watchStats.js";
 import { reproduceReplay, type ReplayReproduction } from "../replay/replayReproduction.js";
 import { getCharacterProfile } from "../ai/characterProfiles.js";
 import { buildCharacterRoster } from "./characterRoster.js";
@@ -20,10 +21,12 @@ import { DEFAULT_PLAYBACK_SPEED, PLAYBACK_FRAME_DELAY_MS, parsePlaybackSpeed } f
 import {
   DEFAULT_OPPONENTS,
   DEFAULT_WATCH_SEATS,
+  parseAiWatchBatchConfig,
   parseAiWatchConfig,
   parseGuiGameConfig,
   parseGuiMode,
   playerCountOf,
+  type AiWatchBatchConfig,
   type AiWatchConfig,
   type GuiGameConfig,
   type GuiGameMode,
@@ -70,7 +73,9 @@ const GATED_PAGES = new Set(["/", "/index.html", "/replay.html"]);
 const REPLAY_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*\.json$/;
 
 /** 리플레이 좌석의 표시 이름: 캐릭터 이름, 사람이면 "플레이어", 캐릭터가 없는 AI면 종류. */
-function replaySeatName(seat: { kind: string; characterId?: string }): string {
+function replaySeatName(seat: { kind: string; characterId?: string; customProfile?: { displayName?: unknown } }): string {
+  // CustomAI 좌석은 기록에 남은 그 대국의 프로필 이름을 쓴다 (characterId "custom:<id>"는 등록 캐릭터 표에 없다)
+  if (typeof seat.customProfile?.displayName === "string") return seat.customProfile.displayName;
   if (seat.characterId) {
     try {
       return getCharacterProfile(seat.characterId).displayName;
@@ -156,11 +161,14 @@ function createGameHost(
   }
 
   let replaySaved = false;
+  /** 저장한 리플레이 파일 이름 (종료 화면의 "리플레이 보기" 링크). 저장하지 않는 대국이면 null. */
+  let savedReplayFile: string | null = null;
   async function saveReplayIfFinished(): Promise<void> {
     if (!options.replay || replaySaved || snapshot.phase !== "game_end") return;
     replaySaved = true;
     const record = await runner.replayRecord(options.replay.label);
     const path = writeGameReplay(record, options.replay.dir ?? "replays");
+    savedReplayFile = basename(path);
     options.replay.onSaved?.(path);
   }
 
@@ -198,6 +206,7 @@ function createGameHost(
         ...(view ? { view } : {}),
         canStartNewGame: startedConfig !== null,
         ...(startedConfig ? { gameConfig: startedConfig } : {}),
+        ...(savedReplayFile ? { replayFile: savedReplayFile } : {}),
         ...extra,
       });
     }
@@ -415,6 +424,9 @@ type LobbySetup = {
   opponents: Record<GuiGameMode, string[]>;
   /** AI 관전 좌석 (seat 0부터 전부 AI) */
   watchSeats: Record<GuiGameMode, string[]>;
+  /** AI 관전 판 수(1이면 한 판 관전)와 여러 판일 때 판마다 리플레이 저장 여부 */
+  watchGames: number;
+  watchSaveReplays: boolean;
   seed: string;
   saveReplays: boolean;
 };
@@ -450,6 +462,22 @@ interface Room {
   tokensAt: number;
   /** 로비에 한 번 보여줄 안내 (예: 방치된 대국 정리) */
   notice: string | null;
+  /** AI 관전 여러 판 연속 실행 (진행 중이거나, 끝난 뒤 결과를 지우기 전까지 남는다) */
+  watchBatch: WatchBatch | null;
+}
+
+/** AI 관전 여러 판 연속 실행 하나. 판은 한 번에 하나씩 엔진에서 끝까지 돌리고, 판이 끝날 때마다 요약만 남긴다
+ *  (리플레이 전체는 저장 옵션을 켰을 때만 파일로 남긴다). 취소는 지금 도는 판이 끝난 뒤에 멈춘다. */
+interface WatchBatch {
+  id: number;
+  config: AiWatchBatchConfig & { seed: string };
+  /** 좌석별 표시 이름 (CustomAI는 시작 순간의 프로필 이름) */
+  seatNames: string[];
+  playerCount: number;
+  status: "running" | "done" | "cancelled" | "failed";
+  cancelRequested: boolean;
+  results: WatchGameSummary[];
+  error?: string;
 }
 
 /** 대국 하나. 사람 좌석마다 그 좌석을 가진 사용자가 연결된다 (seatUsers[seat], AI 좌석은 null).
@@ -556,6 +584,8 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
             yonma: [...(defaults.opponents?.yonma ?? DEFAULT_OPPONENTS.yonma)],
           },
           watchSeats: { sanma: [...DEFAULT_WATCH_SEATS.sanma], yonma: [...DEFAULT_WATCH_SEATS.yonma] },
+          watchGames: 1,
+          watchSaveReplays: false,
           seed: defaults.seed ?? "",
           saveReplays: defaults.saveReplays ?? false,
         },
@@ -568,6 +598,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
         tokens: limits?.requestBurst ?? 0,
         tokensAt: Date.now(),
         notice: null,
+        watchBatch: null,
       };
       rooms.set(userId, room);
     }
@@ -632,6 +663,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       purpose: room.lobbyPurpose,
       mode: lastSetup.mode,
       ...(room.notice ? { notice: room.notice } : {}),
+      ...(room.watchBatch ? { watchBatch: watchBatchView(room.watchBatch) } : {}),
       roster,
       playerCounts: { sanma: playerCountOf("sanma"), yonma: playerCountOf("yonma") },
       // 허브 카드에 보여줄 모드 차이: 규칙 설정(RuleConfig)에서 그대로 가져온다 (GUI가 규칙을 따로 적지 않는다).
@@ -665,6 +697,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   async function startGame(room: Room, config: GuiGameConfig): Promise<void> {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
+    assertNoWatchBatch(room);
     // 이 사용자의 끝난 대국은 새 대국으로 바뀌므로 세지 않는다
     if (limits && openGameCount() - (room.table ? 1 : 0) >= limits.maxOpenGames) {
       throw new Error(`지금은 서버에서 진행 중인 대국이 많습니다 (최대 ${limits.maxOpenGames}판). 잠시 뒤 다시 시도해 주세요`);
@@ -714,12 +747,13 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   async function watchGame(room: Room, config: AiWatchConfig): Promise<string> {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
+    assertNoWatchBatch(room);
     if (limits && openGameCount() - (room.table ? 1 : 0) >= limits.maxOpenGames) {
       throw new Error(`지금은 서버에서 진행 중인 대국이 많습니다 (최대 ${limits.maxOpenGames}판). 잠시 뒤 다시 시도해 주세요`);
     }
     room.notice = null;
     const seed = config.seed ?? `watch-${Date.now()}`;
-    room.lastSetup = { ...room.lastSetup, mode: config.mode, watchSeats: { ...room.lastSetup.watchSeats, [config.mode]: [...config.seats] }, seed: config.seed ?? "" };
+    room.lastSetup = { ...room.lastSetup, mode: config.mode, watchSeats: { ...room.lastSetup.watchSeats, [config.mode]: [...config.seats] }, seed: config.seed ?? "", watchGames: 1 };
     const spec: AiWatchSpec = { mode: config.mode, seed, seats: config.seats.map((id) => opponentSpecOf(room, id)) };
     // 같은 시드를 다른 좌석으로 다시 봐도 앞 기록을 덮어쓰지 않게 시각을 붙인다
     const label = `watch-${config.mode}-${replayFileNamePart(seed, 40)}-${Date.now()}`;
@@ -734,6 +768,118 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     lobby.onReplaySaved?.(path);
     await pruneReplays(room.replayDir).catch(() => {});
     return `${label}_game0.json`;
+  }
+
+  /** 여러 판 관전이 도는 동안에는 이 사용자의 새 대국/관전을 시작하지 않는다 (로비 화면 이동은 된다). */
+  function watchBatchRunning(room: Room): boolean {
+    return room.watchBatch?.status === "running";
+  }
+  function assertNoWatchBatch(room: Room): void {
+    if (watchBatchRunning(room)) throw new Error("GuiServer: 여러 판 관전이 진행 중입니다. 끝나거나 취소한 뒤 다시 시도해 주세요");
+  }
+
+  /** 화면에 보낼 여러 판 관전 상태: 진행률, 판별 결과, 좌석별 통계(watchStats.ts). */
+  function watchBatchView(batch: WatchBatch) {
+    return {
+      id: batch.id,
+      status: batch.status,
+      cancelRequested: batch.cancelRequested,
+      mode: batch.config.mode,
+      seed: batch.config.seed,
+      total: batch.config.games,
+      done: batch.results.length,
+      saveReplays: batch.config.saveReplays,
+      seatNames: batch.seatNames,
+      ...(batch.error ? { error: batch.error } : {}),
+      games: batch.results.map((g) => ({
+        index: g.index,
+        seed: g.seed,
+        hands: g.hands,
+        placements: g.seats.map((st) => st.placement),
+        points: g.seats.map((st) => st.points),
+        ...(g.replayFile ? { replayFile: g.replayFile } : {}),
+      })),
+      stats: aggregateWatchStats(batch.results, batch.playerCount),
+    };
+  }
+
+  function sendWatchBatch(room: Room): void {
+    if (room.watchBatch) sendToRoom(room, `data: ${JSON.stringify({ type: "watch_batch", batch: watchBatchView(room.watchBatch) })}\n\n`);
+  }
+
+  let nextWatchBatchId = 1;
+
+  /** 여러 판 관전을 시작한다. 요청은 바로 끝나고, 판이 끝날 때마다 "watch_batch" 메시지로 진행 상황을 보낸다.
+   *  판 i(1부터)의 시드는 "<시드>-i"라 같은 시드로 다시 돌리면 같은 대국들이 나온다. */
+  function startWatchBatch(room: Room, config: AiWatchBatchConfig): void {
+    if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
+    if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
+    assertNoWatchBatch(room);
+    if (limits && openGameCount() - (room.table ? 1 : 0) >= limits.maxOpenGames) {
+      throw new Error(`지금은 서버에서 진행 중인 대국이 많습니다 (최대 ${limits.maxOpenGames}판). 잠시 뒤 다시 시도해 주세요`);
+    }
+    room.notice = null;
+    const seed = config.seed ?? `watch-${Date.now()}`;
+    room.lastSetup = { ...room.lastSetup, mode: config.mode, watchSeats: { ...room.lastSetup.watchSeats, [config.mode]: [...config.seats] }, seed: config.seed ?? "", watchGames: config.games, watchSaveReplays: config.saveReplays };
+    // 좌석 구성(CustomAI 프로필 포함)은 시작 순간의 것을 모든 판에 쓴다
+    const seats = config.seats.map((id) => opponentSpecOf(room, id));
+    const batch: WatchBatch = {
+      id: nextWatchBatchId++,
+      config: { ...config, seats: [...config.seats], seed },
+      seatNames: seats.map((o) => ("profile" in o ? o.profile.displayName : replaySeatName({ kind: "characterAI", characterId: o.characterId }))),
+      playerCount: playerCountOf(config.mode),
+      status: "running",
+      cancelRequested: false,
+      results: [],
+    };
+    room.watchBatch = batch;
+    sendWatchBatch(room);
+    void runWatchBatch(room, batch, seats);
+  }
+
+  async function runWatchBatch(room: Room, batch: WatchBatch, seats: OpponentSpec[]): Promise<void> {
+    const { mode, games, saveReplays } = batch.config;
+    try {
+      for (let i = 0; i < games && !batch.cancelRequested; i++) {
+        const seed = `${batch.config.seed}-${i + 1}`;
+        const label = `watch-${mode}-${replayFileNamePart(seed, 40)}-${Date.now()}`;
+        const spec: AiWatchSpec = { mode, seed, seats };
+        let record: GameReplayRecord;
+        if (lobby!.engine) record = await lobby!.engine.runAiWatch(spec, label);
+        else {
+          // 같은 스레드에서 돌릴 때(테스트 서버)도 판 사이에 취소 요청과 다른 요청을 받을 수 있게 한 번 양보한다
+          await new Promise((r) => setImmediate(r));
+          record = runAiWatchGame(spec, label);
+        }
+        let replayFile: string | undefined;
+        if (saveReplays) {
+          const path = writeGameReplay(record, room.replayDir);
+          replayFile = basename(path);
+          lobby!.onReplaySaved?.(path);
+          await pruneReplays(room.replayDir).catch(() => {});
+        }
+        batch.results.push(summarizeWatchGame(record, i, replayFile));
+        if (i + 1 < games) sendWatchBatch(room);
+      }
+      batch.status = batch.results.length < games ? "cancelled" : "done";
+    } catch (err) {
+      batch.status = "failed";
+      batch.error = err instanceof Error ? err.message : String(err);
+    }
+    sendWatchBatch(room);
+  }
+
+  function cancelWatchBatch(room: Room): void {
+    if (!watchBatchRunning(room)) throw new Error("GuiServer: 진행 중인 여러 판 관전이 없습니다");
+    room.watchBatch!.cancelRequested = true;
+    sendWatchBatch(room);
+  }
+
+  /** 끝난 여러 판 관전의 결과를 로비에서 지운다 (저장한 리플레이 파일은 그대로 둔다). */
+  function clearWatchBatch(room: Room): void {
+    if (watchBatchRunning(room)) throw new Error("GuiServer: 진행 중에는 결과를 지울 수 없습니다. 먼저 취소해 주세요");
+    room.watchBatch = null;
+    sendToRoom(room, `data: ${JSON.stringify({ type: "watch_batch", batch: null })}\n\n`);
   }
 
   function returnToSetup(room: Room): void {
@@ -930,7 +1076,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
         room.notice = ended ? null : "오래 응답이 없어 진행 중이던 대국을 정리했습니다 (리플레이는 저장하지 않았습니다).";
         sendToRoom(room, `data: ${setupMessage(room)}\n\n`);
       }
-      if (!room.table && !room.starting && room.sseClients.size === 0 && idle > limits.idleRoomMs) rooms.delete(room.userId);
+      if (!room.table && !room.starting && !watchBatchRunning(room) && room.sseClients.size === 0 && idle > limits.idleRoomMs) rooms.delete(room.userId);
     }
   }
   const sweepTimer = limits ? setInterval(sweepIdle, Math.min(60_000, Math.max(1_000, limits.idleGameMs / 2))) : null;
@@ -939,7 +1085,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   /** 서버 전체에서 열려 있는 대국 수 (끝났지만 아직 떠나지 않은 대국 포함, 만드는 중인 대국 포함) */
   function openGameCount(): number {
     let count = 0;
-    for (const room of rooms.values()) if (room.table || room.starting) count++;
+    for (const room of rooms.values()) if (room.table || room.starting || watchBatchRunning(room)) count++;
     return count;
   }
 
@@ -1024,6 +1170,19 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
 
     if (req.method === "POST" && url.pathname === "/start") {
       readBody(req, res, (body) => reply(res, () => startGame(room, parseGuiGameConfig(JSON.parse(body), (id) => resolveOpponentProfile(room, id)))));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/watch/batch") {
+      readBody(req, res, (body) => reply(res, () => startWatchBatch(room, parseAiWatchBatchConfig(JSON.parse(body), (id) => resolveOpponentProfile(room, id)))));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/watch/batch/cancel") {
+      reply(res, () => cancelWatchBatch(room));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/watch/batch/clear") {
+      reply(res, () => clearWatchBatch(room));
       return;
     }
 

@@ -2,8 +2,10 @@
   /* Tile sizes follow the viewport height (capped at the full-size art) so the same table
    * fits 3 or 4 seats on smaller windows. */
   --tile-w: clamp(28px, 6.4vh, 46px);
+  --tile-w: clamp(28px, 6.4dvh, 46px);
   --tile-h: calc(var(--tile-w) * 59 / 44);
   --tile-w-small: clamp(16px, 3.5vh, 30px);
+  --tile-w-small: clamp(16px, 3.5dvh, 30px);
   --tile-h-small: calc(var(--tile-w-small) * 4 / 3);
   color-scheme: light dark;
 }
@@ -22,6 +24,7 @@ body {
   flex-direction: column;
   gap: 6px;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -904,6 +907,17 @@ body {
 }
 .overlay-panel .link-button:hover { color: #fff; }
 
+/* 종료 화면: 저장한 리플레이로 가는 링크 (다시 하기 버튼들 아래) */
+.overlay-panel .final-replay-link {
+  display: inline-block;
+  margin-top: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffd54a;
+  text-underline-offset: 3px;
+}
+.overlay-panel .final-replay-link:hover { color: #fff; }
+
 .final-error {
   margin: 10px 0 0;
   font-size: 13px;
@@ -1393,3 +1407,140 @@ body.replay-page {
 .character-card:disabled { cursor: default; }
 .character-card:disabled:hover { border-color: var(--setup-line); }
 div.setup-seat { cursor: default; }
+
+/* --- AI 연속 관전 결과 (관전 설정 화면 위쪽) --- */
+
+#setup-screen.has-watch-batch {
+  display: flex;
+  flex-direction: column;
+}
+#setup-screen.has-watch-batch .setup-layout {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  width: 100%;
+}
+
+.watch-batch {
+  flex: none;
+  max-height: 46vh;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 14px 20px;
+  background: var(--setup-panel);
+  border-bottom: 1px solid var(--setup-line);
+}
+.watch-batch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.watch-batch-actions { display: flex; gap: 8px; }
+.watch-batch-status { margin: 6px 0; font-size: 13px; color: var(--setup-muted); }
+.watch-batch-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.watch-batch-fill {
+  height: 100%;
+  background: var(--setup-accent);
+  transition: width 0.3s ease;
+}
+.watch-batch-scroll {
+  margin-top: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.watch-batch-table {
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.watch-batch-table th,
+.watch-batch-table td {
+  padding: 4px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--setup-line);
+}
+.watch-batch-table th { font-weight: 600; color: var(--setup-muted); }
+.watch-batch-table td:nth-child(1),
+.watch-batch-table td:nth-child(2),
+.watch-batch-table th:nth-child(1),
+.watch-batch-table th:nth-child(2) { text-align: left; }
+.watch-batch-note { margin: 6px 0 0; font-size: 12px; color: var(--setup-muted); }
+.watch-batch-games {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--setup-muted);
+}
+
+/* 좁은 화면: 로비 전체가 한 번에 스크롤되므로(760px 규칙) 결과 영역도 나누지 않고 그 흐름에 넣는다 */
+@media (max-width: 760px) {
+  #setup-screen.has-watch-batch { display: block; }
+  .watch-batch { max-height: none; padding: 14px 16px; }
+}
+
+/* --- 휴대폰 (가로 우선) ---
+ * 조작 막대는 "메뉴" 하나로 접고, 터치 기기에서는 누르는 영역을 키운다. 대국 화면은 가로에 맞추고, 세로 휴대폰에서 대국 중이면
+ * 돌려 달라는 안내를 덮는다. 로비/리플레이 뷰어/입장 화면은 세로에서도 기존 좁은 화면 규칙으로 쓴다. */
+
+.controls-toggle { display: none; }
+#rotate-hint { display: none; }
+
+@media (max-width: 900px), (max-height: 520px) {
+  body { padding: 4px 6px; }
+  #audio-controls {
+    top: max(4px, env(safe-area-inset-top));
+    right: max(6px, env(safe-area-inset-right));
+    flex-direction: column;
+    align-items: stretch;
+    padding: 3px;
+    opacity: 1;
+    max-height: calc(100dvh - 12px);
+    overflow-y: auto;
+  }
+  #audio-controls .controls-toggle { display: block; }
+  #audio-controls:not(.is-open) > :not(.controls-toggle) { display: none !important; }
+  #audio-controls.is-open { padding: 6px; background: rgba(10, 30, 16, 0.94); gap: 6px; }
+  #audio-controls.is-open .audio-volume { width: 100%; }
+}
+
+@media (pointer: coarse) {
+  #audio-controls button,
+  #audio-controls select { min-height: 36px; font-size: 14px; padding: 4px 12px; }
+  #action-bar button { min-height: 40px; padding-left: 14px; padding-right: 14px; font-size: 15px; }
+  .overlay-panel button { min-height: 40px; }
+}
+
+@media (max-height: 520px) {
+  .overlay-panel { padding: 14px 18px; max-height: 92dvh; }
+}
+
+@media (orientation: portrait) and (max-width: 760px) {
+  /* 세로에서는 작탁을 안내로 덮는다: 가로 기준 크기의 손패가 화면 밖으로 넘쳐 브라우저가 페이지를 넓히지(축소하지) 않게 자른다 */
+  body:not(.is-setup) #table { overflow: hidden; }
+  body:not(.is-setup) #rotate-hint {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(10, 30, 16, 0.96);
+    text-align: center;
+  }
+  .rotate-hint-box { max-width: 320px; word-break: keep-all; }
+  .rotate-hint-icon { font-size: 48px; line-height: 1; margin-bottom: 12px; }
+  .rotate-hint-box p { margin: 6px 0; font-size: 16px; line-height: 1.5; }
+  .rotate-hint-box .rotate-hint-sub { font-size: 13px; color: rgba(240, 240, 240, 0.7); }
+}
