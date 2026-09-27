@@ -46,6 +46,7 @@ import {
 } from "../customai/customAiSchema.js";
 import type { CharacterProfile } from "../ai/characterProfile.js";
 import { AccessError, AccessGate } from "./accessGate.js";
+import { DEFAULT_THINKING_TIME, FriendRoomError, FriendRoomStore, THINKING_TIME_OPTIONS, parseThinkingTime, type FriendRoom } from "./friendRooms.js";
 
 export const PUBLIC_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "public");
 
@@ -130,7 +131,8 @@ interface GameHost {
 }
 
 /** 시작 화면에서 시작한 대국의 구성 (실제로 쓰인 시드 포함). 종료 화면의 "다시 하기"가 이것을 그대로 /start에 보낸다. */
-export type StartedGameConfig = GuiGameConfig & { seed: string };
+/** 시작한 대국의 구성. `friendRoom`: 친선전 방에서 시작한 대국 (종료 화면은 "다시 하기" 대신 방으로 돌아간다) */
+export type StartedGameConfig = GuiGameConfig & { seed: string; friendRoom?: true };
 
 /** `startedConfig`: 시작 화면이 있는 서버에서 시작한 대국이면 그 구성. 있으면 종료 화면에 새 대국/다시 하기 버튼이 나온다. */
 /** `frameDelayMs`: 재생 속도 설정. 장면마다 새로 읽는다 (재생 중에 바꾸면 다음 장면부터 적용). */
@@ -661,6 +663,13 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       type: "setup",
       screen: lobbyScreen,
       purpose: room.lobbyPurpose,
+      // 친선전 (입장 게이트가 있는 서버만): 방 만들기 옵션과 지금 있는 방
+      ...(friendRooms
+        ? {
+            friendRooms: { thinkingTimes: THINKING_TIME_OPTIONS.map((o) => o.id), defaultThinkingTime: DEFAULT_THINKING_TIME },
+            friendRoom: friendRoomViewFor(room.userId),
+          }
+        : {}),
       mode: lastSetup.mode,
       ...(room.notice ? { notice: room.notice } : {}),
       ...(room.watchBatch ? { watchBatch: watchBatchView(room.watchBatch) } : {}),
@@ -694,10 +703,11 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     return host !== undefined && (host.isPlaying() || host.phase() !== "game_end");
   }
 
-  async function startGame(room: Room, config: GuiGameConfig): Promise<void> {
+  async function startGame(room: Room, config: GuiGameConfig, fromFriendRoom = false): Promise<void> {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
     assertNoWatchBatch(room);
+    if (!fromFriendRoom) assertNotInFriendRoom(room);
     // 이 사용자의 끝난 대국은 새 대국으로 바뀌므로 세지 않는다
     if (limits && openGameCount() - (room.table ? 1 : 0) >= limits.maxOpenGames) {
       throw new Error(`지금은 서버에서 진행 중인 대국이 많습니다 (최대 ${limits.maxOpenGames}판). 잠시 뒤 다시 시도해 주세요`);
@@ -728,7 +738,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
           }
         : {}),
     };
-    const started: StartedGameConfig = { ...config, opponents: [...config.opponents], seed };
+    const started: StartedGameConfig = { ...config, opponents: [...config.opponents], seed, ...(fromFriendRoom ? { friendRoom: true as const } : {}) };
     room.starting = true;
     let opened: { runner: EngineRunner; start: EngineStart };
     try {
@@ -748,6 +758,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
     assertNoWatchBatch(room);
+    assertNotInFriendRoom(room);
     if (limits && openGameCount() - (room.table ? 1 : 0) >= limits.maxOpenGames) {
       throw new Error(`지금은 서버에서 진행 중인 대국이 많습니다 (최대 ${limits.maxOpenGames}판). 잠시 뒤 다시 시도해 주세요`);
     }
@@ -769,6 +780,131 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     await pruneReplays(room.replayDir).catch(() => {});
     return `${label}_game0.json`;
   }
+
+  // --- 친선전 방 (사람끼리 대전 A단계, friendRooms.ts). 방 상태는 저장소에 있고, 바뀔 때마다 방에 있는 모든 사람의 로비에
+  // 설정 메시지를 다시 보낸다. 공개 방 목록은 없다(코드를 아는 사람만 들어온다). A단계에서는 방장 한 사람 + AI로만 시작한다. ---
+
+  const friendRooms = access ? new FriendRoomStore() : null;
+
+  function requireFriendRooms(): FriendRoomStore {
+    if (!friendRooms) throw new FriendRoomError("이 서버에서는 친선전을 쓸 수 없습니다 (공개/비공개 모드에서만)", 404);
+    return friendRooms;
+  }
+
+  function assertNotInFriendRoom(room: Room): void {
+    if (friendRooms?.roomOf(room.userId)) throw new Error("GuiServer: 친선전 방에 있습니다. 방에서 나간 뒤 시작해 주세요");
+  }
+
+  /** 좌석의 AI 이름: 등록 캐릭터, 또는 방장의 CustomAI (지워졌으면 id 그대로) */
+  function friendAiName(friendRoom: FriendRoom, characterId: string): string {
+    try {
+      return resolveOpponentProfile(roomOf(friendRoom.hostUserId), characterId).displayName;
+    } catch {
+      return characterId;
+    }
+  }
+
+  /** 방장 한 사람 + AI만일 때 시작할 수 있다 (사람 2명 이상 대국은 B단계). 시작할 수 없으면 이유. */
+  function friendStartBlocker(friendRoom: FriendRoom): string | null {
+    if (friendRoom.seats.some((st) => st.kind === "open")) return "빈자리가 있습니다. 사람이 들어오거나 AI를 앉혀 주세요";
+    if (friendRoom.seats.filter((st) => st.kind === "human").length > 1) return "사람 2명 이상이 함께 두는 대국은 다음 단계에서 지원합니다 (지금은 방장 + AI만)";
+    return null;
+  }
+
+  function friendRoomViewFor(userId: string) {
+    const friendRoom = friendRooms?.roomOf(userId);
+    if (!friendRoom) return null;
+    const blocker = friendStartBlocker(friendRoom);
+    return {
+      code: friendRoom.code,
+      mode: friendRoom.mode,
+      thinkingTime: friendRoom.thinkingTime,
+      isHost: friendRoom.hostUserId === userId,
+      seats: friendRoom.seats.map((st, seat) =>
+        st.kind === "human"
+          ? { seat, kind: "human", name: st.nickname, isHost: st.userId === friendRoom.hostUserId, isMe: st.userId === userId }
+          : st.kind === "ai"
+            ? { seat, kind: "ai", name: friendAiName(friendRoom, st.characterId), characterId: st.characterId }
+            : { seat, kind: "open" }
+      ),
+      canStart: blocker === null,
+      ...(blocker ? { startBlocker: blocker } : {}),
+    };
+  }
+
+  /** 방에 있는(있던) 사람들의 로비에 새 상태를 보낸다. 대국 화면에 있는 사람에게는 보내지 않는다(로비로 돌아오면 받는다). */
+  function notifyFriendMembers(userIds: readonly string[], notice?: string): void {
+    for (const userId of new Set(userIds)) {
+      const member = roomOf(userId);
+      if (notice) member.notice = notice;
+      if (!member.table) sendToRoom(member, `data: ${setupMessage(member)}\n\n`);
+    }
+  }
+
+  function nicknameOf(req: import("node:http").IncomingMessage): string {
+    return access?.userOf(req)?.nickname ?? "플레이어";
+  }
+
+  function handleFriend(room: Room, req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse, pathname: string): void {
+    const fail = (err: unknown) =>
+      res.writeHead(err instanceof FriendRoomError ? err.status : 400, { "Content-Type": "text/plain; charset=utf-8" }).end(String(err instanceof Error ? err.message : err));
+    readBody(req, res, (body) => {
+      Promise.resolve()
+        .then(async () => {
+          const store = requireFriendRooms();
+          const input = (body ? JSON.parse(body) : {}) as Record<string, unknown>;
+          const me = { userId: room.userId, nickname: nicknameOf(req) };
+          if (pathname === "/friend/create") {
+            if (inActiveGame(room) || watchBatchRunning(room)) throw new FriendRoomError("진행 중인 대국이나 관전이 끝난 뒤 방을 만들 수 있습니다");
+            const created = store.create(me, parseGuiMode(typeof input.mode === "string" ? input.mode : String(input.mode)), parseThinkingTime(input.thinkingTime));
+            room.notice = null;
+            notifyFriendMembers(store.membersOf(created));
+          } else if (pathname === "/friend/join") {
+            if (inActiveGame(room) || watchBatchRunning(room)) throw new FriendRoomError("진행 중인 대국이나 관전이 끝난 뒤 들어갈 수 있습니다");
+            const joined = store.join(me, input.code);
+            room.notice = null;
+            notifyFriendMembers(store.membersOf(joined));
+          } else if (pathname === "/friend/leave") {
+            const left = store.leave(room.userId);
+            if (!left) throw new FriendRoomError("친선전 방에 있지 않습니다");
+            notifyFriendMembers([room.userId]);
+            notifyFriendMembers(left.members.filter((u) => u !== room.userId), left.closed ? "방장이 방을 닫았습니다." : undefined);
+          } else if (pathname === "/friend/seat") {
+            const current = store.roomOf(room.userId);
+            if (!current) throw new FriendRoomError("친선전 방에 있지 않습니다");
+            let seat: { kind: "open" } | { kind: "ai"; characterId: string };
+            if (input.characterId === null || input.characterId === undefined) seat = { kind: "open" };
+            else if (typeof input.characterId !== "string") throw new FriendRoomError("characterId는 문자열이어야 합니다");
+            // AI는 등록 캐릭터나 방장의 CustomAI (legacy id는 정식 id로)
+            else seat = { kind: "ai", characterId: resolveOpponentProfile(room, input.characterId).characterId };
+            const { room: changed, removedUserId } = store.setSeat(room.userId, input.seat, seat);
+            if (removedUserId) notifyFriendMembers([removedUserId], "방장이 좌석을 바꿔 방에서 나왔습니다.");
+            notifyFriendMembers(store.membersOf(changed));
+          } else if (pathname === "/friend/start") {
+            const current = store.roomOf(room.userId);
+            if (!current) throw new FriendRoomError("친선전 방에 있지 않습니다");
+            if (current.hostUserId !== room.userId) throw new FriendRoomError("방장만 시작할 수 있습니다", 403);
+            const blocker = friendStartBlocker(current);
+            if (blocker) throw new FriendRoomError(blocker, 409);
+            store.touch(current);
+            const opponents = current.seats.slice(1).map((st) => (st.kind === "ai" ? st.characterId : ""));
+            await startGame(room, { mode: current.mode, opponents, saveReplays: room.lastSetup.saveReplays }, true);
+          } else {
+            res.writeHead(404).end("Not found");
+            return;
+          }
+          res.writeHead(204).end();
+        })
+        .catch(fail);
+    });
+  }
+
+  const friendSweepTimer = friendRooms
+    ? setInterval(() => {
+        for (const { members } of friendRooms.sweepIdle()) notifyFriendMembers(members, "오래 쓰이지 않아 친선전 방이 닫혔습니다.");
+      }, 60_000)
+    : null;
+  friendSweepTimer?.unref();
 
   /** 여러 판 관전이 도는 동안에는 이 사용자의 새 대국/관전을 시작하지 않는다 (로비 화면 이동은 된다). */
   function watchBatchRunning(room: Room): boolean {
@@ -815,6 +951,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
     assertNoWatchBatch(room);
+    assertNotInFriendRoom(room);
     if (limits && openGameCount() - (room.table ? 1 : 0) >= limits.maxOpenGames) {
       throw new Error(`지금은 서버에서 진행 중인 대국이 많습니다 (최대 ${limits.maxOpenGames}판). 잠시 뒤 다시 시도해 주세요`);
     }
@@ -1134,6 +1271,8 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     const isAppRequest = req.method !== "GET" || url.pathname === "/events" || url.pathname.startsWith("/api/");
     if (isAppRequest) {
       room.lastActivity = Date.now();
+      const friendRoom = friendRooms?.roomOf(userId);
+      if (friendRoom) friendRooms!.touch(friendRoom);
       if (!takeToken(room)) {
         res.writeHead(429, { "Content-Type": "text/plain; charset=utf-8", "Retry-After": "1" }).end("요청이 너무 잦습니다. 잠시 뒤 다시 시도해 주세요");
         return;
@@ -1175,6 +1314,11 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
 
     if (req.method === "POST" && url.pathname === "/start") {
       readBody(req, res, (body) => reply(res, () => startGame(room, parseGuiGameConfig(JSON.parse(body), (id) => resolveOpponentProfile(room, id)))));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname.startsWith("/friend/")) {
+      handleFriend(room, req, res, url.pathname);
       return;
     }
 
@@ -1277,6 +1421,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
 
   server.on("close", () => {
     if (sweepTimer) clearInterval(sweepTimer);
+    if (friendSweepTimer) clearInterval(friendSweepTimer);
     if (heartbeatTimer) clearInterval(heartbeatTimer);
   });
 

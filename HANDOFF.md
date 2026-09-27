@@ -130,6 +130,20 @@
 - 리플레이 뷰어의 좌석 이름(`replaySeatName`)은 CustomAI 좌석이면 기록의 `customProfile.displayName`을 쓴다.
 - 진행 중에는 `room.starting`으로 동시 대국 한 판으로 센다. 파일 이름은 `watch-<모드>-<시드의 영문/숫자/._- 부분>-<시각>_game0.json`.
 
+### 친선전 방 (사람끼리 대전 A단계)
+
+- `src/gui/friendRooms.ts` `FriendRoomStore`: 서버/화면과 무관한 방 상태와 규칙. 코드(헷갈리는 글자를 뺀 32자 중 6자리),
+  좌석 `open | human(userId, nickname) | ai(characterId)`, 방장은 seat 0, 사람당 방 하나, 방장이 나가면 닫힘, 방장만 좌석 변경
+  (사람 자리를 바꾸면 그 사람은 나감), 같은 AI 중복 불가, 틀린 코드 사용자별 10분에 10번, 30분 무활동 정리, 서버 전체 방 100개.
+  시간 제한 옵션 `THINKING_TIME_OPTIONS`(작혼 친선전: 3+5 / 5+10 / 5+20(기본) / 60+0 / 300+0)은 방에 저장만 한다.
+- 서버(`createGuiServer.ts`): 입장 게이트가 있는 서버에만 저장소를 만든다. `POST /friend/create|join|leave|seat|start`. 방이 바뀌면
+  방에 있는(있던) 모든 사용자의 로비에 설정 메시지를 다시 보낸다(`setup.friendRoom`: 코드, 방장 여부, 좌석과 이름, 시작 가능 여부와
+  이유). 방에 있는 사람의 요청은 방 활동으로 센다. 방에 있으면 `/start`, `/watch`, `/watch/batch`는 거절한다.
+- A단계 시작 조건(`friendStartBlocker`): 빈자리가 없고 사람이 방장 하나뿐일 때. 시작은 기존 `startGame`(사람 seat 0 + AI)을 그대로
+  쓰고, `StartedGameConfig.friendRoom`으로 표시해 종료 화면에서 "방으로 돌아가기"만 보인다.
+- 화면: 허브의 "친선전" 절(`renderFriendEntry`)과 방 화면(`renderFriendRoom`, 방에 있으면 로비 대신 그린다).
+- 테스트: `tests/friendRooms.test.ts`(규칙), `tests/friendRoomServer.test.ts`(두 사용자 서버 흐름), `e2e/friendRoom.e2e.ts`.
+
 ### 사람 플레이 (CLI/GUI)
 
 - `src/core/decisions.ts`: Request/Response 타입 전부 (`discard`, `call_pon|call_daiminkan|ankan|kakan|kita`, `ron`, `tsumo`,
@@ -312,6 +326,17 @@
    따로인 브라우저 두 개: 각자 입장/로비/대국, 한쪽 그만두기와 새로고침이 다른 쪽에 영향 없음, 미입장/틀린 초대 코드).
 
 1.2 이후: 사람끼리 대전(매칭, 재접속, 시간 제한), 다른 기기에서 이어 하기(복구 코드 등), 상시 호스팅(Oracle Cloud Always Free 등).
+
+**사람끼리 대전 (친선전 방) 결정 사항과 단계** (운영자와 합의):
+- 공개 방 목록(로비)은 만들지 않는다. 코드를 입력하는 친선전 입구만 둔다.
+- 시간 제한은 작혼 친선전 옵션(한 수 초 + 국마다 나눠 쓰는 여유 초): 3+5 / 5+10 / 5+20(기본) / 60+0 / 300+0. 방을 만들 때 고른다.
+- 자리를 비운 사람(시간 초과, 연결 끊김)은 AI가 대신 둔다. 대행 AI는 CharacterAI(캐릭터 성향)가 아닌 중립 AI로 한다.
+- 사람 방에 AI를 자유롭게 섞을 수 있다(빈자리마다 AI 초대).
+- 단계: **A(완료)** 방 코드/대기실/좌석·AI 배정, 방장 + AI로 시작. **B** 여러 사람 대국: 사람마다 장면(현재 `frameObserver`는 첫
+  사람 좌석 하나만, `GameState.ts` emitFrame), 사용자별 메시지, 한 버림패에 여러 사람의 울기/론을 동시에 묻고 우선순위로 결정
+  (지금은 차례로 물어 응답 시간으로 정보가 샌다 - 엔진 변경이라 AI-only parity 확인 필요). **C** 시간 제한 적용, 시간 초과/연결
+  끊김 시 중립 AI 대행, 재접속하면 자리 복귀. **D** 같은 멤버로 다시 하기, 참가자별 리플레이(대국 중에는 상대 손패가 보이는
+  리플레이를 열지 않음).
 
 **모바일 대응 (1.2.0 이후 완료).** 1.2.0 확정 뒤 휴대폰에서 손패가 잘려 둘 수 없었던 문제를 고쳤다: `index.html` viewport meta,
 body와 패 크기를 `dvh`(주소창 제외 높이) 기준으로, 폭 900px 이하나 높이 520px 이하에서는 조작 막대를 "메뉴" 하나로 접음(밖을 누르면

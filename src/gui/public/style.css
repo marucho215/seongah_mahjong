@@ -1544,3 +1544,32 @@ div.setup-seat { cursor: default; }
   .rotate-hint-box p { margin: 6px 0; font-size: 16px; line-height: 1.5; }
   .rotate-hint-box .rotate-hint-sub { font-size: 13px; color: rgba(240, 240, 240, 0.7); }
 }
+
+/* --- 친선전 (허브의 방 만들기/코드 입력, 방 화면) --- */
+.friend-code-row { display: flex; gap: 8px; }
+.friend-code-row .friend-code-input { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: 0.12em; font-family: ui-monospace, Consolas, monospace; }
+.friend-code { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.friend-code-value {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--setup-accent);
+  user-select: all;
+}
+.friend-actions { display: flex; flex-direction: column; gap: 8px; }
+.friend-actions .setup-lead { margin: 0; }
+#setup-screen .setup-seats li:has(> .setup-link-button) { display: flex; align-items: center; gap: 8px; }
+#setup-screen .setup-seats li > .setup-seat { flex: 1; min-width: 0; }
+.friend-button {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--setup-line);
+  background: var(--setup-panel);
+  color: #f0f0f0;
+  cursor: pointer;
+}
+.friend-button:hover:not(:disabled) { border-color: var(--setup-accent); }
+.friend-button:disabled { opacity: 0.55; cursor: default; }

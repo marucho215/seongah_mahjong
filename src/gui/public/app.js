@@ -1287,7 +1287,21 @@ function renderFinalResultStep() {
     panel.appendChild(seed);
   }
 
-  if (msg.canStartNewGame && msg.gameConfig) {
+  // 친선전 방에서 시작한 대국: 다시 하기 대신 방으로 돌아간다 (다음 대국은 방에서 방장이 시작한다)
+  if (msg.canStartNewGame && msg.gameConfig && msg.gameConfig.friendRoom) {
+    const actions = el("div", "final-actions");
+    const back = el("button", "continue-button");
+    back.textContent = pending ? "돌아가는 중..." : "방으로 돌아가기";
+    back.disabled = pending;
+    back.addEventListener("click", () => {
+      AudioManager.play("ui.confirm");
+      gameEndState.pending = true;
+      renderFinalResultStep();
+      fetch("/setup", { method: "POST" });
+    });
+    actions.appendChild(back);
+    panel.appendChild(actions);
+  } else if (msg.canStartNewGame && msg.gameConfig) {
     const cfg = msg.gameConfig;
     const actions = el("div", "final-actions");
     const same = el("button", "continue-button");
@@ -1600,6 +1614,13 @@ function initSetupState(msg) {
     watchGames: prev ? prev.watchGames : (msg.defaults.watchGames ?? 1),
     watchSaveReplays: prev ? prev.watchSaveReplays : (msg.defaults.watchSaveReplays ?? false),
     watchBatch: msg.watchBatch ?? null, // 여러 판 관전 상태는 서버가 들고 있다 (새로고침해도 이어서 보인다)
+    // 친선전 (입장 게이트가 있는 서버만): 방 만들기 옵션, 지금 있는 방(서버가 정한다), 화면에서만 쓰는 값
+    friendRooms: msg.friendRooms ?? null,
+    friendRoom: msg.friendRoom ?? null,
+    friendCreateMode: prev ? prev.friendCreateMode : "sanma",
+    friendThinkingTime: prev ? prev.friendThinkingTime : (msg.friendRooms ? msg.friendRooms.defaultThinkingTime : "5+20"),
+    friendCode: prev ? prev.friendCode : "",
+    friendActiveSeat: prev && prev.friendActiveSeat ? prev.friendActiveSeat : 1,
     pending: false,
     error: "",
     notice: msg.notice ?? "", // 서버 안내 (예: 오래 응답이 없어 대국을 정리함)
@@ -1791,6 +1812,11 @@ fetch("/api/me")
   .catch(() => {});
 
 function renderSetup() {
+  // 친선전 방에 있으면 로비 대신 방 화면을 그린다 (방에서 나가면 원래 로비로 돌아온다)
+  if (setupState.friendRoom) {
+    renderFriendRoom();
+    return;
+  }
   // 허브(모드 선택 전)와 설정 화면은 같은 화면이다. 허브에서는 대국 방식만 고를 수 있고, 나머지 설정은 모드를 고른 뒤에 나온다.
   const isHub = setupState.screen === "hub";
   const watching = !isHub && isWatchSetup();
@@ -1849,6 +1875,7 @@ function renderSetup() {
     const watchLead = el("p", "setup-lead");
     watchLead.textContent = "사람 없이 AI끼리 한 게임을 두고, 결과를 리플레이로 봅니다.";
     side.appendChild(setupSection("AI끼리 관전", watchLead, renderModeRows(true, "watch")));
+    if (setupState.friendRooms) side.appendChild(renderFriendEntry());
   } else {
     side.appendChild(setupSection(watching ? "관전할 대국 방식" : "대국 방식", ...modeChildren));
   }
@@ -2314,6 +2341,253 @@ function renderWatchBatchPanel(batch) {
     panel.appendChild(list);
   }
   return panel;
+}
+
+// --- 친선전 (A단계): 방을 만들어 코드를 받고, 코드를 아는 사람이 들어온다. 좌석/시작 규칙은 서버(friendRooms.ts)가 정하고
+// 화면은 서버가 보낸 방 상태를 그대로 그린다. 지금은 방장 + AI로만 시작할 수 있다(사람끼리 대국은 다음 단계). ---
+
+async function postFriend(path, body) {
+  setupState.error = "";
+  try {
+    const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
+    if (!res.ok) throw new Error(await res.text());
+    return true;
+  } catch (err) {
+    if (!setupState) return false; // 그사이 대국 화면으로 넘어갔다
+    setupState.error = err instanceof Error ? err.message : String(err);
+    renderSetup();
+    return false;
+  }
+}
+
+/** 허브의 친선전 절: 방 만들기(인원, 시간 제한)와 코드로 들어가기 */
+function renderFriendEntry() {
+  const cfg = setupState.friendRooms;
+  const lead = el("p", "setup-lead");
+  lead.textContent = "방을 만들어 코드를 친구에게 알려 주거나, 받은 코드로 들어갑니다. 빈자리에는 AI를 앉힐 수 있습니다.";
+
+  const modeLabel = el("label", "setup-field");
+  const modeText = el("span", "field-label");
+  modeText.textContent = "대국 방식";
+  const modeSelect = el("select", "setup-select");
+  for (const [mode, label, people] of MODE_OPTIONS) {
+    const opt = el("option", "", { value: mode });
+    opt.textContent = `${label} (${people})`;
+    if (mode === setupState.friendCreateMode) opt.selected = true;
+    modeSelect.appendChild(opt);
+  }
+  modeSelect.addEventListener("change", () => (setupState.friendCreateMode = modeSelect.value));
+  modeLabel.append(modeText, modeSelect);
+
+  const timeLabel = el("label", "setup-field");
+  const timeText = el("span", "field-label");
+  timeText.textContent = "시간 제한 (한 수 + 여유, 초)";
+  const timeSelect = el("select", "setup-select");
+  for (const id of cfg.thinkingTimes) {
+    const opt = el("option", "", { value: id });
+    opt.textContent = `${id}초${id === cfg.defaultThinkingTime ? " (기본)" : ""}`;
+    if (id === setupState.friendThinkingTime) opt.selected = true;
+    timeSelect.appendChild(opt);
+  }
+  timeSelect.addEventListener("change", () => (setupState.friendThinkingTime = timeSelect.value));
+  timeLabel.append(timeText, timeSelect);
+
+  const create = el("button", "setup-start friend-create", { type: "button" });
+  create.textContent = "방 만들기";
+  create.addEventListener("click", () => {
+    AudioManager.play("ui.confirm");
+    postFriend("/friend/create", { mode: setupState.friendCreateMode, thinkingTime: setupState.friendThinkingTime });
+  });
+
+  const codeLabel = el("label", "setup-field");
+  const codeText = el("span", "field-label");
+  codeText.textContent = "방 코드로 들어가기";
+  const codeRow = el("div", "friend-code-row");
+  const codeInput = el("input", "setup-input friend-code-input", { type: "text", maxlength: "9", placeholder: "예: K7Q2MX", autocapitalize: "characters", spellcheck: "false" });
+  codeInput.value = setupState.friendCode;
+  codeInput.addEventListener("input", () => (setupState.friendCode = codeInput.value));
+  const join = el("button", "friend-button friend-join", { type: "button" });
+  join.textContent = "들어가기";
+  const doJoin = () => postFriend("/friend/join", { code: setupState.friendCode }).then((ok) => ok && (setupState.friendCode = ""));
+  join.addEventListener("click", doJoin);
+  codeInput.addEventListener("keydown", (ev) => ev.key === "Enter" && doJoin());
+  codeRow.append(codeInput, join);
+  codeLabel.append(codeText, codeRow);
+
+  return setupSection("친선전", lead, modeLabel, timeLabel, create, codeLabel);
+}
+
+/** 친선전 방 화면: 코드, 방 설정, 좌석(방장은 AI 배정/빈자리/내보내기), 시작/나가기. 오른쪽은 AI로 앉힐 캐릭터 목록. */
+function renderFriendRoom() {
+  const fr = setupState.friendRoom;
+  const root = document.getElementById("setup-screen");
+  const scrollTop = root.querySelector(".setup-roster-list")?.scrollTop ?? 0;
+  root.innerHTML = "";
+  root.classList.remove("has-watch-batch");
+  const layout = el("div", "setup-layout");
+  const side = el("aside", "setup-side");
+
+  const header = el("header", "setup-header");
+  const h1 = el("h1");
+  h1.textContent = "친선전 방";
+  const lead = el("p", "setup-lead");
+  lead.textContent = fr.isHost ? "코드를 알려 주면 친구가 빈자리에 들어옵니다. 좌석을 눌러 AI를 앉힐 수도 있습니다." : "방장이 좌석을 정하고 대국을 시작합니다.";
+  header.append(h1, lead);
+  if (onlineNickname !== null) header.appendChild(renderNicknameLine());
+  if (setupState.notice) {
+    const notice = el("p", "setup-notice");
+    notice.textContent = setupState.notice;
+    header.appendChild(notice);
+  }
+  side.appendChild(header);
+
+  // 코드
+  const codeBox = el("div", "friend-code");
+  const code = el("code", "friend-code-value");
+  code.textContent = fr.code;
+  const copy = el("button", "friend-button", { type: "button" });
+  copy.textContent = "코드 복사";
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(fr.code);
+      copy.textContent = "복사했습니다";
+    } catch {
+      copy.textContent = "직접 적어 주세요";
+    }
+  });
+  codeBox.append(code, copy);
+  const info = el("p", "setup-lead");
+  info.textContent = `${MODE_KO[fr.mode] ?? fr.mode} · 시간 제한 ${fr.thinkingTime}초 (시간 제한은 사람끼리 대국 단계에서 적용됩니다)`;
+  side.appendChild(setupSection("방 코드", codeBox, info));
+
+  // 좌석
+  const list = el("ol", "setup-seats");
+  for (const st of fr.seats) {
+    const li = el("li");
+    const selectable = fr.isHost && st.seat > 0;
+    const active = selectable && st.seat === setupState.friendActiveSeat;
+    const row = el(selectable ? "button" : "div", "setup-seat" + (active ? " is-active" : "") + (st.kind === "human" && st.isMe ? " is-me" : ""), selectable ? { type: "button", "aria-pressed": String(active) } : undefined);
+    const where = el("span", "seat-where");
+    where.textContent = WATCH_SEAT_LABEL[st.seat];
+    const name = el("span", "seat-name");
+    name.textContent = st.kind === "open" ? "빈자리" : st.name;
+    const tags = el("span", "seat-tags");
+    tags.textContent = st.kind === "human" ? (st.isHost ? "방장" : "사람") + (st.isMe ? " · 나" : "") : st.kind === "ai" ? "AI" : fr.isHost ? "코드로 들어오거나 AI를 앉힙니다" : "";
+    row.append(where, name, tags);
+    if (selectable) {
+      row.addEventListener("click", () => {
+        setupState.friendActiveSeat = st.seat;
+        renderSetup();
+      });
+    }
+    li.appendChild(row);
+    if (fr.isHost && st.seat > 0 && st.kind !== "open") {
+      const clear = el("button", "setup-link-button", { type: "button" });
+      clear.textContent = st.kind === "human" ? "내보내기" : "빈자리로";
+      clear.addEventListener("click", () => {
+        if (st.kind === "human" && !window.confirm(`${st.name}님을 방에서 내보낼까요?`)) return;
+        postFriend("/friend/seat", { seat: st.seat, characterId: null });
+      });
+      li.appendChild(clear);
+    }
+    list.appendChild(li);
+  }
+  side.appendChild(setupSection("좌석", list));
+
+  const actions = el("div", "friend-actions");
+  if (fr.isHost) {
+    const start = el("button", "setup-start", { type: "button" });
+    start.textContent = setupState.pending ? "시작하는 중..." : "대국 시작";
+    start.disabled = setupState.pending || !fr.canStart;
+    start.addEventListener("click", async () => {
+      AudioManager.play("ui.confirm");
+      setupState.pending = true;
+      renderSetup();
+      const ok = await postFriend("/friend/start");
+      // 성공하면 서버의 대국 화면 메시지가 먼저 와서 로비 상태가 비워졌을 수 있다 (그때는 다시 그리지 않는다)
+      if (!setupState) return;
+      if (!ok) setupState.pending = false;
+      renderSetup();
+    });
+    actions.appendChild(start);
+    if (fr.startBlocker) {
+      const why = el("p", "setup-lead");
+      why.textContent = fr.startBlocker;
+      actions.appendChild(why);
+    }
+  }
+  const leave = el("button", "friend-button", { type: "button" });
+  leave.textContent = fr.isHost ? "방 닫기" : "방에서 나가기";
+  leave.addEventListener("click", () => {
+    if (fr.isHost && fr.seats.some((st) => st.kind === "human" && !st.isMe) && !window.confirm("방을 닫으면 들어온 사람들도 모두 나갑니다. 닫을까요?")) return;
+    postFriend("/friend/leave");
+  });
+  actions.appendChild(leave);
+  side.appendChild(actions);
+  if (setupState.error) {
+    const err = el("p", "setup-error", { role: "alert" });
+    err.textContent = setupState.error;
+    side.appendChild(err);
+  }
+
+  // 오른쪽: 캐릭터 목록 (방장: 고른 좌석에 AI로 앉힌다)
+  const rosterPane = el("section", "setup-roster");
+  const rosterHead = el("div", "setup-roster-head");
+  const titleWrap = el("div", "setup-roster-title");
+  const rh = el("h2", "setup-heading");
+  rh.textContent = `캐릭터 ${setupState.roster.length}명`;
+  const target = el("span", "setup-roster-target");
+  target.textContent = fr.isHost ? `${WATCH_SEAT_LABEL[setupState.friendActiveSeat]} 좌석에 AI로 앉힐 캐릭터` : "방장이 AI를 고릅니다";
+  titleWrap.append(rh, target);
+  rosterHead.appendChild(titleWrap);
+  const grid = el("div", "setup-roster-list");
+  const seatedAi = new Map(fr.seats.filter((st) => st.kind === "ai").map((st) => [st.characterId, st.seat]));
+  for (const entry of sortedRoster()) {
+    const seat = seatedAi.get(entry.characterId);
+    const card = el("button", "character-card" + (seat !== undefined ? " is-seated" : ""), { type: "button" });
+    card.disabled = !fr.isHost;
+    const head = el("div", "card-head");
+    const nm = el("span", "card-name");
+    nm.textContent = entry.displayName;
+    head.appendChild(nm);
+    if (entry.custom) {
+      const badge = el("span", "card-custom");
+      badge.textContent = "CustomAI";
+      head.appendChild(badge);
+    }
+    if (seat !== undefined) {
+      const tag = el("span", "card-seat");
+      tag.textContent = WATCH_SEAT_LABEL[seat];
+      head.appendChild(tag);
+    }
+    card.appendChild(head);
+    if (entry.summary) {
+      const summary = el("p", "card-summary");
+      summary.textContent = entry.summary;
+      card.appendChild(summary);
+    }
+    if (entry.tags.length > 0) {
+      const tags = el("ul", "card-tags");
+      for (const text of entry.tags) {
+        const li = el("li");
+        li.textContent = text;
+        tags.appendChild(li);
+      }
+      card.appendChild(tags);
+    }
+    card.addEventListener("click", () => {
+      // 사람이 앉은 좌석에 AI를 앉히면 그 사람은 방에서 나간다 - 내보내기와 같이 확인한다
+      const target = fr.seats[setupState.friendActiveSeat];
+      if (target && target.kind === "human" && !window.confirm(`${target.name}님을 내보내고 ${entry.displayName}을(를) 앉힐까요?`)) return;
+      postFriend("/friend/seat", { seat: setupState.friendActiveSeat, characterId: entry.characterId });
+    });
+    grid.appendChild(card);
+  }
+  rosterPane.append(rosterHead, grid);
+
+  layout.append(side, rosterPane);
+  root.appendChild(layout);
+  grid.scrollTop = scrollTop;
 }
 
 function showSetup(msg) {
