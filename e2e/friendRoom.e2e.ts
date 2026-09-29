@@ -74,8 +74,8 @@ describe("친선전 방 스모크", () => {
     await seatRow(host, "서가").locator("button.setup-seat").click();
     await host.locator(".character-card", { hasText: "제갈 미나" }).click();
     await seatRow(guest, "서가").locator(".seat-name", { hasText: "제갈 미나" }).waitFor();
-    await host.locator(".setup-lead", { hasText: "사람 2명 이상" }).waitFor();
-    expect(await host.locator(".setup-start", { hasText: "대국 시작" }).isDisabled()).toBe(true);
+    // 사람 둘 + AI로 빈자리가 없으면 시작할 수 있다 (B단계)
+    await host.locator(".setup-start:not([disabled])", { hasText: "대국 시작" }).waitFor();
 
     // 손님을 내보내면 손님 화면은 로비로 돌아가 안내를 본다
     await seatRow(host, "남가").locator(".setup-link-button", { hasText: "내보내기" }).click();
@@ -89,4 +89,48 @@ describe("친선전 방 스모크", () => {
     await host.locator("#zone-bottom .hand img").first().waitFor();
     expect(await host.locator("#table").getAttribute("data-players")).toBe("3");
   }, 120_000);
+
+  it("사람끼리 대국 (B단계): 두 사람이 각자 자기 시점으로 두고, 자기 차례가 아니면 기다린다", async () => {
+    const host = await enterAs("방장");
+    const guest = await enterAs("손님");
+    await host.locator(".friend-create").click();
+    const code = (await host.locator(".friend-code-value").textContent())!.trim();
+    await guest.locator(".friend-code-input").fill(code);
+    await guest.locator(".friend-join").click();
+    await seatRow(host, "남가").locator(".seat-name", { hasText: "손님" }).waitFor();
+    await seatRow(host, "서가").locator("button.setup-seat").click();
+    await host.locator(".character-card", { hasText: "제갈 미나" }).click();
+    await host.locator(".setup-start:not([disabled])", { hasText: "대국 시작" }).click();
+
+    // 두 사람 모두 작탁이 열리고, 각자 자기 손패를 본다. 손님에게는 그만두기가 없다
+    await host.locator("#zone-bottom .hand img").first().waitFor();
+    await guest.locator("#zone-bottom .hand img").first().waitFor();
+    expect(await guest.locator(".abandon-button").isVisible()).toBe(false);
+    // 첫 차례는 방장(친)이므로 손님은 기다린다. 방장 화면에는 남은 시간(기본 5+20초)이 보이고, 손님에게는 없다
+    await guest.locator("#action-bar", { hasText: "방장의 선택을 기다리는 중" }).waitFor();
+    await host.locator("#turn-timer", { hasText: /초/ }).waitFor();
+    expect(await guest.locator("#turn-timer").isVisible()).toBe(false);
+
+    // 몇 수를 진행한다: 자기 요청이 뜬 사람만 누른다 (버림은 첫 패, 선택 요청은 넘기기, 그 밖의 예/아니오는 아니오)
+    for (let moves = 0; moves < 12; ) {
+      let acted = false;
+      for (const page of [host, guest]) {
+        const bar = page.locator("#action-bar");
+        const text = (await bar.textContent()) ?? "";
+        if (text.includes("버릴 패")) {
+          await page.locator("#zone-bottom .hand img.clickable").first().click();
+          page.once("dialog", (d) => d.dismiss()); // 리치 확인창이 뜨면 그냥 버린다
+        } else if (await bar.locator("button", { hasText: "넘기기" }).count()) {
+          await bar.locator("button", { hasText: "넘기기" }).click();
+        } else if (await bar.locator("button", { hasText: "아니오" }).count()) {
+          await bar.locator("button", { hasText: "아니오" }).click();
+        } else continue;
+        acted = true;
+        moves++;
+        await page.waitForTimeout(150);
+      }
+      if (!acted) await host.waitForTimeout(200);
+      if ((await host.locator("#hand-end-overlay:not(.hidden)").count()) > 0) break;
+    }
+  }, 180_000);
 });

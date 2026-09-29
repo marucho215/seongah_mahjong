@@ -11,7 +11,7 @@
  * - AI 판단은 "이 이벤트가 추가되기 직전에 새로 기록된 판단"만 그 이벤트에 붙인다 (재현 중 실제 순서, 추측 없음). */
 import { GameState, type ControllerKind } from "../core/GameState.js";
 import type { AiDecisionEntry, GameEvent, MeldSnapshot, TileRef } from "../core/GameLog.js";
-import type { DecisionRequest, DecisionResponse } from "../core/decisions.js";
+import type { ClaimChoice, SeatDecisionRequest, SeatDecisionResponse } from "../core/decisions.js";
 import type { HumanDecisionEntry } from "../core/humanDecisionLog.js";
 import { getCharacterProfile } from "../ai/characterProfiles.js";
 import { isUsableProfileSnapshot } from "../customai/customAiSchema.js";
@@ -84,15 +84,17 @@ function sameJson(a: unknown, b: unknown): boolean {
 }
 
 /** 기록된 사람 결정 요약(choice)을 엔진 응답으로 되돌린다. 요청 종류가 다르면 불일치. */
-function responseFromRecorded(request: DecisionRequest, entry: HumanDecisionEntry): DecisionResponse {
+function responseFromRecorded(request: SeatDecisionRequest, entry: HumanDecisionEntry): SeatDecisionResponse {
   const choice = entry.choice;
   switch (request.type) {
+    case "claim":
+      return { type: "claim", choice: choice.choice as ClaimChoice, ...(choice.choice === "chi" ? { chiOptionId: choice.chiOptionId as string } : {}) };
     case "discard":
       return { type: "discard", tileId: choice.tileId as number, declareRiichi: choice.riichi === true };
     case "chi":
       return { type: "chi", optionId: (choice.optionId as string | null) ?? null };
     default:
-      return { type: request.type, declare: choice.declare === true } as DecisionResponse;
+      return { type: request.type, declare: choice.declare === true } as SeatDecisionResponse;
   }
 }
 
@@ -142,7 +144,7 @@ function reproduceOrThrow(record: GameReplayRecord): ReplayReproduction & { ok: 
     }
     return s.characterId ? getCharacterProfile(s.characterId) : null;
   });
-  const game = new GameState({ rules: meta.rules, seed: meta.gameSeed, characterProfiles, controllers });
+  const game = new GameState({ rules: meta.rules, seed: meta.gameSeed, characterProfiles, controllers, ...(meta.multiplayer === true ? { multiplayer: true } : {}) });
 
   const steps: ReplayStep[] = [];
   let handIndex = -1;
@@ -182,12 +184,14 @@ function reproduceOrThrow(record: GameReplayRecord): ReplayReproduction & { ok: 
         session.continueToNextHand();
         continue;
       }
-      const request = session.getCurrentRequest()!;
-      const entry = humanDecisions[next++];
-      if (!entry || entry.type !== request.type || entry.seat !== request.seat || entry.atEventIndex !== game.log.length) {
-        throw new ReproductionMismatch(`사람 결정 ${next - 1}번이 원본 기록과 맞지 않습니다`, game.log.length);
+      // 여러 사람에게 동시에 물은 요청(multi)은 좌석 순서대로 기록되어 있다: 남은 요청마다 다음 기록을 넣는다
+      for (const request of session.pendingSeatRequests()) {
+        const entry = humanDecisions[next++];
+        if (!entry || entry.type !== request.type || entry.seat !== request.seat || entry.atEventIndex !== game.log.length) {
+          throw new ReproductionMismatch(`사람 결정 ${next - 1}번이 원본 기록과 맞지 않습니다`, game.log.length);
+        }
+        session.respond(responseFromRecorded(request, entry), request.seat);
       }
-      session.respond(responseFromRecorded(request, entry));
     }
   } else {
     game.playGame();

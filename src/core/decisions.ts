@@ -142,3 +142,70 @@ export interface ChiDecisionResponse {
 
 export type DecisionRequest = DiscardDecisionRequest | CallDecisionRequest | RonDecisionRequest | NineTerminalsDecisionRequest | ChiDecisionRequest | TsumoDecisionRequest;
 export type DecisionResponse = DiscardDecisionResponse | CallDecisionResponse | RonDecisionResponse | NineTerminalsDecisionResponse | ChiDecisionResponse | TsumoDecisionResponse;
+
+/**
+ * 사람이 2명 이상인 대국에서, 남이 내놓은 패 하나(버림패, 가깡 패, 북 빼기 패 등)에 대한 한 사람의 선택지를 한 번에 묻는다.
+ * 여러 사람에게 동시에 묻기 위해서다: 차례로 물으면 "앞사람이 론을 고민한 시간" 때문에 뒷사람이 남의 선택지를 알게 된다.
+ * 선택지는 엔진이 계산한 합법한 것만 담긴다(론은 후리텐이 아니고 역이 있을 때만, 울기는 리치 중이 아닐 때만).
+ * 사람은 하나를 고르거나 넘긴다. 론을 넘기면(다른 선택 포함) 기존 론 패스와 똑같이 후리텐이 된다.
+ * 실제 결과는 기존 엔진 순서(론 우선 → 깡/퐁 → 치, 아타마하네 등)로 정해진다 - 고른 것이 다른 사람의 우선 선택에 밀리면
+ * 아무 일도 일어나지 않는다. 사람이 1명 이하인 대국은 이 요청을 쓰지 않는다(기존 ron/call_pon/chi 요청 그대로).
+ */
+export interface ClaimDecisionRequest {
+  type: "claim";
+  seat: number;
+  fromSeat: number;
+  tile: TileRef;
+  context: RonDecisionContext;
+  /** 론이 선택지일 때 엔진의 화료 결과 요약 */
+  ron?: WinPreview;
+  daiminkan: boolean;
+  pon: boolean;
+  /** 치 선택지 (4마에서 하가만). 없으면 빈 배열 */
+  chiOptions: ChiOption[];
+  view: PlayerView;
+}
+export type ClaimChoice = "pass" | "ron" | "daiminkan" | "pon" | "chi";
+export interface ClaimDecisionResponse {
+  type: "claim";
+  choice: ClaimChoice;
+  /** choice가 "chi"일 때 chiOptions 중 하나의 id */
+  chiOptionId?: string;
+}
+
+/** 여러 사람에게 동시에 묻는 엔진 요청 (claim 여러 개). 응답은 같은 순서의 claim 응답 배열이다. */
+export interface MultiDecisionRequest {
+  type: "multi";
+  requests: ClaimDecisionRequest[];
+}
+export interface MultiDecisionResponse {
+  type: "multi";
+  responses: ClaimDecisionResponse[];
+}
+
+/** 엔진(generator)이 내놓는 요청: 한 좌석의 결정, 또는 여러 좌석에 동시에 묻는 묶음 (claim은 항상 묶음 안에서만 나온다). */
+export type EngineRequest = DecisionRequest | MultiDecisionRequest;
+export type EngineResponse = DecisionResponse | MultiDecisionResponse;
+/** 한 좌석이 답하는 요청 (묶음을 푼 것) */
+export type SeatDecisionRequest = DecisionRequest | ClaimDecisionRequest;
+export type SeatDecisionResponse = DecisionResponse | ClaimDecisionResponse;
+
+/** claim 응답이 요청의 선택지와 맞는지 확인한다 (엔진에 넣기 전 검증, GuiSession과 엔진이 같이 쓴다). 맞지 않으면 이유. */
+export function claimResponseProblem(request: ClaimDecisionRequest, response: unknown): string | null {
+  const r = response as Partial<ClaimDecisionResponse> | null;
+  if (r?.type !== "claim") return `expected a "claim" response, got "${String(r?.type)}"`;
+  switch (r.choice) {
+    case "pass":
+      return null;
+    case "ron":
+      return request.ron ? null : "ron is not an option here";
+    case "daiminkan":
+      return request.daiminkan ? null : "daiminkan is not an option here";
+    case "pon":
+      return request.pon ? null : "pon is not an option here";
+    case "chi":
+      return request.chiOptions.some((o) => o.id === r.chiOptionId) ? null : `chi option "${String(r.chiOptionId)}" is not offered`;
+    default:
+      return `unknown claim choice "${String(r.choice)}"`;
+  }
+}

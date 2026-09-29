@@ -113,11 +113,10 @@ describe("친선전 방 서버 (A단계)", () => {
     expect((await a.post("/friend/seat", { seat: 3, characterId: "no-such-character" })).status).toBe(400);
     expect((await a.post("/friend/seat", { seat: 3, characterId: "byeonari" })).status).toBe(204);
 
-    // 사람이 둘이면 아직 시작할 수 없다 (B단계)
+    // 사람이 둘이어도 빈자리가 없으면 시작할 수 있다 (B단계: 사람끼리 대국). 시작은 방장만
     const twoHumans = (await a.untilSetup((m) => m.friendRoom?.seats[3].kind === "ai")).friendRoom;
-    expect(twoHumans.canStart).toBe(false);
-    expect(twoHumans.startBlocker).toMatch(/사람 2명 이상/);
-    expect((await a.post("/friend/start")).status).toBe(409);
+    expect(twoHumans.canStart).toBe(true);
+    expect(twoHumans).not.toHaveProperty("startBlocker");
     expect((await b.post("/friend/start")).status).toBe(403);
 
     // 내보내면 손님은 방에서 나오고 안내를 받는다
@@ -147,7 +146,8 @@ describe("친선전 방 서버 (A단계)", () => {
     let msg = await a.next();
     while (msg.type === "setup") msg = await a.next();
     expect(msg.type).toBe("decision");
-    expect(msg.characterNames).toEqual([null, "제갈 미나", "제갈 나희"]);
+    expect(msg.characterNames).toEqual(["방장", "제갈 미나", "제갈 나희"]); // 친선전은 사람 좌석에 닉네임을 보인다 (D단계)
+    expect(msg.timer).toMatchObject({ perTurnMs: expect.any(Number) }); // 방의 시간 제한(기본 5+20)이 걸린다 (C단계)
     // 대국을 그만두면 방이 있는 로비(방 화면)로 돌아온다
     expect((await a.post("/abandon")).status).toBe(204);
     const back = await a.untilSetup();

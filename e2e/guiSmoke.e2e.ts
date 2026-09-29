@@ -98,7 +98,12 @@ describe("GUI 스모크", () => {
     expect(await seatLabels()).toEqual(["동가", "남가", "서가"]);
     expect(await page.locator(".setup-side input[type=checkbox]").count()).toBe(0); // 관전은 항상 저장하므로 저장 옵션이 없다
 
-    await page.locator(".setup-side .setup-start").click();
+    // 이 버튼에서는 Playwright의 클릭 전 "스크롤" 단계가 멈추는 경우가 있어(실제 마우스 클릭은 정상), 보이게 스크롤한 뒤 그 자리를
+    // 진짜 마우스로 누른다
+    const start = page.locator(".setup-side .setup-start");
+    await start.evaluate((b) => b.scrollIntoView({ block: "center" }));
+    const box = (await start.boundingBox())!;
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await page.waitForURL(/\/replay\.html\?file=watch-sanma-.*_game0\.json&autoplay=1$/, { timeout: 120_000 });
     await page.locator("#rv-play", { hasText: "정지" }).waitFor({ timeout: 120_000 }); // 재현이 끝나면 스스로 재생을 시작한다
     expect(handle.getSession()).toBeNull(); // 사람 대국 화면(세션)은 쓰지 않는다

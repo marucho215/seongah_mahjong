@@ -11,7 +11,7 @@ import type { GameEvent } from "../core/GameLog.js";
 import { InlineEngineRunner, gameFromSpec, runAiWatchGame, type AiWatchSpec, type EngineRunner, type EngineSnapshot, type EngineStart, type GameSpec, type OpponentSpec } from "./engineRunner.js";
 import type { EngineWorkerPool } from "./engineWorkerPool.js";
 import { AudioCueTracker, toPublicAction, type AudioCue, type PublicAction } from "./audioCues.js";
-import type { DecisionResponse } from "../core/decisions.js";
+import type { DecisionResponse, SeatDecisionRequest, SeatDecisionResponse } from "../core/decisions.js";
 import { replayFileNamePart, resolveReplayDir, writeGameReplay, type GameReplayRecord } from "../sim/replayRecorder.js";
 import { aggregateWatchStats, summarizeWatchGame, type WatchGameSummary } from "../sim/watchStats.js";
 import { reproduceReplay, type ReplayReproduction } from "../replay/replayReproduction.js";
@@ -46,6 +46,7 @@ import {
 } from "../customai/customAiSchema.js";
 import type { CharacterProfile } from "../ai/characterProfile.js";
 import { AccessError, AccessGate } from "./accessGate.js";
+import { substituteResponse } from "./substitute.js";
 import { DEFAULT_THINKING_TIME, FriendRoomError, FriendRoomStore, THINKING_TIME_OPTIONS, parseThinkingTime, type FriendRoom } from "./friendRooms.js";
 
 export const PUBLIC_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "public");
@@ -74,7 +75,8 @@ const GATED_PAGES = new Set(["/", "/index.html", "/replay.html"]);
 const REPLAY_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*\.json$/;
 
 /** 리플레이 좌석의 표시 이름: 캐릭터 이름, 사람이면 "플레이어", 캐릭터가 없는 AI면 종류. */
-function replaySeatName(seat: { kind: string; characterId?: string; customProfile?: { displayName?: unknown } }): string {
+function replaySeatName(seat: { kind: string; characterId?: string; customProfile?: { displayName?: unknown }; nickname?: unknown }): string {
+  if (typeof seat.nickname === "string" && seat.nickname) return seat.nickname; // 친선전 사람 좌석
   // CustomAI 좌석은 기록에 남은 그 대국의 프로필 이름을 쓴다 (characterId "custom:<id>"는 등록 캐릭터 표에 없다)
   if (typeof seat.customProfile?.displayName === "string") return seat.customProfile.displayName;
   if (seat.characterId) {
@@ -95,7 +97,15 @@ export interface GuiServerHandle {
 export interface GuiServerOptions {
   /** 지정하면 게임이 끝날 때(game_end) 이 대국의 리플레이 JSON을 기존 AI 리플레이와 같은 형식/규칙으로 한 번 저장한다.
    *  파일: <dir>/<label>_game0.json (dir 기본 "replays" = 프로젝트 루트 기준). 서버가 게임 도중 종료되면 저장되지 않는다. */
-  replay?: { label: string; dir?: string; onSaved?: (path: string) => void };
+  replay?: {
+    label: string;
+    dir?: string;
+    onSaved?: (path: string) => void;
+    /** 같은 파일을 더 저장할 폴더들 (친선전: 다른 참가자의 리플레이 폴더) */
+    alsoDirs?: string[];
+    /** 사람 좌석의 닉네임 (친선전, meta.seats[].nickname으로 남긴다) */
+    seatNames?: (string | null)[];
+  };
   /** 일반 타패 한 장면을 보여주는 기본 시간(ms). 울기/리치/화료는 이것의 배수만큼 더 오래 보여준다.
    *  0이면 장면 재생 없이 곧바로 다음 상태만 보낸다. 클라이언트가 POST /speed로 바꿀 수 있다. */
   frameDelayMs?: number;
@@ -114,25 +124,59 @@ function holdMultiplier(actions: PublicAction[]): number {
 }
 
 /** 한 게임을 엔진 실행기(engineRunner.ts - 같은 스레드 또는 worker)로 진행하며 SSE 메시지를 만든다. HTTP 서버는 이것을 게임마다
- *  새로 만든다. 엔진 상태는 실행기가 돌려준 스냅샷으로만 알며, 로그는 받은 이벤트를 이어 붙인 사본을 쓴다(인덱스는 원본과 같다). */
+ *  새로 만든다. 엔진 상태는 실행기가 돌려준 스냅샷으로만 알며, 로그는 받은 이벤트를 이어 붙인 사본을 쓴다(인덱스는 원본과 같다).
+ *  메시지 받는 쪽(viewer):
+ *  - null: 대국의 모든 사람 좌석 사용자가 같은 메시지를 받는다 (사람 1명 대국, 사람끼리 대국 모드가 아닌 대국 - 지금까지와 같음).
+ *  - 좌석 번호: 사람끼리 대국 모드. 좌석마다 자기 요청(없으면 "waiting")과 자기 시점의 장면만 받는다. */
 interface GameHost {
   /** 같은 스레드에서 도는 대국이면 그 세션 (테스트/직접 게임용), worker면 null */
   session: GuiSession | null;
+  /** 사람끼리 대국 모드 (좌석마다 메시지를 따로 만든다) */
+  multiplayer: boolean;
   phase(): GuiSessionPhase;
-  connectMessage(): string;
+  connectMessage(viewer: number | null): string;
   /** 장면 재생 중이거나 엔진이 응답을 처리하는 중 */
   isPlaying(): boolean;
-  /** 지금 결정을 요청받은 좌석 (결정 대기가 아니면 null) */
-  currentRequestSeat(): number | null;
-  respond(response: DecisionResponse): Promise<void>;
+  /** 지금 답해야 하는 좌석들 (결정 대기가 아니면 빈 배열) */
+  pendingSeats(): number[];
+  respond(response: SeatDecisionResponse, seat?: number): Promise<void>;
   continueToNextHand(): Promise<void>;
+  /** 친선전: 좌석을 자리 비움으로 두거나(중립 AI가 대신 둔다) 되돌린다. 친선전 대국이 아니면 아무것도 하지 않는다. */
+  setAway(seat: number, away: boolean): void;
   /** 대국 그만두기: 이후 이 호스트는 아무 메시지도 보내지 않는다 (재생 중이던 장면 타이머 포함). 리플레이는 저장하지 않는다. */
   dispose(): void;
 }
 
-/** 시작 화면에서 시작한 대국의 구성 (실제로 쓰인 시드 포함). 종료 화면의 "다시 하기"가 이것을 그대로 /start에 보낸다. */
 /** 시작한 대국의 구성. `friendRoom`: 친선전 방에서 시작한 대국 (종료 화면은 "다시 하기" 대신 방으로 돌아간다) */
 export type StartedGameConfig = GuiGameConfig & { seed: string; friendRoom?: true };
+
+/** 같은 순간(같은 행동 좌석, 같은 로그 위치)에 사람 좌석마다 만들어진 장면들을 한 묶음으로 모은다 (사람이 1명이면 장면 하나씩). */
+function groupFrames(frames: WatchFrame[]): WatchFrame[][] {
+  const moments: WatchFrame[][] = [];
+  for (const frame of frames) {
+    const last = moments.at(-1);
+    if (last && last[0]!.actor === frame.actor && last[0]!.logLength === frame.logLength && !last.some((f) => f.view.seat === frame.view.seat)) last.push(frame);
+    else moments.push([frame]);
+  }
+  return moments;
+}
+
+interface GameHostOptions {
+  /** 사람 좌석의 표시 이름 (친선전: 닉네임). 없으면 엔진의 캐릭터 이름(사람 좌석은 null)을 그대로 쓴다. */
+  humanNames?: (string | null)[];
+  /** 사람끼리 대국에서 대국을 끝낼(그만둘) 수 있는 좌석 (방장). 없으면 모든 좌석이 startedConfig 규칙을 따른다. */
+  abandonSeat?: number;
+  /** 친선전 시간 제한(C단계): 한 수마다 perTurnMs, 넘기면 국마다 새로 채워지는 여유 bankMs를 쓴다. 다 쓰면 중립 AI가 그 결정을
+   *  대신 내리고(substitute.ts), 두 번 연속이면 자리 비움이 된다. 주면 자리 비움(setAway)도 켜진다. */
+  timeLimit?: { perTurnMs: number; bankMs: number };
+  /** 자리 비움 좌석을 대신 둘 때 기다리는 시간 (기본 AWAY_ANSWER_DELAY_MS) */
+  awayAnswerDelayMs?: number;
+}
+
+/** 연속으로 시간을 다 쓰면 자리 비움이 되는 횟수 */
+const AWAY_AFTER_TIMEOUTS = 2;
+/** 자리 비움 좌석을 대신 둘 때 기다리는 시간 (화면이 바뀌는 것을 볼 수 있게) */
+const AWAY_ANSWER_DELAY_MS = 400;
 
 /** `startedConfig`: 시작 화면이 있는 서버에서 시작한 대국이면 그 구성. 있으면 종료 화면에 새 대국/다시 하기 버튼이 나온다. */
 /** `frameDelayMs`: 재생 속도 설정. 장면마다 새로 읽는다 (재생 중에 바꾸면 다음 장면부터 적용). */
@@ -140,26 +184,165 @@ function createGameHost(
   runner: EngineRunner,
   start: EngineStart,
   options: GuiServerOptions,
-  broadcast: (payload: string) => void,
+  deliver: (viewer: number | null, payload: string) => void,
   startedConfig: StartedGameConfig | null,
-  frameDelayMs: () => number
+  frameDelayMs: () => number,
+  hostOptions: GameHostOptions = {}
 ): GameHost {
+  const multiplayer = start.multiplayer;
+  /** 메시지 받는 쪽들: 사람끼리 대국이면 사람 좌석마다, 아니면 null 하나 (모두 같은 메시지) */
+  const viewers: (number | null)[] = multiplayer ? start.controllers.flatMap((c, seat) => (c === "human" ? [seat] : [])) : [null];
+  const keyOf = (viewer: number | null): number => viewer ?? -1;
+
+  // --- 친선전 시간 제한과 자리 비움 (C단계). timeLimit이 없으면(로비 대국 등) 아무것도 하지 않는다. ---
+  const timeLimit = hostOptions.timeLimit ?? null;
+  const humanSeats = start.controllers.flatMap((c, seat) => (c === "human" ? [seat] : []));
+  const away = new Set<number>();
+  const bankLeft = new Map<number, number>();
+  const consecutiveTimeouts = new Map<number, number>();
+  const resetBanks = (): void => {
+    for (const seat of humanSeats) bankLeft.set(seat, timeLimit?.bankMs ?? 0);
+  };
+  resetBanks();
+  /** 좌석마다 지금 걸린 시계 (같은 요청이 계속 대기 중이면 key가 같아 다시 시작하지 않는다) */
+  const clocks = new Map<number, { key: string; timer: ReturnType<typeof setTimeout>; startedAt: number; deadline: number }>();
+  let awayTimer: ReturnType<typeof setTimeout> | null = null;
   /** 엔진 로그 사본: 스냅샷의 newEvents를 순서대로 이어 붙인다. */
   const log: GameEvent[] = [];
   let snapshot: EngineSnapshot = start.initial;
   log.push(...snapshot.newEvents);
-  /** 가장 최근 장면(화료/유국 포함)의 사람 좌석 view. 국/게임 종료 상태를 새로고침으로 다시 받을 때 작탁을 그 상태로 다시 그리는 데 쓴다. */
-  let lastFrameView: WatchFrame["view"] | null = snapshot.frames.at(-1)?.view ?? null; // 접속 전의 AI 턴은 재생하지 않는다
-  /** 시작 화면이 있는 서버에서 시작한 대국만 도중에 그만두고 로비로 돌아갈 수 있다. */
-  const canAbandon = startedConfig !== null;
+  /** 받는 쪽마다 가장 최근 장면(화료/유국 포함)의 view. 국/게임 종료 상태를 새로고침으로 다시 받을 때, 그리고 사람끼리 대국에서 자기
+   *  차례가 아닐 때 작탁을 그 상태로 그리는 데 쓴다. 접속 전의 AI 턴은 재생하지 않는다. */
+  const lastFrameView = new Map<number, WatchFrame["view"]>();
+  const lastRequestView = new Map<number, WatchFrame["view"]>();
+  const rememberFrames = (frames: WatchFrame[]): void => {
+    for (const f of frames) lastFrameView.set(multiplayer ? f.view.seat : -1, f.view);
+  };
+  rememberFrames(snapshot.frames);
   let disposed = false;
-  let lastRequestView: WatchFrame["view"] | null = null;
+
+  /** 시작 화면이 있는 서버에서 시작한 대국만 도중에 그만두고 로비로 돌아갈 수 있다. 사람끼리 대국은 정해진 좌석(방장)만. */
+  const canAbandonFor = (viewer: number | null): boolean =>
+    startedConfig !== null && (hostOptions.abandonSeat === undefined || viewer === hostOptions.abandonSeat);
 
   /** 스냅샷을 반영한다: 로그 사본에 이벤트를 붙이고 현재 상태를 바꾼다. 장면(frames)은 호출한 쪽이 쓴다. */
   function apply(next: EngineSnapshot): WatchFrame[] {
     log.push(...next.newEvents);
     snapshot = next;
+    // 국이 새로 시작되면 여유 시간을 다시 채운다 (작혼과 같이 국마다)
+    if (next.newEvents.some((ev) => ev.type === "hand_start")) resetBanks();
     return next.frames;
+  }
+
+  /** 지금 답해야 하는 좌석별 요청 */
+  function currentPending(): SeatDecisionRequest[] {
+    if (runner.session) return runner.session.pendingSeatRequests();
+    return snapshot.phase === "decision" ? snapshot.pending : [];
+  }
+  /** 같은 대기 요청인지 가르는 값: 엔진 로그 위치 + 요청 종류 + 좌석 (여러 좌석 동시 묻기 중에는 로그가 그대로라 같은 값) */
+  const clockKey = (request: SeatDecisionRequest): string => `${log.length}:${request.type}:${request.seat}`;
+
+  function clearClock(seat: number): void {
+    const clock = clocks.get(seat);
+    if (clock) clearTimeout(clock.timer);
+    clocks.delete(seat);
+  }
+
+  /** 대기 중인 좌석에 시계를 걸고, 자리 비움 좌석은 대신 둔다. 상태를 보내기 직전에 부른다. */
+  function scheduleClocks(): void {
+    if (!timeLimit || disposed) return;
+    const pending = currentPending();
+    for (const seat of [...clocks.keys()]) {
+      const request = pending.find((r) => r.seat === seat);
+      if (!request || clocks.get(seat)!.key !== clockKey(request)) clearClock(seat);
+    }
+    for (const request of pending) {
+      const seat = request.seat;
+      if (away.has(seat) || clocks.has(seat)) continue;
+      const allowed = timeLimit.perTurnMs + (bankLeft.get(seat) ?? 0);
+      const key = clockKey(request);
+      const startedAt = Date.now();
+      const timer = setTimeout(() => onTimeout(seat, key), allowed);
+      timer.unref?.();
+      clocks.set(seat, { key, timer, startedAt, deadline: startedAt + allowed });
+    }
+    // 사람이 모두 자리를 비웠으면 국 결과에서 기다리지 않고 다음 국으로 넘어간다 (한 명이라도 있으면 그 사람이 누른다)
+    const phaseNow = runner.session?.getPhase() ?? snapshot.phase;
+    if (phaseNow === "hand_end" && humanSeats.length > 0 && humanSeats.every((seat) => away.has(seat)) && !awayTimer) {
+      awayTimer = setTimeout(() => {
+        awayTimer = null;
+        if (disposed || playing || busy || (runner.session?.getPhase() ?? snapshot.phase) !== "hand_end") return;
+        void advance(() => runner.continueToNextHand()).catch(() => {});
+      }, hostOptions.awayAnswerDelayMs ?? AWAY_ANSWER_DELAY_MS);
+      awayTimer.unref?.();
+    }
+    if (pending.some((r) => away.has(r.seat)) && !awayTimer) {
+      awayTimer = setTimeout(() => {
+        awayTimer = null;
+        answerAwaySeats();
+      }, hostOptions.awayAnswerDelayMs ?? AWAY_ANSWER_DELAY_MS);
+      awayTimer.unref?.();
+    }
+  }
+
+  function answerAwaySeats(): void {
+    if (disposed) return;
+    if (playing || busy) return; // 진행이 끝나면 scheduleClocks가 다시 부른다
+    for (const request of currentPending()) {
+      if (away.has(request.seat)) void answerFor(request).catch(() => {});
+    }
+  }
+
+  function onTimeout(seat: number, key: string): void {
+    if (disposed) return;
+    const request = currentPending().find((r) => r.seat === seat);
+    if (!request || clockKey(request) !== key) return;
+    if (playing || busy) {
+      // 엔진이 다른 응답을 처리하는 중이면 잠깐 뒤에 다시 본다 (시계는 이미 다 됐다)
+      const retry = setTimeout(() => onTimeout(seat, key), 200);
+      retry.unref?.();
+      return;
+    }
+    clocks.delete(seat);
+    bankLeft.set(seat, 0);
+    const count = (consecutiveTimeouts.get(seat) ?? 0) + 1;
+    consecutiveTimeouts.set(seat, count);
+    if (count >= AWAY_AFTER_TIMEOUTS) away.add(seat);
+    void answerFor(request).catch(() => {});
+  }
+
+  /** 중립 AI가 이 요청에 대신 답한다 (사람 응답과 같은 경로라 사람 결정으로 기록된다) */
+  function answerFor(request: SeatDecisionRequest): Promise<void> {
+    return queueRespond(substituteResponse(request), request.seat);
+  }
+
+  /** 사람이 직접 답했다: 기본 시간을 넘겨 쓴 만큼 여유 시간에서 빼고, 연속 시간 초과와 자리 비움을 푼다 */
+  function noteManualAnswer(seat: number): void {
+    const clock = clocks.get(seat);
+    if (clock && timeLimit) {
+      const over = Math.max(0, Date.now() - clock.startedAt - timeLimit.perTurnMs);
+      bankLeft.set(seat, Math.max(0, (bankLeft.get(seat) ?? 0) - over));
+    }
+    clearClock(seat);
+    consecutiveTimeouts.set(seat, 0);
+    away.delete(seat);
+  }
+
+  /** 메시지에 실을 자리 비움 좌석과, 받는 쪽 자신의 남은 시간 */
+  function presenceFields(viewer: number | null): { awaySeats?: number[]; timer?: { remainingMs: number; perTurnMs: number; bankMs: number } } {
+    if (!timeLimit) return {};
+    const out: { awaySeats?: number[]; timer?: { remainingMs: number; perTurnMs: number; bankMs: number } } = { awaySeats: [...away].sort() };
+    const seat = viewer ?? currentPending()[0]?.seat;
+    const clock = seat === undefined ? undefined : clocks.get(seat);
+    if (clock && seat !== undefined) {
+      const elapsed = Date.now() - clock.startedAt;
+      out.timer = {
+        remainingMs: Math.max(0, clock.deadline - Date.now()),
+        perTurnMs: Math.max(0, timeLimit.perTurnMs - elapsed),
+        bankMs: Math.max(0, (bankLeft.get(seat) ?? 0) - Math.max(0, elapsed - timeLimit.perTurnMs)),
+      };
+    }
+    return out;
   }
 
   let replaySaved = false;
@@ -169,15 +352,18 @@ function createGameHost(
     if (!options.replay || replaySaved || snapshot.phase !== "game_end") return;
     replaySaved = true;
     const record = await runner.replayRecord(options.replay.label);
+    const names = options.replay.seatNames;
+    if (names) for (const seatInfo of record.meta.seats) if (seatInfo.kind === "human" && names[seatInfo.seat]) seatInfo.nickname = names[seatInfo.seat]!;
     const path = writeGameReplay(record, options.replay.dir ?? "replays");
     savedReplayFile = basename(path);
     options.replay.onSaved?.(path);
+    for (const dir of options.replay.alsoDirs ?? []) options.replay.onSaved?.(writeGameReplay(record, dir));
   }
 
   // Identity-only, presentation-layer detail: each seat's display name (or null when that seat has no
   // character profile) so the client never hardcodes a name and never confuses "who this seat is" with
-  // "who controls it".
-  const characterNames: (string | null)[] = start.characterNames;
+  // "who controls it". 친선전에서는 사람 좌석에 닉네임을 넣는다.
+  const characterNames: (string | null)[] = start.characterNames.map((name, seat) => hostOptions.humanNames?.[seat] ?? name);
 
   // 효과음 신호: 로그를 서버에서 공개 정보만 담은 AudioCue로 바꿔 보낸다 (audioCues.ts).
   // 접속 전에 이미 쌓인 신호는 "과거"이므로 다시 재생하지 않는다.
@@ -187,16 +373,21 @@ function createGameHost(
 
   /** 장면 재생 중에는 사람이 응답할 수 없다 (클라이언트는 아직 요청을 받지 못했다). */
   let playing = false;
-  /** 엔진이 응답/다음 국을 처리하는 중 (worker 결과를 기다리는 동안 다른 요청을 받지 않는다) */
+  /** 엔진이 응답/다음 국을 처리하는 중 (worker 결과를 기다리는 동안) */
   let busy = false;
-  let lastWatchMessage: string | null = null;
+  /** 사람끼리 대국: 여러 사람의 응답을 받은 순서대로 하나씩 엔진에 넣는다 */
+  let respondQueue: Promise<void> = Promise.resolve();
+  /** 받는 쪽마다 재생 중인 마지막 장면 메시지 (재생 중에 접속하면 이것을 준다) */
+  const lastWatchMessage = new Map<number, string>();
   /** 최근 행동 목록을 만들 때 어디까지 읽었는지 (로그 인덱스) */
   let actionLogIndex = log.length;
 
-  function currentStateMessage(extra: { cues: AudioCue[]; cueBase?: number }): string {
+  function currentStateMessage(viewer: number | null, extra: { cues: AudioCue[]; cueBase?: number }): string {
+    const key = keyOf(viewer);
     const phase = snapshot.phase;
-    // 종료 화면 뒤에 그릴 작탁: 마지막 장면, 없으면 마지막 결정 요청의 view (사람 좌석 view라 숨은 정보가 없다)
-    const view = lastFrameView ?? lastRequestView;
+    const canAbandon = canAbandonFor(viewer);
+    // 종료 화면 뒤에 그릴 작탁: 마지막 장면, 없으면 마지막 결정 요청의 view (그 좌석 view라 숨은 정보가 없다)
+    const view = lastFrameView.get(key) ?? lastRequestView.get(key);
     if (phase === "game_end") {
       // 순위/우마는 엔진의 computeFinalStandings() 결과를 그대로 보낸다 (GUI가 따로 정렬하지 않는다).
       return JSON.stringify({
@@ -209,75 +400,101 @@ function createGameHost(
         canStartNewGame: startedConfig !== null,
         ...(startedConfig ? { gameConfig: startedConfig } : {}),
         ...(savedReplayFile ? { replayFile: savedReplayFile } : {}),
+        // 친선전: 방장은 종료 화면에서 같은 멤버로 바로 다시 시작할 수 있다
+        ...(startedConfig?.friendRoom ? { canRestartFriend: hostOptions.abandonSeat === undefined || viewer === hostOptions.abandonSeat } : {}),
         ...extra,
       });
     }
     if (phase === "hand_end") {
-      return JSON.stringify({ type: "hand_end", event: snapshot.handEndEvent, ...(view ? { view } : {}), characterNames, canAbandon, ...extra });
+      return JSON.stringify({ type: "hand_end", event: snapshot.handEndEvent, ...(view ? { view } : {}), characterNames, canAbandon, ...presenceFields(viewer), ...extra });
     }
-    const request = snapshot.request;
-    if (request) lastRequestView = request.view;
-    return JSON.stringify({ type: "decision", request, characterNames, canAbandon, ...extra });
+    if (viewer === null) {
+      // 지금까지와 같다: 한 좌석의 요청을 모두에게 (사람끼리 대국 모드가 아니면 묶음 요청은 나오지 않는다)
+      const request = snapshot.request?.type === "multi" ? null : snapshot.request;
+      if (request) lastRequestView.set(key, request.view);
+      return JSON.stringify({ type: "decision", request, characterNames, canAbandon, ...presenceFields(viewer), ...extra });
+    }
+    const mine = snapshot.pending.find((r) => r.seat === viewer);
+    if (mine) {
+      lastRequestView.set(key, mine.view);
+      return JSON.stringify({ type: "decision", request: mine, characterNames, canAbandon, ...presenceFields(viewer), ...extra });
+    }
+    // 이 좌석은 지금 할 일이 없다 (다른 사람의 차례이거나, 이미 답하고 다른 사람을 기다리는 중)
+    const waitingView = lastFrameView.get(key) ?? lastRequestView.get(key);
+    return JSON.stringify({ type: "waiting", ...(waitingView ? { view: waitingView } : {}), waitingFor: snapshot.pending.map((r) => r.seat), characterNames, canAbandon, ...presenceFields(viewer), ...extra });
   }
 
   /** 새로 접속한 클라이언트: 과거 신호는 보내지 않고, 현재 seq만 기준점(cueBase)으로 알려준다. */
-  function connectMessage(): string {
+  function connectMessage(viewer: number | null): string {
     // 같은 스레드의 대국이 서버 밖에서 진행됐으면(테스트가 세션을 직접 조작한 경우) 그 장면은 새 접속에 재생하지 않되 마지막 상태로는 반영한다
     if (!playing && !busy) {
       const fresh = runner.pollSync();
-      if (fresh) {
-        const pending = apply(fresh);
-        if (pending.length > 0) lastFrameView = pending.at(-1)!.view;
-      }
+      if (fresh) rememberFrames(apply(fresh));
     }
     cueTracker.sync();
-    // 재생 중에 접속하면 가장 최근 장면을 보여준다 (최종 상태는 재생이 끝난 뒤 브로드캐스트된다).
-    if (playing && lastWatchMessage) return lastWatchMessage;
-    return currentStateMessage({ cues: [], cueBase: cueTracker.latestSeq() });
+    // 대국을 막 열었을 때 첫 요청은 이 메시지로 전달된다 - 시계도 여기서 건다 (같은 요청이면 다시 시작하지 않아 새로고침으로 시간이 늘지 않는다)
+    if (!playing && !busy) scheduleClocks();
+    // 재생 중에 접속하면 가장 최근 장면을 보여준다 (최종 상태는 재생이 끝난 뒤 보낸다).
+    const watching = lastWatchMessage.get(keyOf(viewer));
+    if (playing && watching) return watching;
+    return currentStateMessage(viewer, { cues: [], cueBase: cueTracker.latestSeq() });
   }
 
-  function watchMessage(frame: WatchFrame): string {
+  /** 한 순간(좌석마다의 장면 묶음)의 공개 정보를 한 번만 계산하고, 받는 쪽마다 자기 시점의 장면 메시지를 만든다. */
+  function watchMessages(moment: WatchFrame[]): Map<number, string> {
+    const { actor, logLength } = moment[0]!;
     cueTracker.sync();
-    const upTo = cueTracker.seqThroughLogLength(frame.logLength);
+    const upTo = cueTracker.seqThroughLogLength(logLength);
     const cues = cueTracker.cuesAfter(lastBroadcastSeq).filter((c) => c.seq <= upTo);
     if (upTo > lastBroadcastSeq) lastBroadcastSeq = upTo;
     // 이 장면 직전까지 새로 생긴 공개 행동들
     const actions: PublicAction[] = [];
-    for (; actionLogIndex < frame.logLength; actionLogIndex++) {
+    for (; actionLogIndex < logLength; actionLogIndex++) {
       const a = toPublicAction(log[actionLogIndex]!);
       if (a) actions.push(a);
     }
     // 방금 버려진 패의 주인 (론이면 방총자): 그 패를 강조하는 데 쓴다
     let latestDiscardSeat: number | null = null;
-    for (let i = frame.logLength - 1; i >= 0; i--) {
+    for (let i = logLength - 1; i >= 0; i--) {
       const e = log[i]!;
       if (e.type === "discard") { latestDiscardSeat = e.player; break; }
       if (e.type === "hand_start") break;
     }
-    const message = JSON.stringify({ type: "watch", view: frame.view, actor: frame.actor, latestDiscardSeat, actions, characterNames, canAbandon, cues });
     lastHold = frameDelayMs() * holdMultiplier(actions);
-    return message;
+    const out = new Map<number, string>();
+    for (const viewer of viewers) {
+      const frame = viewer === null ? moment[0]! : moment.find((f) => f.view.seat === viewer);
+      if (!frame) continue;
+      out.set(keyOf(viewer), JSON.stringify({ type: "watch", view: frame.view, actor, latestDiscardSeat, actions, characterNames, canAbandon: canAbandonFor(viewer), ...(timeLimit ? { awaySeats: [...away].sort() } : {}), cues }));
+    }
+    return out;
   }
   let lastHold = 0;
 
   /** 응답 처리 뒤 상태를 보낸다. 그 사이 AI 턴이 있었다면 한 수씩 간격을 두고 보여준 다음 최종 상태를 보낸다. */
   function broadcastAfterAction(frames: WatchFrame[]): void {
-    if (frames.length > 0) lastFrameView = frames.at(-1)!.view;
+    rememberFrames(frames);
     if (frameDelayMs() <= 0 || frames.length === 0) {
       broadcastState();
       return;
     }
+    const moments = groupFrames(frames);
     playing = true;
     let i = 0;
     const step = (): void => {
       if (disposed) return;
-      if (i < frames.length) {
-        lastWatchMessage = watchMessage(frames[i++]!);
-        broadcast(`data: ${lastWatchMessage}\n\n`);
+      if (i < moments.length) {
+        const messages = watchMessages(moments[i++]!);
+        for (const viewer of viewers) {
+          const message = messages.get(keyOf(viewer));
+          if (!message) continue;
+          lastWatchMessage.set(keyOf(viewer), message);
+          deliver(viewer, `data: ${message}\n\n`);
+        }
         setTimeout(step, lastHold).unref();
       } else {
         playing = false;
-        lastWatchMessage = null;
+        lastWatchMessage.clear();
         broadcastState();
       }
     };
@@ -290,10 +507,21 @@ function createGameHost(
     const cues = cueTracker.cuesAfter(lastBroadcastSeq);
     lastBroadcastSeq = cueTracker.latestSeq();
     cueTracker.discardThrough(lastBroadcastSeq);
-    broadcast(`data: ${currentStateMessage({ cues })}\n\n`);
+    scheduleClocks();
+    for (const viewer of viewers) deliver(viewer, `data: ${currentStateMessage(viewer, { cues })}\n\n`);
   }
 
-  /** 엔진에 한 번 진행을 맡기고, 결과를 반영해 보낸다. 처리 중에는 다른 진행 요청을 받지 않는다. */
+  /** 응답을 엔진에 넣는다. 사람끼리 대국/친선전(시간 제한)은 여러 응답(대신 둔 것 포함)이 겹쳐도 거절하지 않고 받은 순서대로 넣는다. */
+  function queueRespond(response: SeatDecisionResponse, seat?: number): Promise<void> {
+    const seatForEngine = multiplayer ? seat : undefined;
+    const run = (): Promise<void> => (disposed ? Promise.resolve() : advance(() => runner.respond(response, seatForEngine)));
+    if (!multiplayer && !timeLimit) return run();
+    const queued = respondQueue.then(run);
+    respondQueue = queued.catch(() => {});
+    return queued;
+  }
+
+  /** 엔진에 한 번 진행을 맡기고, 결과를 반영해 보낸다. */
   async function advance(run: () => Promise<EngineSnapshot>): Promise<void> {
     busy = true;
     let next: EngineSnapshot;
@@ -311,20 +539,35 @@ function createGameHost(
 
   return {
     session: runner.session,
+    multiplayer,
     // 같은 스레드의 대국은 서버 밖(테스트)에서 진행될 수 있으므로 세션을 바로 읽는다. worker 대국은 마지막 스냅샷이 곧 현재 상태다.
     phase: () => runner.session?.getPhase() ?? snapshot.phase,
     connectMessage,
     isPlaying: () => playing || busy,
-    currentRequestSeat: () => {
-      if (runner.session) return runner.session.getCurrentRequest()?.seat ?? null;
-      return snapshot.phase === "decision" ? (snapshot.request?.seat ?? null) : null;
+    pendingSeats: () => {
+      if (runner.session) return runner.session.pendingSeatRequests().map((r) => r.seat);
+      return snapshot.phase === "decision" ? snapshot.pending.map((r) => r.seat) : [];
     },
-    respond(response) {
+    respond(response, seat) {
       if (playing) return Promise.reject(new Error("GuiServer: 장면 재생 중에는 응답할 수 없습니다"));
-      if (busy) return Promise.reject(new Error("GuiServer: 앞의 응답을 처리하는 중입니다"));
-      return advance(() => runner.respond(response));
+      if (!multiplayer && !timeLimit && busy) return Promise.reject(new Error("GuiServer: 앞의 응답을 처리하는 중입니다"));
+      const answering = seat ?? currentPending()[0]?.seat;
+      if (answering !== undefined) noteManualAnswer(answering);
+      return queueRespond(response, seat);
+    },
+    setAway(seat, isAway) {
+      if (!timeLimit || disposed || !humanSeats.includes(seat) || away.has(seat) === isAway) return;
+      if (isAway) away.add(seat);
+      else {
+        away.delete(seat);
+        consecutiveTimeouts.set(seat, 0);
+      }
+      if (playing || busy) return; // 진행이 끝나면 새 상태와 함께 알린다
+      broadcastState();
     },
     continueToNextHand() {
+      // 사람끼리 대국: 국 결과에서 누구든 먼저 "다음 국"을 누르면 모두 함께 넘어간다. 거의 동시에 누른 뒤의 것은 조용히 무시한다.
+      if (multiplayer && (playing || busy || (runner.session?.getPhase() ?? snapshot.phase) !== "hand_end")) return Promise.resolve();
       if (playing) return Promise.reject(new Error("GuiServer: 장면 재생 중에는 진행할 수 없습니다"));
       if (busy) return Promise.reject(new Error("GuiServer: 앞의 응답을 처리하는 중입니다"));
       return advance(() => runner.continueToNextHand());
@@ -332,6 +575,8 @@ function createGameHost(
     dispose() {
       disposed = true;
       playing = false;
+      for (const seat of [...clocks.keys()]) clearClock(seat);
+      if (awayTimer) clearTimeout(awayTimer);
       runner.dispose();
     },
   };
@@ -360,11 +605,18 @@ export interface GuiLobbyOptions {
   limits?: ResourceLimits;
   /** 이벤트 연결 유지 신호 간격 (ms, 기본 SSE_HEARTBEAT_MS). 0이면 보내지 않는다. */
   heartbeatMs?: number;
+  /** 친선전 시간 제한과 자리 비움 대행 간격에 곱하는 값 (기본 1, 테스트에서 줄인다) */
+  friendTimeScale?: number;
+  /** 친선전: 연결이 모두 끊긴 뒤 자리 비움으로 보기까지의 시간 (ms, 기본 PRESENCE_GRACE_MS) */
+  presenceGraceMs?: number;
 }
 
 /** 이벤트 연결(SSE) 유지 신호 간격. 터널/프록시는 한동안 데이터가 없는 연결을 끊기도 하므로(흔히 60~100초),
  *  그보다 짧게 SSE 주석 줄(": ping")을 보낸다. 브라우저 EventSource는 주석 줄을 무시한다. */
 export const SSE_HEARTBEAT_MS = 25_000;
+
+/** 친선전: 이벤트 연결이 모두 끊긴 뒤 이만큼 지나도 돌아오지 않으면 자리 비움으로 본다 (새로고침은 이보다 빠르다) */
+export const PRESENCE_GRACE_MS = 10_000;
 
 /** 온라인 서버의 자원 제한 (1.2 4단계). */
 export interface ResourceLimits {
@@ -610,33 +862,84 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     for (const res of room.sseClients) res.write(payload);
   };
 
-  /** 대국을 만들고 사람 좌석에 대국을 연 사용자를 앉힌다 (로비 대국은 seat 0만 사람이다. 직접 만든 게임을 여는 createGuiServer는
-   *  사람 좌석이 여럿일 수 있고, 모두 로컬 사용자가 둔다). 메시지는 사람 좌석의 사용자 로비로만 간다. */
-  function openTable(room: Room, runner: EngineRunner, start: EngineStart, options: GuiServerOptions, startedConfig: StartedGameConfig | null): Table {
-    const seatUsers: (string | null)[] = start.controllers.map((c) => (c === "human" ? room.userId : null));
-    const deliver = (payload: string): void => {
+  /** 대국을 만들고 사람 좌석에 사용자를 앉힌다. 로비 대국은 seat 0만 사람이고, 직접 만든 게임을 여는 createGuiServer는 사람 좌석이
+   *  여럿일 수 있다(모두 대국을 연 사용자가 둔다). 친선전(사람끼리 대국)은 `seatUsers`로 좌석마다 다른 사용자를 앉힌다.
+   *  메시지는 사람 좌석의 사용자 로비로만 가고, 사람끼리 대국이면 좌석마다 자기 것만 간다. */
+  function openTable(
+    room: Room,
+    runner: EngineRunner,
+    start: EngineStart,
+    options: GuiServerOptions,
+    startedConfig: StartedGameConfig | null,
+    extra: { seatUsers?: (string | null)[]; hostOptions?: GameHostOptions } = {}
+  ): Table {
+    const seatUsers: (string | null)[] = extra.seatUsers ?? start.controllers.map((c) => (c === "human" ? room.userId : null));
+    const deliver = (viewer: number | null, payload: string): void => {
+      if (viewer !== null) {
+        const userId = seatUsers[viewer];
+        // 그 좌석 사용자가 아직 이 대국에 있을 때만 (먼저 방으로 돌아간 사람에게는 보내지 않는다)
+        if (userId) {
+          const member = roomOf(userId);
+          if (member.table === table) sendToRoom(member, payload);
+        }
+        return;
+      }
       for (const userId of new Set(seatUsers)) if (userId !== null) sendToRoom(roomOf(userId), payload);
     };
     // 재생 속도는 대국을 시작한 사용자의 설정을 장면마다 읽는다.
-    const table: Table = { host: createGameHost(runner, start, options, deliver, startedConfig, () => room.frameDelayMs), seatUsers };
-    leaveTable(room);
-    room.table = table;
+    const table: Table = { host: createGameHost(runner, start, options, deliver, startedConfig, () => room.frameDelayMs, extra.hostOptions), seatUsers };
+    for (const userId of new Set(seatUsers)) {
+      if (userId === null) continue;
+      const member = roomOf(userId);
+      leaveTable(member);
+      member.table = table;
+    }
     return table;
   }
 
-  /** 사용자가 대국을 떠난다 (그만두기, 끝난 대국에서 로비로, 새 대국). 대국을 버려 worker의 메모리도 비운다. */
+  /** 사용자가 대국을 떠난다 (그만두기, 끝난 대국에서 로비로, 새 대국). 그 대국에 남은 사람이 없으면 대국을 버려 worker의 메모리도 비운다
+   *  (사람끼리 대국은 여러 사용자가 같은 대국을 가리킨다). */
   function leaveTable(room: Room): void {
-    room.table?.host.dispose();
+    const table = room.table;
+    if (!table) return;
     room.table = null;
+    const others = [...new Set(table.seatUsers)].some((userId) => userId !== null && userId !== room.userId && rooms.get(userId)?.table === table);
+    if (!others) {
+      table.host.dispose();
+      return;
+    }
+    table.seatUsers.forEach((userId, seat) => {
+      if (userId === room.userId) table.host.setAway(seat, true);
+    });
   }
 
-  /** 대국 응답: 지금 결정을 요청받은 좌석의 사용자만 보낼 수 있다. */
-  async function respondAt(room: Room, response: DecisionResponse): Promise<void> {
+  /** 이 사용자가 대국에서 앉은 좌석 (사람끼리 대국의 메시지 받는 쪽). 사람끼리 대국이 아니면 null (모두 같은 메시지). */
+  function viewerSeatOf(room: Room, table: Table): number | null {
+    if (!table.host.multiplayer) return null;
+    const seat = table.seatUsers.indexOf(room.userId);
+    return seat >= 0 ? seat : null;
+  }
+
+  /** 친선전 자리 비움: 이 사용자가 앉은 좌석을 자리 비움으로 두거나 복귀시킨다 (친선전 대국이 아니면 GameHost가 무시한다) */
+  function markPresence(room: Room, present: boolean): void {
+    const table = room.table;
+    if (!table) return;
+    table.seatUsers.forEach((userId, seat) => {
+      if (userId === room.userId) table.host.setAway(seat, !present);
+    });
+  }
+
+  /** 대국 응답: 지금 결정을 요청받은 좌석의 사용자만 보낼 수 있다. 한 사용자가 여러 좌석을 두면(직접 만든 게임) `seat`로 고른다. */
+  async function respondAt(room: Room, input: SeatDecisionResponse & { seat?: unknown }): Promise<void> {
     const table = room.table;
     if (!table) throw new Error("GuiServer: 진행 중인 게임이 없습니다");
-    const seat = table.host.currentRequestSeat();
-    if (seat !== null && table.seatUsers[seat] !== room.userId) throw new Error("GuiServer: 이 결정은 다른 좌석의 차례입니다");
-    await table.host.respond(response);
+    const { seat: wanted, ...response } = input;
+    const pending = table.host.pendingSeats();
+    if (pending.length === 0) return table.host.respond(response as SeatDecisionResponse); // 엔진이 거절한다 (지금 요청 없음)
+    const mine = pending.filter((seat) => table.seatUsers[seat] === room.userId);
+    if (mine.length === 0) throw new Error("GuiServer: 이 결정은 다른 좌석의 차례입니다");
+    const seat = typeof wanted === "number" && mine.includes(wanted) ? wanted : mine[0]!;
+    await table.host.respond(response as SeatDecisionResponse, table.host.multiplayer ? seat : undefined);
   }
 
   if (initial) {
@@ -693,7 +996,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   }
 
   function connectMessage(room: Room): string {
-    return room.table ? room.table.host.connectMessage() : setupMessage(room);
+    return room.table ? room.table.host.connectMessage(viewerSeatOf(room, room.table)) : setupMessage(room);
   }
 
   /** 이 사용자가 진행 중인(끝나지 않았거나 장면 재생 중인) 대국에 앉아 있는지 */
@@ -703,7 +1006,8 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     return host !== undefined && (host.isPlaying() || host.phase() !== "game_end");
   }
 
-  async function startGame(room: Room, config: GuiGameConfig, fromFriendRoom = false): Promise<void> {
+  async function startGame(room: Room, config: GuiGameConfig, friend: { timeLimit: GameHostOptions["timeLimit"]; nickname: string } | null = null): Promise<void> {
+    const fromFriendRoom = friend !== null;
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
     assertNoWatchBatch(room);
@@ -728,8 +1032,9 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
         ? {
             replay: {
               // 파일 이름에는 목록이 받는 문자만 쓴다 (시드는 기록 안에 원문 그대로 남는다)
-              label: `human-${config.mode}-${replayFileNamePart(seed)}`,
+              label: `${fromFriendRoom ? "friend" : "human"}-${config.mode}-${replayFileNamePart(seed)}`,
               dir: room.replayDir,
+              ...(friend ? { seatNames: [friend.nickname] } : {}),
               onSaved: (path: string) => {
                 lobby.onReplaySaved?.(path);
                 pruneReplays(room.replayDir).catch(() => {});
@@ -746,9 +1051,9 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     } finally {
       room.starting = false;
     }
-    const table = openTable(room, opened.runner, opened.start, options, started);
+    openTable(room, opened.runner, opened.start, options, started, friend ? { hostOptions: { timeLimit: friend.timeLimit, humanNames: [friend.nickname], awayAnswerDelayMs: AWAY_ANSWER_DELAY_MS * (lobby.friendTimeScale ?? 1) } } : {});
     lobby.onGameStarted?.(started, room.userId);
-    sendToRoom(room, `data: ${table.host.connectMessage()}\n\n`);
+    sendToRoom(room, `data: ${connectMessage(room)}\n\n`);
   }
 
   /** AI 관전: 모든 좌석이 AI인 게임을 엔진(worker)에서 끝까지 진행하고, 그 리플레이를 이 사용자의 리플레이 폴더에 저장한다.
@@ -805,10 +1110,69 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   }
 
   /** 방장 한 사람 + AI만일 때 시작할 수 있다 (사람 2명 이상 대국은 B단계). 시작할 수 없으면 이유. */
+  /** 빈자리가 없고, 방에 있는 사람 모두가 다른 대국/관전 중이 아니면 시작할 수 있다. 시작할 수 없으면 이유. */
   function friendStartBlocker(friendRoom: FriendRoom): string | null {
     if (friendRoom.seats.some((st) => st.kind === "open")) return "빈자리가 있습니다. 사람이 들어오거나 AI를 앉혀 주세요";
-    if (friendRoom.seats.filter((st) => st.kind === "human").length > 1) return "사람 2명 이상이 함께 두는 대국은 다음 단계에서 지원합니다 (지금은 방장 + AI만)";
+    for (const st of friendRoom.seats) {
+      if (st.kind !== "human") continue;
+      const member = roomOf(st.userId);
+      if (inActiveGame(member) || watchBatchRunning(member)) return `${st.nickname}님이 아직 다른 대국이나 관전 중입니다`;
+    }
     return null;
+  }
+
+  /** 방의 시간 제한 옵션 → 밀리초 */
+  function timeLimitOf(friendRoom: FriendRoom): { perTurnMs: number; bankMs: number } {
+    const option = THINKING_TIME_OPTIONS.find((o) => o.id === friendRoom.thinkingTime)!;
+    const scale = lobby?.friendTimeScale ?? 1;
+    return { perTurnMs: option.perTurnSeconds * 1000 * scale, bankMs: option.bankSeconds * 1000 * scale };
+  }
+
+  /** 사람 2명 이상인 친선전 대국을 연다 (사람끼리 대국 모드). 좌석은 방 좌석 그대로이고, 사람 좌석마다 그 사람이 앉는다.
+   *  재생 속도는 방장 설정을 쓰고, 대국은 방장만 끝낼 수 있다. 리플레이 저장은 다음 단계. */
+  async function startFriendGame(hostRoom: Room, friendRoom: FriendRoom): Promise<void> {
+    if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
+    if (limits && openGameCount() >= limits.maxOpenGames) {
+      throw new Error(`지금은 서버에서 진행 중인 대국이 많습니다 (최대 ${limits.maxOpenGames}판). 잠시 뒤 다시 시도해 주세요`);
+    }
+    const seed = `friend-${Date.now()}`;
+    const spec: GameSpec = {
+      mode: friendRoom.mode,
+      seed,
+      opponents: [],
+      seats: friendRoom.seats.map((st) => (st.kind === "human" ? null : opponentSpecOf(hostRoom, st.kind === "ai" ? st.characterId : ""))),
+    };
+    const seatUsers = friendRoom.seats.map((st) => (st.kind === "human" ? st.userId : null));
+    const humanNames = friendRoom.seats.map((st) => (st.kind === "human" ? st.nickname : null));
+    const started: StartedGameConfig = { mode: friendRoom.mode, opponents: [], seed, saveReplays: true, friendRoom: true };
+    hostRoom.starting = true;
+    let opened: { runner: EngineRunner; start: EngineStart };
+    try {
+      opened = lobby.engine ? await lobby.engine.openGame(spec) : InlineEngineRunner.open(gameFromSpec(spec));
+    } finally {
+      hostRoom.starting = false;
+    }
+    const memberDirs = [...new Set(seatUsers.filter((u): u is string => u !== null))].map((u) => roomOf(u).replayDir);
+    const replay: GuiServerOptions["replay"] = {
+      label: `friend-${friendRoom.mode}-${replayFileNamePart(seed)}`,
+      dir: hostRoom.replayDir,
+      alsoDirs: memberDirs.filter((d) => d !== hostRoom.replayDir),
+      seatNames: humanNames,
+      onSaved: (path: string) => {
+        lobby!.onReplaySaved?.(path);
+        for (const dir of memberDirs) pruneReplays(dir).catch(() => {});
+      },
+    };
+    openTable(hostRoom, opened.runner, opened.start, { replay }, started, {
+      seatUsers,
+      hostOptions: { humanNames, abandonSeat: 0, timeLimit: timeLimitOf(friendRoom), awayAnswerDelayMs: AWAY_ANSWER_DELAY_MS * (lobby!.friendTimeScale ?? 1) },
+    });
+    for (const userId of new Set(seatUsers)) {
+      if (userId === null) continue;
+      const member = roomOf(userId);
+      member.notice = null;
+      sendToRoom(member, `data: ${connectMessage(member)}\n\n`);
+    }
   }
 
   function friendRoomViewFor(userId: string) {
@@ -887,8 +1251,13 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
             const blocker = friendStartBlocker(current);
             if (blocker) throw new FriendRoomError(blocker, 409);
             store.touch(current);
-            const opponents = current.seats.slice(1).map((st) => (st.kind === "ai" ? st.characterId : ""));
-            await startGame(room, { mode: current.mode, opponents, saveReplays: room.lastSetup.saveReplays }, true);
+            if (current.seats.filter((st) => st.kind === "human").length >= 2) {
+              await startFriendGame(room, current);
+            } else {
+              const opponents = current.seats.slice(1).map((st) => (st.kind === "ai" ? st.characterId : ""));
+              // 친선전은 리플레이를 항상 남긴다 (D단계)
+              await startGame(room, { mode: current.mode, opponents, saveReplays: true }, { timeLimit: timeLimitOf(current), nickname: me.nickname });
+            }
           } else {
             res.writeHead(404).end("Not found");
             return;
@@ -1031,9 +1400,23 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
    *  게임이 이미 끝났다면 "설정 바꾸기"(/setup)를 쓴다. */
   function abandonGame(room: Room): void {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
-    const host = room.table?.host;
-    if (!host) throw new Error("GuiServer: 진행 중인 대국이 없습니다");
+    const table = room.table;
+    const host = table?.host;
+    if (!table || !host) throw new Error("GuiServer: 진행 중인 대국이 없습니다");
     if (host.phase() === "game_end") throw new Error("GuiServer: 이미 끝난 대국입니다");
+    if (host.multiplayer) {
+      // 사람끼리 대국은 방장만 끝낼 수 있고, 끝내면 모두 방으로 돌아간다 (자리 비움 대행은 다음 단계)
+      if (table.seatUsers[0] !== room.userId) throw new Error("GuiServer: 사람끼리 대국은 방장만 끝낼 수 있습니다");
+      for (const userId of new Set(table.seatUsers)) {
+        if (userId === null || userId === room.userId) continue;
+        const member = roomOf(userId);
+        if (member.table !== table) continue;
+        member.table = null;
+        member.lobbyScreen = "setup";
+        member.notice = "방장이 대국을 끝냈습니다.";
+        sendToRoom(member, `data: ${setupMessage(member)}\n\n`);
+      }
+    }
     leaveTable(room);
     room.lobbyScreen = "setup";
     sendToRoom(room, `data: ${setupMessage(room)}\n\n`);
@@ -1226,9 +1609,14 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
 
   /** 서버 전체에서 열려 있는 대국 수 (끝났지만 아직 떠나지 않은 대국 포함, 만드는 중인 대국 포함) */
   function openGameCount(): number {
+    // 사람끼리 대국은 여러 사용자가 같은 대국을 가리키므로 대국 단위로 센다
+    const tables = new Set<Table>();
     let count = 0;
-    for (const room of rooms.values()) if (room.table || room.starting || watchBatchRunning(room)) count++;
-    return count;
+    for (const room of rooms.values()) {
+      if (room.table) tables.add(room.table);
+      if (room.starting || watchBatchRunning(room)) count++;
+    }
+    return count + tables.size;
   }
 
   /** 사용자 리플레이 폴더를 최근 maxReplaysPerUser개로 줄인다 (온라인 서버). */
@@ -1293,13 +1681,22 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       });
       res.write(`data: ${connectMessage(room)}\n\n`);
       room.sseClients.add(res);
-      req.on("close", () => room.sseClients.delete(res));
+      markPresence(room, true);
+      req.on("close", () => {
+        room.sseClients.delete(res);
+        if (room.sseClients.size > 0) return;
+        const table = room.table;
+        const timer = setTimeout(() => {
+          if (room.sseClients.size === 0 && room.table === table) markPresence(room, false);
+        }, lobby?.presenceGraceMs ?? PRESENCE_GRACE_MS);
+        timer.unref?.();
+      });
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/respond") {
       readBody(req, res, (body) =>
-        reply(res, () => respondAt(room, JSON.parse(body) as DecisionResponse))
+        reply(res, () => respondAt(room, JSON.parse(body) as SeatDecisionResponse & { seat?: unknown }))
       );
       return;
     }
@@ -1384,6 +1781,15 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
           room.frameDelayMs = PLAYBACK_FRAME_DELAY_MS[parsePlaybackSpeed(speed)];
         })
       );
+      return;
+    }
+
+    // 자리 비움에서 복귀 ("복귀" 버튼)
+    if (req.method === "POST" && url.pathname === "/presence") {
+      reply(res, () => {
+        if (!room.table) throw new Error("GuiServer: 진행 중인 대국이 없습니다");
+        markPresence(room, true);
+      });
       return;
     }
 

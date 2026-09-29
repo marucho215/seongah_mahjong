@@ -23,7 +23,7 @@ function handle(message: EngineRequest): unknown {
       return core.start();
     }
     case "respond":
-      return gameOf(message.gameId).respond(message.response);
+      return gameOf(message.gameId).respond(message.response, message.seat);
     case "continue":
       return gameOf(message.gameId).continueToNextHand();
     case "replay":

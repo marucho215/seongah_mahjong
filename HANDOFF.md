@@ -130,7 +130,7 @@
 - 리플레이 뷰어의 좌석 이름(`replaySeatName`)은 CustomAI 좌석이면 기록의 `customProfile.displayName`을 쓴다.
 - 진행 중에는 `room.starting`으로 동시 대국 한 판으로 센다. 파일 이름은 `watch-<모드>-<시드의 영문/숫자/._- 부분>-<시각>_game0.json`.
 
-### 친선전 방 (사람끼리 대전 A단계)
+### 친선전 방 (사람끼리 대전 A~D단계)
 
 - `src/gui/friendRooms.ts` `FriendRoomStore`: 서버/화면과 무관한 방 상태와 규칙. 코드(헷갈리는 글자를 뺀 32자 중 6자리),
   좌석 `open | human(userId, nickname) | ai(characterId)`, 방장은 seat 0, 사람당 방 하나, 방장이 나가면 닫힘, 방장만 좌석 변경
@@ -139,8 +139,39 @@
 - 서버(`createGuiServer.ts`): 입장 게이트가 있는 서버에만 저장소를 만든다. `POST /friend/create|join|leave|seat|start`. 방이 바뀌면
   방에 있는(있던) 모든 사용자의 로비에 설정 메시지를 다시 보낸다(`setup.friendRoom`: 코드, 방장 여부, 좌석과 이름, 시작 가능 여부와
   이유). 방에 있는 사람의 요청은 방 활동으로 센다. 방에 있으면 `/start`, `/watch`, `/watch/batch`는 거절한다.
-- A단계 시작 조건(`friendStartBlocker`): 빈자리가 없고 사람이 방장 하나뿐일 때. 시작은 기존 `startGame`(사람 seat 0 + AI)을 그대로
-  쓰고, `StartedGameConfig.friendRoom`으로 표시해 종료 화면에서 "방으로 돌아가기"만 보인다.
+- 시작 조건(`friendStartBlocker`): 빈자리가 없고, 방의 사람 모두 다른 대국/관전 중이 아닐 때. 사람이 방장 하나면 기존 `startGame`
+  (사람 seat 0 + AI), 둘 이상이면 `startFriendGame`(방 좌석 그대로, `GameSpec.seats` → `gameSetup.createFriendGame`,
+  `multiplayer: true`). 둘 다 `StartedGameConfig.friendRoom`으로 표시해 종료 화면에서 "방으로 돌아가기"만 보인다.
+- **사람끼리 대국 (B단계)** - 엔진 `GameStateOptions.multiplayer`(켠 대국에서만 동작, 기본 꺼짐이라 기존 대국/테스트/리플레이는 그대로):
+  - 동시 묻기 창(`GameState` `collectClaims`): 남이 내놓은 패(버림패, 리치 선언패, 창깡/북/국사 안깡의 론만 창)에 반응할 수 있는 사람
+    모두에게 `MultiDecisionRequest`(좌석별 `ClaimDecisionRequest`: 론 미리보기/대명깡/퐁/치 조합)를 한 번에 묻고 답을 `claimWindow`에
+    모은다. 그 뒤 기존 순서(offerRon → offerCallsForDiscard: 론 우선, 아타마하네, 후리텐, 4마 중재, AI 판단)를 그대로 돌리고, 사람 차례의
+    `decidePon/decideDaiminkan/decideChi`와 `offerRon`은 모아 둔 답을 쓴다. 모아 두지 못한 질문이 생기면 평소처럼 그 자리에서 묻는다.
+    론 외의 선택이나 넘기기는 론 패스(후리텐). 리치 선언패는 론 확인 전에 울기까지 함께 묻는다(울기 가능 여부는 리치 성립과 무관).
+  - 장면: 사람 좌석마다 `frameObserver`를 부르고(`view.seat`), 국 시작 때 배패 장면을 하나 만든다(첫 결정을 받지 않는 사람도 손패를 그림).
+  - `GuiSession`: `pendingSeatRequests()`, `respond(response, seat)` - 묶음은 좌석별 답을 모아 모두 오면 좌석 순서로 기록하고 한 번에 넣는다.
+    리플레이: `humanDecisions`에 claim이 좌석 순서로 남고, `meta.multiplayer: true`(켠 대국만), 재현은 남은 좌석 요청마다 다음 기록을 넣는다.
+  - 서버 `GameHost`: 사람끼리 대국이면 받는 쪽(viewer)=좌석마다 메시지를 만든다(자기 요청 또는 `waiting`, 자기 시점 장면, 사람 좌석
+    닉네임). 응답은 줄을 세워 차례로 넣는다(동시 응답 거절 없음). "다음 국"은 누구든 먼저 누르면 진행, 나머지는 조용히 무시. 그만두기는
+    방장(seat 0)만, 끝내면 모두 방으로. 한 대국을 여러 로비가 가리키므로 떠날 때 마지막 사람이 대국을 버리고, 동시 대국 수는 대국 단위로 센다.
+    사람 1명 대국은 viewer null(모두 같은 메시지)로 지금까지와 같다.
+  - 화면: `renderClaimRequest`(론/깡/퐁/치 조합/넘기기), `renderWaiting`. 자동 화료/울기 패스는 claim에도 적용된다.
+  - 테스트: `tests/multiplayer.test.ts`(고정 패 동시 묻기, 한 판 전체 + 재현), `tests/friendMultiplayer.test.ts`(두 사용자 서버, worker 풀
+    포함), `e2e/friendRoom.e2e.ts`(브라우저 두 개).
+- **시간 제한과 자리 비움 (C단계)** - 친선전 대국(혼자 + AI 포함)의 `GameHostOptions.timeLimit`(방의 시간 옵션, `timeLimitOf`):
+  - 시계는 `GameHost.scheduleClocks`가 상태를 보내기 직전(방송, 접속 메시지)에 대기 좌석마다 건다(한 수 `perTurnMs` + 그 국의 여유 `bankMs`).
+    같은 대기 요청이면(로그 위치+종류+좌석이 같음) 다시 시작하지 않는다. 국이 시작되면(hand_start) 여유를 다시 채운다. 직접 답하면 기본
+    시간을 넘긴 만큼 여유에서 뺀다. 시간이 다 되면 `substitute.ts`(요청의 view만 쓰는 중립 AI: SimpleAI 타패, 리치 안 함, 론/쯔모 선언, 울기
+    넘김, 북 빼기)가 같은 응답 경로로 대신 답한다(사람 결정으로 기록 → 리플레이 재현 그대로).
+  - 자리 비움: 연속 시간 초과 2번(`AWAY_AFTER_TIMEOUTS`), 이벤트 연결이 모두 끊긴 뒤 `PRESENCE_GRACE_MS`(10초), 사람끼리 대국에서 대국을
+    떠남. 자리 비움 좌석은 차례가 오면 `AWAY_ANSWER_DELAY_MS`(0.4초) 뒤 대행한다. 사람이 모두 자리 비움이면 국 결과도 자동 진행.
+    복귀: 다시 접속, `POST /presence`("복귀" 버튼), 직접 한 수. 메시지에 `awaySeats`와 받는 쪽 자신의 `timer`(remainingMs/perTurnMs/bankMs).
+  - 테스트 서버용 `GuiLobbyOptions.friendTimeScale`(시간 제한/대행 간격 배율), `presenceGraceMs`.
+- **리플레이와 다시 하기 (D단계)**: 친선전 대국은 항상 리플레이를 남긴다. 사람끼리 대국은 방장 폴더에 쓰고 `replay.alsoDirs`로 다른 참가자
+  폴더에도 같은 파일을 쓴다(`friend-<모드>-<시드>`). 사람 좌석에는 `meta.seats[].nickname`(표시 전용 선택 필드, 뷰어 `replaySeatName`이 쓴다).
+  게임이 끝났을 때만 저장하므로 대국 중에는 상대 손패가 보이는 리플레이가 없다. 종료 메시지 `canRestartFriend`(방장)면 "같은 멤버로 다시" →
+  `POST /friend/start`(끝난 대국은 진행 중으로 치지 않으므로 방 좌석 그대로 새 대국이 모두에게 열린다).
+  - 테스트: `tests/friendTimeAndReplay.test.ts`(대행 규칙, 혼자 + AI가 답하지 않아도 끝까지, 연결 끊김/재접속, 참가자별 리플레이, 다시 하기).
 - 화면: 허브의 "친선전" 절(`renderFriendEntry`)과 방 화면(`renderFriendRoom`, 방에 있으면 로비 대신 그린다).
 - 테스트: `tests/friendRooms.test.ts`(규칙), `tests/friendRoomServer.test.ts`(두 사용자 서버 흐름), `e2e/friendRoom.e2e.ts`.
 
@@ -332,11 +363,10 @@
 - 시간 제한은 작혼 친선전 옵션(한 수 초 + 국마다 나눠 쓰는 여유 초): 3+5 / 5+10 / 5+20(기본) / 60+0 / 300+0. 방을 만들 때 고른다.
 - 자리를 비운 사람(시간 초과, 연결 끊김)은 AI가 대신 둔다. 대행 AI는 CharacterAI(캐릭터 성향)가 아닌 중립 AI로 한다.
 - 사람 방에 AI를 자유롭게 섞을 수 있다(빈자리마다 AI 초대).
-- 단계: **A(완료)** 방 코드/대기실/좌석·AI 배정, 방장 + AI로 시작. **B** 여러 사람 대국: 사람마다 장면(현재 `frameObserver`는 첫
-  사람 좌석 하나만, `GameState.ts` emitFrame), 사용자별 메시지, 한 버림패에 여러 사람의 울기/론을 동시에 묻고 우선순위로 결정
-  (지금은 차례로 물어 응답 시간으로 정보가 샌다 - 엔진 변경이라 AI-only parity 확인 필요). **C** 시간 제한 적용, 시간 초과/연결
-  끊김 시 중립 AI 대행, 재접속하면 자리 복귀. **D** 같은 멤버로 다시 하기, 참가자별 리플레이(대국 중에는 상대 손패가 보이는
-  리플레이를 열지 않음).
+- 단계: **A(완료)** 방 코드/대기실/좌석·AI 배정, 방장 + AI로 시작. **B(완료)** 여러 사람 대국: 사람마다 장면, 사용자별 메시지,
+  남이 내놓은 패에 여러 사람의 론/울기를 동시에 묻고 기존 우선순위로 결정(`multiplayer` 옵션, §3 친선전 방). **C(완료)** 시간 제한 적용, 시간 초과/연결
+  끊김 시 중립 AI 대행, 재접속하면 자리 복귀. **D(완료)** 같은 멤버로 다시 하기, 참가자별 리플레이(대국이 끝난 뒤에만 저장).
+- 이후 후보: 대국 중 채팅/이모트, 관전자(방에 들어와 지켜보기), 방 설정 추가(국 길이, 규칙 옵션), 시간 초과 기준(연속 2번) 조정.
 
 **모바일 대응 (1.2.0 이후 완료).** 1.2.0 확정 뒤 휴대폰에서 손패가 잘려 둘 수 없었던 문제를 고쳤다: `index.html` viewport meta,
 body와 패 크기를 `dvh`(주소창 제외 높이) 기준으로, 폭 900px 이하나 높이 520px 이하에서는 조작 막대를 "메뉴" 하나로 접음(밖을 누르면

@@ -108,6 +108,20 @@ export function parseAiWatchConfig(input: unknown, resolveProfile: (id: string) 
   return { mode, seats, ...(seed !== undefined ? { seed } : {}) };
 }
 
+/** 친선전 대국: 좌석마다 사람(null) 또는 AI 프로필. 사람이 2명 이상이면 사람끼리 대국 모드(동시 묻기, 사람별 장면)로 만든다. */
+export function createFriendGame(mode: GuiGameMode, seed: string, seats: readonly (CharacterProfile | null)[]): GameState {
+  if (seats.length !== playerCountOf(mode)) throw new Error(`${mode}: 좌석은 ${playerCountOf(mode)}개여야 합니다`);
+  const humans = seats.filter((p) => p === null).length;
+  if (humans === 0) throw new Error("친선전 대국에는 사람이 한 명 이상 있어야 합니다");
+  return new GameState({
+    rules: mode === "yonma" ? MAJSOUL_YONMA_RULES : DEFAULT_SANMA_RULES,
+    seed,
+    characterProfiles: [...seats],
+    controllers: seats.map((p) => (p === null ? ("human" as const) : isCustomAiCharacterId(p.characterId) ? ("customAI" as const) : ("characterAI" as const))),
+    ...(humans >= 2 ? { multiplayer: true } : {}),
+  });
+}
+
 /** AI 관전 여러 판 연속 실행의 판 수 상한 (한 판 10~30초라 20판이면 최대 10분 정도). */
 export const MAX_WATCH_BATCH_GAMES = 20;
 

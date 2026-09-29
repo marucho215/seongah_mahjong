@@ -1,9 +1,10 @@
 import type { GameState } from "../core/GameState.js";
-import type { DecisionRequest, DecisionResponse, DiscardDecisionResponse } from "../core/decisions.js";
+import { claimResponseProblem } from "../core/decisions.js";
+import type { ClaimDecisionResponse, DiscardDecisionResponse, EngineRequest, EngineResponse, MultiDecisionRequest, SeatDecisionRequest, SeatDecisionResponse } from "../core/decisions.js";
 import type { GameEndEvent, GameEvent } from "../core/GameLog.js";
 import type { PlayerView } from "../core/playerView.js";
 
-/** AI 턴 도중의 한 장면. 엔진이 타패를 기록할 때마다 하나씩 쌓이며, 표시(재생) 전용이다. */
+/** AI 턴 도중의 한 장면. 엔진이 타패를 기록할 때마다 사람 좌석마다 하나씩 쌓이며(view.seat가 그 좌석), 표시(재생) 전용이다. */
 export interface WatchFrame {
   view: PlayerView;
   /** 행동한 좌석 (타패/울기/리치/화료 등) */
@@ -17,9 +18,14 @@ export interface WatchFrame {
  * 예외로 거절하는데, generator는 예외가 나면 즉시 종료되어 되살릴 수 없다. 즉 잘못된 클릭 한 번이
  * 진행 중인 국을 망가뜨릴 수 있으므로, 거절은 generator를 건드리기 전에 여기서 해야 한다.
  */
-function validateResponse(request: DecisionRequest, response: DecisionResponse): void {
+function validateResponse(request: SeatDecisionRequest, response: SeatDecisionResponse): void {
   const got = (response as { type?: unknown } | null)?.type;
   if (got !== request.type) throw new Error(`GuiSession: expected a "${request.type}" response, got "${String(got)}"`);
+  if (request.type === "claim") {
+    const problem = claimResponseProblem(request, response);
+    if (problem) throw new Error(`GuiSession: ${problem}`);
+    return;
+  }
   if (request.type === "discard") {
     const r = response as DiscardDecisionResponse;
     if (!request.legalTileIds.includes(r.tileId)) throw new Error(`GuiSession: tileId ${String(r.tileId)} is not a legal discard right now`);
@@ -58,8 +64,10 @@ export type GuiSessionPhase = "decision" | "hand_end" | "game_end";
  *   final result. Terminal: there is no next hand and continueToNextHand() will throw.
  */
 export class GuiSession {
-  private session: Generator<DecisionRequest, void, DecisionResponse>;
-  private current: DecisionRequest | null = null;
+  private session: Generator<EngineRequest, void, EngineResponse>;
+  private current: EngineRequest | null = null;
+  /** 여러 사람에게 동시에 묻는 요청(multi)의 좌석별 답. 모두 모이면 한꺼번에 엔진에 넣는다. */
+  private multiAnswers: (ClaimDecisionResponse | undefined)[] = [];
   private phase: GuiSessionPhase = "decision";
   private lastHandEndEvent: Extract<GameEvent, { type: "hand_end" }> | undefined;
   private gameEndEvent: GameEndEvent | undefined;
@@ -73,8 +81,8 @@ export class GuiSession {
     this.advance();
   }
 
-  private advance(response?: DecisionResponse): void {
-    let step: IteratorResult<DecisionRequest, void>;
+  private advance(response?: EngineResponse): void {
+    let step: IteratorResult<EngineRequest, void>;
     try {
       step = response === undefined ? this.session.next() : this.session.next(response);
     } catch (err) {
@@ -85,6 +93,7 @@ export class GuiSession {
       this.onHandFinished();
     } else {
       this.current = step.value;
+      this.multiAnswers = step.value.type === "multi" ? step.value.requests.map(() => undefined) : [];
       this.phase = "decision";
     }
   }
@@ -117,8 +126,21 @@ export class GuiSession {
     return this.phase;
   }
 
-  getCurrentRequest(): DecisionRequest | null {
+  /** 엔진이 지금 기다리는 요청 (한 좌석의 결정, 또는 여러 좌석에 동시에 묻는 묶음) */
+  getCurrentRequest(): EngineRequest | null {
     return this.current;
+  }
+
+  /** 아직 답하지 않은 좌석별 요청 (묶음이면 답하지 않은 claim들, 아니면 지금 요청 하나) */
+  pendingSeatRequests(): SeatDecisionRequest[] {
+    if (this.phase !== "decision" || !this.current) return [];
+    if (this.current.type !== "multi") return [this.current];
+    return this.current.requests.filter((_, i) => this.multiAnswers[i] === undefined);
+  }
+
+  /** 이 좌석이 지금 답할 요청 (없으면 null) */
+  requestForSeat(seat: number): SeatDecisionRequest | null {
+    return this.pendingSeatRequests().find((r) => r.seat === seat) ?? null;
   }
 
   /** The hand that most recently finished - defined throughout "hand_end" and "game_end"
@@ -133,14 +155,35 @@ export class GuiSession {
     return this.gameEndEvent;
   }
 
-  respond(response: DecisionResponse): void {
+  /** 결정에 답한다. `seat`는 여러 좌석에 동시에 묻는 중일 때 누가 답하는지 (한 좌석만 남았거나 묶음이 아니면 생략 가능). */
+  respond(response: SeatDecisionResponse, seat?: number): void {
     this.assertNotBroken();
     if (this.phase !== "decision" || this.current === null) {
       throw new Error(`GuiSession: no decision is currently pending (phase is "${this.phase}")`);
     }
-    validateResponse(this.current, response); // 거절되면 세션 상태는 그대로 (같은 요청이 계속 대기)
-    this.game.recordHumanDecision(this.current, response);
-    this.advance(response);
+    if (this.current.type !== "multi") {
+      if (seat !== undefined && seat !== this.current.seat) throw new Error(`GuiSession: seat ${seat} is not being asked right now`);
+      validateResponse(this.current, response); // 거절되면 세션 상태는 그대로 (같은 요청이 계속 대기)
+      this.game.recordHumanDecision(this.current, response);
+      this.advance(response as Exclude<SeatDecisionResponse, ClaimDecisionResponse>);
+      return;
+    }
+    this.respondToMulti(this.current, response, seat);
+  }
+
+  private respondToMulti(multi: MultiDecisionRequest, response: SeatDecisionResponse, seat: number | undefined): void {
+    const open = multi.requests.map((r, i) => ({ r, i })).filter(({ i }) => this.multiAnswers[i] === undefined);
+    const target = seat === undefined ? (open.length === 1 ? open[0] : undefined) : open.find(({ r }) => r.seat === seat);
+    if (!target) {
+      throw new Error(seat === undefined ? "GuiSession: several seats are being asked - say which seat answers" : `GuiSession: seat ${seat} has nothing to answer right now`);
+    }
+    validateResponse(target.r, response);
+    this.multiAnswers[target.i] = response as ClaimDecisionResponse;
+    if (this.multiAnswers.some((a) => a === undefined)) return; // 다른 사람의 답을 기다린다
+    // 모두 답했다: 좌석 순서(요청 순서)대로 기록하고 한꺼번에 엔진에 넣는다
+    const responses = this.multiAnswers as ClaimDecisionResponse[];
+    multi.requests.forEach((r, i) => this.game.recordHumanDecision(r, responses[i]!));
+    this.advance({ type: "multi", responses });
   }
 
   private assertNotBroken(): void {

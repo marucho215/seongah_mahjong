@@ -17,6 +17,13 @@
 
   <div id="action-bar"></div>
 
+  <!-- 친선전(C단계): 내 차례의 남은 시간, 내가 자리 비움일 때의 안내와 복귀 버튼 (app.js가 채운다) -->
+  <div id="turn-timer" class="hidden" role="timer" aria-live="off"></div>
+  <div id="away-banner" class="hidden" role="status">
+    <span>자리 비움 상태입니다. 중립 AI가 대신 두고 있습니다.</span>
+    <button type="button" class="away-return">복귀</button>
+  </div>
+
   <!-- 최근 공개 행동 몇 개만 작게 (AI 턴 장면 재생 중 상황 파악용) -->
   <div id="recent-feed" class="hidden"></div>
 

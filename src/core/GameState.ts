@@ -9,7 +9,8 @@ import { canAnkan, applyAnkan, canPon, applyPon, canDaiminkan, applyDaiminkan, c
 import { applyKita, canKita, canRiichiKita, type KitaAction } from "../actions/kita.js";
 import { canRiichiAnkan } from "../actions/riichiAnkan.js";
 import { canDeclareRiichi, riichiDiscardCandidates } from "../actions/riichi.js";
-import type { CallDecisionRequest, CallDecisionResponse, ChiDecisionRequest, ChiDecisionResponse, ChiOption, DecisionRequest, DecisionResponse, DiscardDecisionRequest, DiscardDecisionResponse, NineTerminalsDecisionRequest, NineTerminalsDecisionResponse, RonDecisionContext, RonDecisionRequest, RonDecisionResponse, TsumoDecisionRequest, TsumoDecisionResponse, WinPreview } from "./decisions.js";
+import { claimResponseProblem } from "./decisions.js";
+import type { CallDecisionRequest, CallDecisionResponse, ChiDecisionRequest, ChiDecisionResponse, ChiOption, ClaimDecisionRequest, SeatDecisionRequest, SeatDecisionResponse, DecisionRequest, DecisionResponse, DiscardDecisionRequest, EngineRequest, EngineResponse, MultiDecisionResponse, DiscardDecisionResponse, NineTerminalsDecisionRequest, NineTerminalsDecisionResponse, RonDecisionContext, RonDecisionRequest, RonDecisionResponse, TsumoDecisionRequest, TsumoDecisionResponse, WinPreview } from "./decisions.js";
 import { buildPlayerView, withUnseenCounts, type PlayerView, type WaitInfo } from "./playerView.js";
 import { isKokushiAnkanRon } from "../actions/kokushiAnkan.js";
 import {
@@ -99,6 +100,12 @@ export interface GameStateOptions {
   /** 표시 전용 관찰 콜백. 타패/울기/북빼기/리치/화료/유국이 로그에 기록되는 시점(론 판정 전 포함)에 사람 좌석의 PlayerView와 행동 좌석을 넘긴다.
    *  GUI가 AI 턴을 한 수씩 보여주는 데 쓰며, 게임 진행/로그/결과에는 영향이 없다. */
   frameObserver?: (view: PlayerView, actor: number, logLength: number) => void;
+  /** 사람끼리 대국 모드 (친선전 방에서 사람 2명 이상이 앉은 대국). 켜면
+   *  - 남이 내놓은 패에 반응할 수 있는 사람 모두에게 동시에 묻고(ClaimDecisionRequest 묶음), 답은 기존 순서/우선순위로 적용한다.
+   *  - 표시 장면(frameObserver)을 사람 좌석마다 만든다(view.seat가 그 좌석).
+   *  끄면(기본) 지금까지와 똑같다: 사람 좌석이 여럿이어도 한 좌석씩 차례로 묻고, 장면은 첫 사람 좌석 것 하나다.
+   *  리플레이에는 켰을 때만 meta.multiplayer로 남는다. */
+  multiplayer?: boolean;
 }
 
 /** seatWind: 1=East, 2=South, 3=West, relative to who is dealer this hand. */
@@ -118,9 +125,9 @@ export function resolveRonBeforeInterruption<T>(offerRon: () => T[], commitInter
  *  decision. Kept separate so the synchronous exported helper's signature (and its direct
  *  callers/tests) never changes. */
 export function* resolveRonBeforeInterruptionInteractive<T>(
-  offerRon: () => Generator<DecisionRequest, T[], DecisionResponse>,
+  offerRon: () => Generator<EngineRequest, T[], EngineResponse>,
   commitInterruption: () => void
-): Generator<DecisionRequest, T[], DecisionResponse> {
+): Generator<EngineRequest, T[], EngineResponse> {
   const winners = yield* offerRon();
   if (winners.length === 0) commitInterruption();
   return winners;
@@ -188,6 +195,8 @@ export class GameState {
    *  for the exact derivation/precedence. This, not characterProfiles, is the source of
    *  truth for who decides a seat's actions. */
   readonly controllers: ControllerKind[];
+  /** GameStateOptions.multiplayer */
+  readonly multiplayer: boolean;
   scores: number[];
   dealerSeat = 0;
   roundWind = 1;
@@ -229,6 +238,7 @@ export class GameState {
     this.nineTerminalsPolicy = opts.nineTerminalsPolicy ?? (() => true);
     this.kitaDecisionPolicy = opts.kitaDecisionPolicy;
     this.frameObserver = opts.frameObserver;
+    this.multiplayer = opts.multiplayer === true;
     const humanSeatSet = new Set(opts.humanSeats ?? []);
     this.controllers = allSeats(opts.rules.playerCount).map((i) => {
       const explicit = opts.controllers?.[i];
@@ -402,7 +412,7 @@ export class GameState {
    * as before, so a game with no human-controlled seat never yields at all: `playHand()`
    * below still drives it to completion in one `.next()` call, unchanged.
    */
-  private *playHandSession(): Generator<DecisionRequest, void, DecisionResponse> {
+  private *playHandSession(): Generator<EngineRequest, void, EngineResponse> {
     this.assertFullGameplaySupported();
     const wallSeed = `${this.baseSeed}::hand${this.handIndex}`;
     const { wall, hands } = this.bootstrapPhysicalHand();
@@ -559,7 +569,7 @@ export class GameState {
       seat: number,
       winningTile: Tile,
       result: FullWinResult
-    ): Generator<DecisionRequest, boolean, DecisionResponse> {
+    ): Generator<EngineRequest, boolean, EngineResponse> {
       if (!isHumanSeat(seat)) return true;
       const response = (yield {
         type: "tsumo",
@@ -584,7 +594,10 @@ export class GameState {
       isChankan: boolean,
       context: RonDecisionContext,
       restriction: "any" | "kokushi-ankan" = "any"
-    ): Generator<DecisionRequest, { player: number; result: FullWinResult }[], DecisionResponse> {
+    ): Generator<EngineRequest, { player: number; result: FullWinResult }[], EngineResponse> {
+      if (multiHuman && !(claimWindow && claimWindow.tileId === tile.id && claimWindow.fromSeat === fromSeat)) {
+        yield* collectClaimsBound(fromSeat, tile, isHoutei, isChankan, context, restriction, false);
+      }
       const order = seatsInTurnOrder(fromSeat, ronPlayerCount);
       const accepted: { player: number; result: FullWinResult }[] = [];
       for (const p of order) {
@@ -596,7 +609,11 @@ export class GameState {
         const result = tryRon(p, tile, fromSeat, isHoutei, isChankan);
         if (result && (restriction === "any" || isKokushiAnkanRon(result))) {
           let takesRon = true;
-          if (isHumanSeat(p)) {
+          const prefetchedRon = isHumanSeat(p) ? claimAnswerFor(p, fromSeat, { tileId: tile.id })?.ron : undefined;
+          if (prefetchedRon !== undefined) {
+            takesRon = prefetchedRon;
+            if (!takesRon) furiten[p]!.onMissedRonChance();
+          } else if (isHumanSeat(p)) {
             const response = (yield {
               type: "ron",
               seat: p,
@@ -986,10 +1003,105 @@ export class GameState {
         wallRemainingLive: wall.remainingLiveCount(),
       });
 
+    // 장면: 사람끼리 대국 모드면 사람 좌석마다 자기 시점의 장면을 만든다(view.seat로 구분). 아니면 지금까지처럼 첫 사람 좌석 하나.
+    const humanSeats = seats.filter((seat) => isHumanSeat(seat));
+    const frameSeats = this.multiplayer ? humanSeats : humanSeats.slice(0, 1);
     const emitFrame = (actor: number, pendingEvents = 0): void => {
       if (!this.frameObserver) return;
-      const humanSeat = this.controllers.indexOf("human");
-      if (humanSeat >= 0) this.frameObserver(buildViewFor(humanSeat), actor, this.log.length + pendingEvents);
+      for (const seat of frameSeats) this.frameObserver(buildViewFor(seat), actor, this.log.length + pendingEvents);
+    };
+
+    // --- 동시 묻기 창 (사람이 2명 이상인 대국에서만): 남이 내놓은 패 하나에 반응할 수 있는 사람 모두에게 먼저 한꺼번에
+    // 묻고(claim 묶음), 답을 claimWindow에 모아 둔다. 그 뒤 기존 순서(론 → 깡/퐁 → 치, 아타마하네, 후리텐, AI 판단)를 그대로
+    // 돌리되 사람 차례에서는 새로 묻지 않고 모아 둔 답을 쓴다 - 규칙 판정은 기존 코드가 그대로 한다. 모아 둔 답이 없는 질문이
+    // 생기면(예상과 다른 선택지) 지금까지처럼 그 자리에서 묻는다. 사람이 1명 이하인 대국에서는 창을 만들지 않아 동작이 같다.
+    const multiHuman = this.multiplayer && humanSeats.length >= 2;
+    type ClaimAnswer = { ron?: boolean; daiminkan?: boolean; pon?: boolean; chi?: string | null };
+    let claimWindow: { tileId: number; kind: TileKind; fromSeat: number; answers: Map<number, ClaimAnswer> } | null = null;
+
+    /** decideChi와 같은 방식의 치 선택지 (id = sequence를 "-"로 이은 값, 손에서 꺼낼 패 = 종류별 첫 번째) */
+    const chiOptionOf = (seat: number, candidate: ChiCandidate): ChiOption => ({
+      id: candidate.sequence.join("-"),
+      sequence: candidate.sequence,
+      consumeTileIds: candidate.consumedKinds.map((kind) => hands[seat]!.tilesOfKind(kind)[0]!.id) as [number, number],
+    });
+
+    function* collectClaims(
+      this: GameState,
+      fromSeat: number,
+      tile: Tile,
+      isHoutei: boolean,
+      isChankan: boolean,
+      context: RonDecisionContext,
+      restriction: "any" | "kokushi-ankan",
+      includeCalls: boolean
+    ): Generator<EngineRequest, void, EngineResponse> {
+      claimWindow = { tileId: tile.id, kind: tile.kind, fromSeat, answers: new Map() };
+      // 4마 울기 후보는 offerCallsForDiscard와 같은 함수로 만든다 (쿠이카에/리치 제외 등이 같게)
+      const yonmaCandidates =
+        includeCalls && this.rules.playerCount === MAJSOUL_YONMA_RULESET.playerCount
+          ? generateDiscardResponseCandidates({
+              rules: this.rules,
+              discarderSeat: fromSeat,
+              discardedKind: tile.kind,
+              concealedKindsBySeat: hands.map((candidateHand) => candidateHand.concealed.map((t) => t.kind)),
+              riichiSeats: seats.filter((seat) => hands[seat]!.riichi),
+            })
+          : null;
+      const requests: ClaimDecisionRequest[] = [];
+      for (const p of seatsInTurnOrder(fromSeat, ronPlayerCount)) {
+        if (!isHumanSeat(p)) continue;
+        // 론: offerRon이 묻는 조건과 같다 (대기, 후리텐 아님, 역 있음, 국사 안깡 제한)
+        let ron: WinPreview | undefined;
+        const winningTiles = cachedWinningTiles[p]!;
+        if (winningTiles.includes(tile.kind) && !furiten[p]!.isFuriten(winningTiles, hands[p]!.discards.map((d) => d.tile.kind))) {
+          const result = tryRon(p, tile, fromSeat, isHoutei, isChankan);
+          if (result && (restriction === "any" || isKokushiAnkanRon(result))) ron = winPreviewOf(result);
+        }
+        let daiminkan = false;
+        let pon = false;
+        const chiOptions: ChiOption[] = [];
+        if (includeCalls) {
+          if (yonmaCandidates) {
+            for (const candidate of yonmaCandidates) {
+              if (candidate.seat !== p) continue;
+              if (candidate.type === "pon") pon = true;
+              else if (candidate.type === "daiminkan" && wall.canDrawRinshan(this.rules.maxKans)) daiminkan = true;
+              else if (candidate.type === "chi") chiOptions.push(chiOptionOf(p, candidate));
+            }
+          } else if (!hands[p]!.riichi) {
+            // 산마 경로(offerCallsForDiscard 아래쪽)와 같은 조건
+            daiminkan = canDaiminkan(hands[p]!, tile.kind);
+            pon = canPon(hands[p]!, tile.kind);
+          }
+        }
+        if (!ron && !daiminkan && !pon && chiOptions.length === 0) continue;
+        requests.push({ type: "claim", seat: p, fromSeat, tile: tileToRef(tile), context, ...(ron ? { ron } : {}), daiminkan, pon, chiOptions, view: buildViewFor(p) });
+      }
+      if (requests.length === 0) return;
+      const response = (yield { type: "multi", requests }) as MultiDecisionResponse;
+      if (response?.type !== "multi" || !Array.isArray(response.responses) || response.responses.length !== requests.length) {
+        throw new Error(`GameState: expected a "multi" response with ${requests.length} claim answers`);
+      }
+      requests.forEach((request, i) => {
+        const answer = response.responses[i]!;
+        const problem = claimResponseProblem(request, answer);
+        if (problem) throw new Error(`GameState: claim answer for seat ${request.seat}: ${problem}`);
+        const stored: ClaimAnswer = {};
+        if (request.ron) stored.ron = answer.choice === "ron";
+        if (request.daiminkan) stored.daiminkan = answer.choice === "daiminkan";
+        if (request.pon) stored.pon = answer.choice === "pon";
+        if (request.chiOptions.length > 0) stored.chi = answer.choice === "chi" ? answer.chiOptionId! : null;
+        claimWindow!.answers.set(request.seat, stored);
+      });
+    }
+    const collectClaimsBound = collectClaims.bind(this);
+    /** 지금 창에서 모아 둔 이 좌석의 답 (같은 패/같은 내놓은 사람일 때만) */
+    const claimAnswerFor = (seat: number, fromSeat: number, match: { tileId?: number; kind?: TileKind }): ClaimAnswer | undefined => {
+      if (!claimWindow || claimWindow.fromSeat !== fromSeat) return undefined;
+      if (match.tileId !== undefined && claimWindow.tileId !== match.tileId) return undefined;
+      if (match.kind !== undefined && claimWindow.kind !== match.kind) return undefined;
+      return claimWindow.answers.get(seat);
     };
 
     // --- Human decision points (discard+riichi, pon, chi, daiminkan, ankan, kakan, kita, tsumo;
@@ -1004,8 +1116,10 @@ export class GameState {
       discardedKind: TileKind,
       fromPlayer: number,
       human: boolean
-    ): Generator<DecisionRequest, { called: boolean; trace: CallDecisionTrace | null }, DecisionResponse> {
+    ): Generator<EngineRequest, { called: boolean; trace: CallDecisionTrace | null }, EngineResponse> {
       if (!human) return evaluatePonFor(player, hand, discardedKind);
+      const prefetched = claimAnswerFor(player, fromPlayer, { kind: discardedKind })?.pon;
+      if (prefetched !== undefined) return { called: prefetched, trace: null };
       const response = (yield {
         type: "call_pon",
         seat: player,
@@ -1022,8 +1136,10 @@ export class GameState {
       discardedKind: TileKind,
       fromPlayer: number,
       human: boolean
-    ): Generator<DecisionRequest, { called: boolean; trace: CallDecisionTrace | null }, DecisionResponse> {
+    ): Generator<EngineRequest, { called: boolean; trace: CallDecisionTrace | null }, EngineResponse> {
       if (!human) return evaluateDaiminkanFor(player, hand, discardedKind);
+      const prefetched = claimAnswerFor(player, fromPlayer, { kind: discardedKind })?.daiminkan;
+      if (prefetched !== undefined) return { called: prefetched, trace: null };
       const response = (yield {
         type: "call_daiminkan",
         seat: player,
@@ -1040,7 +1156,7 @@ export class GameState {
       candidates: readonly ChiCandidate[],
       discardedTile: Tile,
       fromSeat: number
-    ): Generator<DecisionRequest, ChiCandidate | undefined, DecisionResponse> {
+    ): Generator<EngineRequest, ChiCandidate | undefined, EngineResponse> {
       const hand = hands[seat]!;
       const options: ChiOption[] = candidates.map((candidate) => ({
         id: candidate.sequence.join("-"),
@@ -1048,6 +1164,13 @@ export class GameState {
         // applyChi가 손에서 고르는 패와 같은 규칙 (종류별 첫 번째)
         consumeTileIds: candidate.consumedKinds.map((kind) => hand.tilesOfKind(kind)[0]!.id) as [number, number],
       }));
+      const prefetched = claimAnswerFor(seat, fromSeat, { tileId: discardedTile.id })?.chi;
+      if (prefetched === null) return undefined;
+      if (prefetched !== undefined) {
+        const index = options.findIndex((option) => option.id === prefetched);
+        if (index >= 0) return candidates[index];
+        // 모아 둔 치가 중재 결과의 선택지에 없으면(예상 밖) 아래에서 다시 묻는다
+      }
       const response = (yield {
         type: "chi",
         seat,
@@ -1072,7 +1195,7 @@ export class GameState {
       hand: Hand,
       kind: TileKind,
       human: boolean
-    ): Generator<DecisionRequest, boolean, DecisionResponse> {
+    ): Generator<EngineRequest, boolean, EngineResponse> {
       if (!human) return shouldDeclareShouminkanFor(player, hand, kind);
       const response = (yield { type: "kakan", seat: player, tileKind: kind, view: buildViewFor(player) } satisfies CallDecisionRequest) as CallDecisionResponse;
       return response.declare;
@@ -1083,7 +1206,7 @@ export class GameState {
       hand: Hand,
       kind: TileKind,
       human: boolean
-    ): Generator<DecisionRequest, boolean, DecisionResponse> {
+    ): Generator<EngineRequest, boolean, EngineResponse> {
       if (!human) return shouldDeclareAnkanFor(player, hand, kind);
       const response = (yield { type: "ankan", seat: player, tileKind: kind, view: buildViewFor(player) } satisfies CallDecisionRequest) as CallDecisionResponse;
       return response.declare;
@@ -1095,7 +1218,7 @@ export class GameState {
       kitaEnabled: boolean,
       extractedThisTurn: number,
       human: boolean
-    ): Generator<DecisionRequest, KitaAction, DecisionResponse> {
+    ): Generator<EngineRequest, KitaAction, EngineResponse> {
       if (!canKita(hand, kitaEnabled)) return "unavailable";
       if (!human) return shouldDeclareKitaFor(player, hand, extractedThisTurn) ? "kita" : "pass";
       const response = (yield { type: "kita", seat: player, tileKind: "z4", view: buildViewFor(player) } satisfies CallDecisionRequest) as CallDecisionResponse;
@@ -1104,7 +1227,7 @@ export class GameState {
 
     /** Human-only 九種九牌 choice; only ever called once eligibility (9+ distinct terminal/honor
      *  kinds on the first draw) is already established. */
-    function* decideNineTerminals(player: number, hand: Hand): Generator<DecisionRequest, boolean, DecisionResponse> {
+    function* decideNineTerminals(player: number, hand: Hand): Generator<EngineRequest, boolean, EngineResponse> {
       const response = (yield {
         type: "nine_terminals",
         seat: player,
@@ -1144,7 +1267,7 @@ export class GameState {
       wallRemainingLive: number,
       forbiddenDiscardKinds: readonly TileKind[] = [],
       drawnTileId?: number
-    ): Generator<DecisionRequest, { discardId: number; declaringRiichi: boolean }, DecisionResponse> {
+    ): Generator<EngineRequest, { discardId: number; declaringRiichi: boolean }, EngineResponse> {
       if (!human) {
         const discardId = chooseDiscardFor(player, hand, forbiddenDiscardKinds);
         const declaringRiichi = shouldDeclareRiichiFor(player, hand, discardId);
@@ -1192,11 +1315,11 @@ export class GameState {
     const offerCallsForDiscard: (
       discarderSeat: number,
       discardedTile: Tile
-    ) => Generator<DecisionRequest, DiscardResponseFlow, DecisionResponse> = (function* (
+    ) => Generator<EngineRequest, DiscardResponseFlow, EngineResponse> = (function* (
       this: GameState,
       discarderSeat: number,
       discardedTile: Tile
-    ): Generator<DecisionRequest, DiscardResponseFlow, DecisionResponse> {
+    ): Generator<EngineRequest, DiscardResponseFlow, EngineResponse> {
       if (this.rules.playerCount === MAJSOUL_YONMA_RULESET.playerCount) {
         const generated = generateDiscardResponseCandidates({
           rules: this.rules,
@@ -1388,12 +1511,13 @@ export class GameState {
       discarderSeat: number,
       discardedTile: Tile,
       isHoutei: boolean
-    ) => Generator<DecisionRequest, DiscardResponseFlow, DecisionResponse> = (function* (
+    ) => Generator<EngineRequest, DiscardResponseFlow, EngineResponse> = (function* (
       this: GameState,
       discarderSeat: number,
       discardedTile: Tile,
       isHoutei: boolean
-    ): Generator<DecisionRequest, DiscardResponseFlow, DecisionResponse> {
+    ): Generator<EngineRequest, DiscardResponseFlow, EngineResponse> {
+      if (multiHuman) yield* collectClaimsBound(discarderSeat, discardedTile, isHoutei, false, "discard", "any", !isHoutei);
       const winners = yield* offerRon(discarderSeat, discardedTile, isHoutei, false, "discard");
       const abortiveReason = postDiscardAbortiveDrawReason(
         hands,
@@ -1415,6 +1539,9 @@ export class GameState {
 
     let current = this.dealerSeat;
     let pendingRinshan = false;
+    // 사람끼리 대국 모드: 국이 시작되면 모든 사람에게 배패 장면을 먼저 준다 (첫 결정을 받지 않는 사람도 자기 손패를 그릴 수 있게).
+    // 표시 전용이며 로그/진행에는 영향이 없다. 모드가 아니면 지금까지처럼 만들지 않는다.
+    if (this.multiplayer) emitFrame(this.dealerSeat);
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
@@ -1664,6 +1791,8 @@ export class GameState {
         // where the hand could otherwise end (e.g. a daiminkan leading into an exhaustive
         // draw) without ever having been committed.
         const wasFirstGoAround = hand.discards.length === 1 && !tableInterrupted;
+        // 리치 선언 패도 론과 울기를 한 번에 묻는다 (울기 가능 여부는 리치 성립과 무관하다)
+        if (multiHuman) yield* collectClaimsBound(current, discardedTile, isHoutei, false, "riichi_discard", "any", !isHoutei);
         const ronWinners = yield* offerRon(current, discardedTile, isHoutei, false, "riichi_discard");
         const abortiveReason = postDiscardAbortiveDrawReason(
           hands,
@@ -1772,7 +1901,7 @@ export class GameState {
    * but playHand() remains the simpler call for that case.
    */
   /** 사람이 응답한 결정을 기록한다 (GUI 세션/CLI 드라이버가 검증을 통과한 응답마다 호출). 게임 진행에는 영향이 없다. */
-  recordHumanDecision(request: DecisionRequest, response: DecisionResponse): void {
+  recordHumanDecision(request: SeatDecisionRequest, response: SeatDecisionResponse): void {
     this.humanDecisionLog.push({
       handIndex: this.handIndex,
       seat: request.seat,
@@ -1782,7 +1911,7 @@ export class GameState {
     });
   }
 
-  playHandInteractive(): Generator<DecisionRequest, void, DecisionResponse> {
+  playHandInteractive(): Generator<EngineRequest, void, EngineResponse> {
     return this.playHandSession();
   }
 

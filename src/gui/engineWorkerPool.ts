@@ -5,14 +5,14 @@
 import { Worker } from "node:worker_threads";
 import { availableParallelism } from "node:os";
 import { createRequire } from "node:module";
-import type { DecisionResponse } from "../core/decisions.js";
+import type { SeatDecisionResponse } from "../core/decisions.js";
 import type { GameReplayRecord } from "../sim/replayRecorder.js";
 import type { ReplayReproduction } from "../replay/replayReproduction.js";
 import type { AiWatchSpec, EngineRunner, EngineSnapshot, EngineStart, GameSpec } from "./engineRunner.js";
 
 export type EngineRequest =
   | { id: number; op: "create"; gameId: number; spec: GameSpec }
-  | { id: number; op: "respond"; gameId: number; response: DecisionResponse }
+  | { id: number; op: "respond"; gameId: number; response: SeatDecisionResponse; seat?: number }
   | { id: number; op: "continue"; gameId: number }
   | { id: number; op: "replay"; gameId: number; label: string }
   | { id: number; op: "dispose"; gameId: number }
@@ -106,8 +106,8 @@ class WorkerEngineRunner implements EngineRunner {
     return null;
   }
 
-  respond(response: DecisionResponse): Promise<EngineSnapshot> {
-    return this.call({ op: "respond", gameId: this.gameId, response });
+  respond(response: SeatDecisionResponse, seat?: number): Promise<EngineSnapshot> {
+    return this.call({ op: "respond", gameId: this.gameId, response, ...(seat !== undefined ? { seat } : {}) });
   }
 
   continueToNextHand(): Promise<EngineSnapshot> {

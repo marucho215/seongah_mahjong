@@ -246,8 +246,11 @@ export async function runInteractiveHand(gs: GameState, io: CliIO): Promise<void
   const session = gs.playHandInteractive();
   let step = session.next();
   while (!step.done) {
-    const response = await resolveRequest(step.value, io);
-    gs.recordHumanDecision(step.value, response);
+    const request = step.value;
+    // 여러 사람에게 동시에 묻는 요청은 사람이 2명 이상인 대국에서만 나온다. CLI는 사람 한 명 전용이다.
+    if (request.type === "multi") throw new Error("CLI는 사람이 한 명인 대국만 둘 수 있습니다");
+    const response = await resolveRequest(request, io);
+    gs.recordHumanDecision(request, response);
     step = session.next(response);
   }
 }

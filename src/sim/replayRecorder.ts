@@ -35,6 +35,8 @@ export interface ReplaySeatInfo {
    *  CharacterAI 프로필 전체의 스냅샷. 리플레이 재현은 custom-ai/ 파일이 아니라 이 값만 쓰므로, 이후 CustomAI를 고치거나
    *  지워도 지난 대국은 같게 재현된다. */
   customProfile?: CharacterProfile;
+  /** 친선전에서 사람 좌석에 앉은 사람의 닉네임 (표시 전용 선택 필드, 다른 리플레이에는 없다) */
+  nickname?: string;
 }
 
 /** GameState의 controllers/characterProfiles에서 리플레이용 좌석 정보를 만든다 (사람 대국용). */
@@ -65,6 +67,8 @@ export interface GameReplayRecord {
     gameSeed: string;
     rules: RuleConfig;
     seats: ReplaySeatInfo[];
+    /** 사람끼리 대국 모드(GameStateOptions.multiplayer)로 둔 대국일 때만 true. 다른 기록에는 이 키가 없다 (Schema v2의 선택 필드). */
+    multiplayer?: true;
   };
   /** The engine's own rule-accurate event log, verbatim and in chronological order -
    *  haipai, every draw/discard/riichi/call/kan/kita/win/exhaustive-draw/hand-end event. */
@@ -83,7 +87,7 @@ export function buildGameReplayRecord(
   seats: ReplaySeatInfo[]
 ): GameReplayRecord {
   return {
-    meta: { replaySchemaVersion: 2, simulationLabel, gameIndex, gameSeed: gs.baseSeed, rules: gs.rules, seats },
+    meta: { replaySchemaVersion: 2, simulationLabel, gameIndex, gameSeed: gs.baseSeed, rules: gs.rules, seats, ...(gs.multiplayer ? { multiplayer: true as const } : {}) },
     events: gs.log,
     aiDecisions: gs.aiDecisionLog,
     ...(gs.controllers.includes("human") ? { humanDecisions: gs.humanDecisionLog } : {}),

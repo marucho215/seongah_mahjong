@@ -7,12 +7,12 @@
  * 엔진 자체(규칙, RNG, AI 판단)는 바꾸지 않는다: 대국은 같은 GameState 생성자로 만들고 같은 GuiSession으로 진행한다. */
 import type { GameState } from "../core/GameState.js";
 import type { GameEvent } from "../core/GameLog.js";
-import type { DecisionRequest, DecisionResponse } from "../core/decisions.js";
+import type { EngineRequest, SeatDecisionRequest, SeatDecisionResponse } from "../core/decisions.js";
 import type { CharacterProfile } from "../ai/characterProfile.js";
 import { getCharacterProfile } from "../ai/characterProfiles.js";
 import { buildGameReplayRecord, replaySeatsFromGame, type GameReplayRecord } from "../sim/replayRecorder.js";
 import { GuiSession, type GuiSessionPhase, type WatchFrame } from "./guiSession.js";
-import { createAiWatchGame, createGuiGameWithProfiles, type GuiGameMode } from "./gameSetup.js";
+import { createAiWatchGame, createFriendGame, createGuiGameWithProfiles, type GuiGameMode } from "./gameSetup.js";
 
 /** 상대 좌석: 등록 캐릭터는 id만 넘기고(실행하는 쪽이 같은 프로필 표에서 찾는다), CustomAI는 대국 시작 시점의 프로필 스냅샷을 넘긴다. */
 export type OpponentSpec = { characterId: string } | { profile: CharacterProfile };
@@ -21,12 +21,17 @@ export type OpponentSpec = { characterId: string } | { profile: CharacterProfile
 export interface GameSpec {
   mode: GuiGameMode;
   seed: string;
+  /** 사람 seat 0 + 상대 AI (로비 대국) */
   opponents: OpponentSpec[];
+  /** 주면 opponents 대신 좌석 전체: null = 사람, 그 밖은 AI (친선전 대국, gameSetup.createFriendGame) */
+  seats?: (OpponentSpec | null)[];
 }
 
+const profileOf = (o: OpponentSpec): CharacterProfile => ("profile" in o ? o.profile : getCharacterProfile(o.characterId));
+
 export function gameFromSpec(spec: GameSpec): GameState {
-  const profiles = spec.opponents.map((o) => ("profile" in o ? o.profile : getCharacterProfile(o.characterId)));
-  return createGuiGameWithProfiles(spec.mode, spec.seed, profiles);
+  if (spec.seats) return createFriendGame(spec.mode, spec.seed, spec.seats.map((o) => (o === null ? null : profileOf(o))));
+  return createGuiGameWithProfiles(spec.mode, spec.seed, spec.opponents.map(profileOf));
 }
 
 /** AI 관전 대국 구성 (모든 좌석이 AI, 순수 데이터). 좌석 표기는 OpponentSpec과 같다. */
@@ -51,7 +56,10 @@ type GameEndEvent = Extract<GameEvent, { type: "game_end" }>;
 /** 한 번의 진행(응답/다음 국) 뒤의 엔진 상태. newEvents는 앞 스냅샷 이후 game.log에 추가된 이벤트다. */
 export interface EngineSnapshot {
   phase: GuiSessionPhase;
-  request: DecisionRequest | null;
+  /** 엔진이 기다리는 요청 (한 좌석, 또는 여러 좌석에 동시에 묻는 묶음) */
+  request: EngineRequest | null;
+  /** 아직 답하지 않은 좌석별 요청 (묶음이면 답하지 않은 좌석들만) */
+  pending: SeatDecisionRequest[];
   frames: WatchFrame[];
   newEvents: GameEvent[];
   handEndEvent?: HandEndEvent;
@@ -65,6 +73,8 @@ export interface EngineStart {
   /** 좌석별 표시 이름 (프로필이 없는 좌석은 null) */
   characterNames: (string | null)[];
   controllers: GameState["controllers"];
+  /** 사람끼리 대국 모드 (좌석마다 따로 메시지를 보낸다) */
+  multiplayer: boolean;
   initial: EngineSnapshot;
 }
 
@@ -81,6 +91,7 @@ export class EngineCore {
     return {
       characterNames: this.game.characterProfiles.map((p) => p?.displayName ?? null),
       controllers: [...this.game.controllers],
+      multiplayer: this.game.multiplayer,
       initial: this.snapshot(),
     };
   }
@@ -94,6 +105,7 @@ export class EngineCore {
     return {
       phase,
       request: this.session.getCurrentRequest(),
+      pending: this.session.pendingSeatRequests(),
       frames: this.session.takeFrames(),
       newEvents,
       ...(handEndEvent ? { handEndEvent } : {}),
@@ -102,8 +114,8 @@ export class EngineCore {
     };
   }
 
-  respond(response: DecisionResponse): EngineSnapshot {
-    this.session.respond(response);
+  respond(response: SeatDecisionResponse, seat?: number): EngineSnapshot {
+    this.session.respond(response, seat);
     return this.snapshot();
   }
 
@@ -122,7 +134,7 @@ export interface EngineRunner {
   readonly session: GuiSession | null;
   /** 같은 스레드에서 도는 경우, 서버 밖에서 세션이 진행됐을 수 있으므로 지금 상태를 바로 읽는다. worker면 null (바깥에서 바뀌지 않는다). */
   pollSync(): EngineSnapshot | null;
-  respond(response: DecisionResponse): Promise<EngineSnapshot>;
+  respond(response: SeatDecisionResponse, seat?: number): Promise<EngineSnapshot>;
   continueToNextHand(): Promise<EngineSnapshot>;
   replayRecord(label: string): Promise<GameReplayRecord>;
   /** 대국을 버린다 (그만두기, 방치 정리). 이후 호출은 실패한다. */
@@ -149,8 +161,8 @@ export class InlineEngineRunner implements EngineRunner {
     return this.core.snapshot();
   }
 
-  async respond(response: DecisionResponse): Promise<EngineSnapshot> {
-    return this.core.respond(response);
+  async respond(response: SeatDecisionResponse, seat?: number): Promise<EngineSnapshot> {
+    return this.core.respond(response, seat);
   }
 
   async continueToNextHand(): Promise<EngineSnapshot> {

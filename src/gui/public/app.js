@@ -160,6 +160,8 @@ let currentCharacterNames = [];
 
 function displayNameForSeat(seat, mySeat) {
   const name = currentCharacterNames[seat];
+  // 친선전: 자리 비움인 다른 사람은 이름 옆에 표시한다 (내 자리 비움은 화면 위 안내로 보여 준다)
+  if (name && seat !== mySeat && currentAwaySeats.has(seat)) return `${name} (자리 비움)`;
   if (name) return name;
   if (seat === mySeat) return "플레이어";
   return `Seat ${seat}`;
@@ -626,7 +628,7 @@ function showWaits(zone, label, waits, furiten, status) {
 /** Whose turn it currently is, from what the request itself says: my own actions are my turn;
  *  a ron/pon/daiminkan offer is on the seat that just discarded. */
 function turnSeatOf(request) {
-  if (request.type === "ron" || request.type === "chi") return request.fromSeat;
+  if (request.type === "ron" || request.type === "chi" || request.type === "claim") return request.fromSeat;
   if ((request.type === "call_pon" || request.type === "call_daiminkan") && request.fromPlayer !== undefined) return request.fromPlayer;
   return request.view.seat;
 }
@@ -821,6 +823,69 @@ function renderTsumoRequest(request) {
   const btn = addActionButton("쯔모", () => sendResponse({ type: "tsumo", declare: true }));
   btn.classList.add("ron-button");
   addActionButton("넘기기", () => sendResponse({ type: "tsumo", declare: false }), "cancel");
+}
+
+/** 사람끼리 대국: 남이 내놓은 패 하나에 대한 내 선택지(론/깡/퐁/치 조합)를 한 번에 보여 준다. 선택지와 점수는 엔진이 준 그대로다.
+ *  다른 사람에게도 동시에 묻고 있으며, 결과는 우선순위(론 > 깡·퐁 > 치)로 정해진다. */
+function renderClaimRequest(request) {
+  renderTable(request.view, turnSeatOf(request), { actorSeat: null, latestDiscardSeat: request.fromSeat });
+  renderMySeat(request.view, {});
+
+  clearActionBar();
+  const bar = document.getElementById("action-bar");
+  const tileName = koreanTileLabel(request.tile.kind, request.tile.red);
+  const from = displayNameForSeat(request.fromSeat, request.view.seat);
+  const info = el("span", "ron-preview");
+  info.appendChild(tileImg(request.tile, { small: true }));
+  const text = el("span");
+  let line = `${from}의 ${RON_CONTEXT_KO[request.context] ?? request.context} ${tileName}`;
+  if (request.ron) {
+    const p = request.ron;
+    const score = p.yakumanUnits > 0 ? (p.yakumanUnits === 1 ? "역만" : `역만 x${p.yakumanUnits}`) : `${p.han}판 ${p.fu}부`;
+    line += ` - 론 가능! ${score} ${formatPoints(p.totalPoints)}점 (` + p.yaku.map((y) => `${translateYaku(y.name)} ${y.han}`).join(", ") + ")";
+  }
+  text.textContent = line;
+  info.appendChild(text);
+  bar.appendChild(info);
+
+  if (request.ron) addActionButton("론", () => sendResponse({ type: "claim", choice: "ron" })).classList.add("ron-button");
+  if (request.daiminkan) addActionButton("깡", () => sendResponse({ type: "claim", choice: "daiminkan" }));
+  if (request.pon) addActionButton("퐁", () => sendResponse({ type: "claim", choice: "pon" }));
+  for (const option of request.chiOptions) {
+    const btn = el("button", "chi-option");
+    let calledMarked = false;
+    for (const kind of option.sequence) {
+      const isCalled = !calledMarked && kind === request.tile.kind;
+      if (isCalled) calledMarked = true;
+      const img = tileImg(isCalled ? request.tile : { kind }, { small: true });
+      if (isCalled) img.classList.add("called-tile");
+      btn.appendChild(img);
+    }
+    btn.title = "치: " + option.sequence.map((kind) => koreanTileLabel(kind)).join(" ");
+    btn.addEventListener("click", () => {
+      AudioManager.play("ui.confirm");
+      sendResponse({ type: "claim", choice: "chi", chiOptionId: option.id });
+    });
+    bar.appendChild(btn);
+  }
+  const pass = addActionButton("넘기기", () => sendResponse({ type: "claim", choice: "pass" }), "cancel");
+  if (request.ron) pass.title = "론을 넘기면 후리텐이 됩니다";
+}
+
+/** 사람끼리 대국에서 지금 내가 할 일이 없을 때: 작탁을 내 시점으로 그리고 기다린다 (다른 사람의 차례이거나, 내가 이미 고른 뒤). */
+function renderWaiting(msg) {
+  if (msg.view) {
+    lastKnownMySeat = msg.view.seat;
+    renderTable(msg.view, null);
+    renderMySeat(msg.view, {});
+  }
+  clearActionBar();
+  const label = el("span", "section-label");
+  const others = (msg.waitingFor || []).filter((seat) => seat !== lastKnownMySeat).map((seat) => displayNameForSeat(seat, lastKnownMySeat));
+  label.textContent = others.length > 0 ? `${others.join(", ")}의 선택을 기다리는 중...` : "다른 사람을 기다리는 중...";
+  document.getElementById("action-bar").appendChild(label);
+  placeActionBar();
+  awaitingServer = true; // 새 요청이 오기 전에는 응답을 보내지 않는다
 }
 
 function renderRonRequest(request) {
@@ -1300,7 +1365,35 @@ function renderFinalResultStep() {
       fetch("/setup", { method: "POST" });
     });
     actions.appendChild(back);
+    if (msg.canRestartFriend) {
+      // 방장: 방 좌석 그대로 바로 다음 대국 (참가자들은 지금 화면에서 곧바로 새 대국으로 넘어간다)
+      const again = el("button", "secondary-button");
+      again.textContent = "같은 멤버로 다시";
+      again.disabled = pending;
+      again.addEventListener("click", async () => {
+        AudioManager.play("ui.confirm");
+        gameEndState.pending = true;
+        gameEndState.error = "";
+        renderFinalResultStep();
+        const res = await fetch("/friend/start", { method: "POST", body: "{}" });
+        if (!res.ok) {
+          gameEndState.pending = false;
+          gameEndState.error = await res.text();
+          renderFinalResultStep();
+        }
+      });
+      actions.prepend(again);
+    } else {
+      const note = el("p", "final-seed");
+      note.textContent = "방장이 같은 멤버로 다시 시작하면 바로 다음 대국으로 넘어갑니다.";
+      panel.appendChild(note);
+    }
     panel.appendChild(actions);
+    if (error) {
+      const err = el("p", "final-error", { role: "alert" });
+      err.textContent = error;
+      panel.appendChild(err);
+    }
   } else if (msg.canStartNewGame && msg.gameConfig) {
     const cfg = msg.gameConfig;
     const actions = el("div", "final-actions");
@@ -1415,6 +1508,10 @@ const AUTO_LABEL = { tsumogiri: "자동 쯔모기리", passCalls: "울기 자동
 let pendingRequest = null;
 
 function autoResponseFor(request) {
+  if (request.type === "claim") {
+    if (request.ron) return autoPlay.autoWin ? { key: "autoWin", response: { type: "claim", choice: "ron" } } : null;
+    return autoPlay.passCalls ? { key: "passCalls", response: { type: "claim", choice: "pass" } } : null;
+  }
   if (autoPlay.autoWin && (request.type === "ron" || request.type === "tsumo")) {
     return { key: "autoWin", response: { type: request.type, declare: true } };
   }
@@ -2637,6 +2734,48 @@ function clearRecentFeed() {
   box.classList.add("hidden");
 }
 
+// --- 친선전 시간 제한과 자리 비움 (C단계): 서버가 보낸 남은 시간과 자리 비움 좌석을 보여 준다. 시계는 서버가 재고, 화면은 표시만 한다. ---
+
+let currentAwaySeats = new Set();
+let timerTick = null;
+
+function updatePresence(msg) {
+  currentAwaySeats = new Set(msg.awaySeats || []);
+  const mySeat = msg.request?.view?.seat ?? msg.view?.seat ?? lastKnownMySeat;
+  document.getElementById("away-banner").classList.toggle("hidden", !currentAwaySeats.has(mySeat) || msg.type === "game_end");
+  // 남은 시간: 내 결정 요청에만 있다
+  const box = document.getElementById("turn-timer");
+  if (timerTick) clearInterval(timerTick);
+  timerTick = null;
+  if (msg.type !== "decision" || !msg.timer) {
+    box.classList.add("hidden");
+    return;
+  }
+  const startedAt = performance.now();
+  const { remainingMs, perTurnMs } = msg.timer;
+  const draw = () => {
+    const elapsed = performance.now() - startedAt;
+    const left = Math.max(0, remainingMs - elapsed);
+    const turn = Math.max(0, perTurnMs - elapsed);
+    const bank = Math.max(0, left - turn);
+    box.textContent = turn > 0 ? `${Math.ceil(turn / 1000)}초${bank > 0 ? ` + 여유 ${Math.ceil(bank / 1000)}초` : ""}` : `여유 ${Math.ceil(bank / 1000)}초`;
+    box.classList.toggle("is-bank", turn <= 0);
+    box.classList.toggle("is-low", left <= 3000);
+    if (left <= 0 && timerTick) {
+      clearInterval(timerTick);
+      timerTick = null;
+    }
+  };
+  box.classList.remove("hidden");
+  draw();
+  timerTick = setInterval(draw, 200);
+}
+
+document.querySelector("#away-banner .away-return").addEventListener("click", async () => {
+  AudioManager.play("ui.confirm");
+  await fetch("/presence", { method: "POST" });
+});
+
 function handleMessageBody(msg) {
   if (msg.type === "watch_batch") {
     if (setupState) {
@@ -2654,6 +2793,7 @@ function handleMessageBody(msg) {
   hideSetup();
   pendingRequest = null; // decision 메시지면 아래에서 다시 채운다
   currentCharacterNames = msg.characterNames ?? [];
+  updatePresence(msg);
   if (msg.type === "hand_end" || msg.type === "game_end") clearRecentFeed();
   if (msg.type === "watch") {
     // AI 턴 진행 장면: 판을 그리되 행동창은 비운다 (아직 내가 할 일이 없다)
@@ -2686,6 +2826,10 @@ function handleMessageBody(msg) {
     return;
   }
   document.getElementById("hand-end-overlay").classList.add("hidden");
+  if (msg.type === "waiting") {
+    renderWaiting(msg);
+    return;
+  }
   const request = msg.request;
   pendingRequest = request;
   lastKnownMySeat = request.view.seat;
@@ -2693,6 +2837,7 @@ function handleMessageBody(msg) {
   else if (request.type === "ron") renderRonRequest(request);
   else if (request.type === "nine_terminals") renderNineTerminalsRequest(request);
   else if (request.type === "chi") renderChiRequest(request);
+  else if (request.type === "claim") renderClaimRequest(request);
   else if (request.type === "tsumo") renderTsumoRequest(request);
   else renderCallRequest(request);
   placeActionBar();

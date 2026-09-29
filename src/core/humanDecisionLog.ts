@@ -1,4 +1,4 @@
-import type { DecisionRequest, DecisionResponse } from "./decisions.js";
+import type { SeatDecisionRequest, SeatDecisionResponse } from "./decisions.js";
 
 /**
  * 사람이 내린 결정 한 건의 기록 (리플레이의 `humanDecisions`). AI의 `aiDecisions`와 대칭이지만 별도 배열이다.
@@ -10,21 +10,33 @@ export interface HumanDecisionEntry {
   seat: number;
   /** 결정이 내려진 시점의 events 길이. events[atEventIndex]가 이 결정의 결과로 처음 기록되는 이벤트다. */
   atEventIndex: number;
-  type: DecisionRequest["type"];
+  type: SeatDecisionRequest["type"];
   /** 종류별 요약 (예: discard -> { tile, tileId, riichi }, chi -> { optionId, sequence }, ron/tsumo -> { declare, ... }) */
   choice: Record<string, unknown>;
 }
 
 /** 요청과 응답을 리플레이용 요약으로 바꾼다. 요청 안의 view(숨은 정보 포함 가능)는 그대로 복사하지 않는다. */
-export function summarizeHumanDecision(request: DecisionRequest, response: DecisionResponse): Record<string, unknown> {
+export function summarizeHumanDecision(request: SeatDecisionRequest, response: SeatDecisionResponse): Record<string, unknown> {
   switch (request.type) {
+    case "claim": {
+      // 여러 사람에게 동시에 물은 선택 (사람 2명 이상 대국): 무엇을 골랐는지와 어떤 선택지가 있었는지
+      const r = response as Extract<SeatDecisionResponse, { type: "claim" }>;
+      return {
+        choice: r.choice,
+        ...(r.choice === "chi" ? { chiOptionId: r.chiOptionId } : {}),
+        fromSeat: request.fromSeat,
+        tile: request.tile.kind,
+        context: request.context,
+        offered: [...(request.ron ? ["ron"] : []), ...(request.daiminkan ? ["daiminkan"] : []), ...(request.pon ? ["pon"] : []), ...request.chiOptions.map((o) => `chi:${o.id}`)],
+      };
+    }
     case "discard": {
-      const r = response as Extract<DecisionResponse, { type: "discard" }>;
+      const r = response as Extract<SeatDecisionResponse, { type: "discard" }>;
       const tile = request.view.concealedTiles.find((t) => t.id === r.tileId);
       return { tileId: r.tileId, tile: tile?.kind, riichi: r.declareRiichi };
     }
     case "chi": {
-      const r = response as Extract<DecisionResponse, { type: "chi" }>;
+      const r = response as Extract<SeatDecisionResponse, { type: "chi" }>;
       const option = request.options.find((o) => o.id === r.optionId);
       return {
         declare: r.optionId !== null,
@@ -35,20 +47,20 @@ export function summarizeHumanDecision(request: DecisionRequest, response: Decis
       };
     }
     case "ron": {
-      const r = response as Extract<DecisionResponse, { type: "ron" }>;
+      const r = response as Extract<SeatDecisionResponse, { type: "ron" }>;
       return { declare: r.declare, fromSeat: request.fromSeat, winningTile: request.winningTile.kind, context: request.context };
     }
     case "tsumo": {
-      const r = response as Extract<DecisionResponse, { type: "tsumo" }>;
+      const r = response as Extract<SeatDecisionResponse, { type: "tsumo" }>;
       return { declare: r.declare, winningTile: request.winningTile.kind };
     }
     case "nine_terminals": {
-      const r = response as Extract<DecisionResponse, { type: "nine_terminals" }>;
+      const r = response as Extract<SeatDecisionResponse, { type: "nine_terminals" }>;
       return { declare: r.declare, distinctTerminalKinds: request.distinctTerminalKinds };
     }
     default: {
       // call_pon / call_daiminkan / ankan / kakan / kita
-      const r = response as Extract<DecisionResponse, { declare: boolean }>;
+      const r = response as Extract<SeatDecisionResponse, { declare: boolean }>;
       return { declare: r.declare, tile: request.tileKind, ...(request.fromPlayer !== undefined ? { fromSeat: request.fromPlayer } : {}) };
     }
   }

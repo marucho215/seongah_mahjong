@@ -1573,3 +1573,47 @@ div.setup-seat { cursor: default; }
 }
 .friend-button:hover:not(:disabled) { border-color: var(--setup-accent); }
 .friend-button:disabled { opacity: 0.55; cursor: default; }
+
+/* --- 친선전 시간 제한과 자리 비움 (C단계) --- */
+#turn-timer {
+  /* 행동 막대(#action-bar, 손패 위) 바로 위: 결정하는 곳 가까이, 오른쪽 위 조작 막대와 겹치지 않게 */
+  position: fixed;
+  bottom: calc(var(--tile-h) + 124px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(10, 30, 16, 0.88);
+  color: #f0f0f0;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+#turn-timer.is-bank { color: #ffd54a; }
+#turn-timer.is-low { color: #ff8a80; }
+#away-banner {
+  position: fixed;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(120, 30, 30, 0.92);
+  color: #fff;
+  font-size: 14px;
+}
+#away-banner button {
+  font: inherit;
+  font-weight: 700;
+  padding: 4px 14px;
+  border-radius: 6px;
+  border: none;
+  background: #ffd54a;
+  color: #1b1b1b;
+  cursor: pointer;
+}
