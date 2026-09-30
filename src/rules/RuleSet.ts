@@ -11,8 +11,6 @@ export interface RuleSet {
 
   readonly scores: {
     readonly starting: number;
-    /** Baseline subtracted when converting final raw points to game-result points. */
-    readonly return: number;
     /** Minimum leading score used by all-last, extension, and automatic dealer-end rules. */
     readonly target: number;
   };
@@ -50,7 +48,6 @@ export const MAJSOUL_SANMA_RULESET = {
   playerCount: 3,
   scores: {
     starting: 35000,
-    return: 35000,
     target: 40000,
   },
   tiles: {
@@ -83,7 +80,6 @@ export const MAJSOUL_YONMA_RULESET = {
   playerCount: 4,
   scores: {
     starting: 25000,
-    return: 25000,
     target: 30000,
   },
   tiles: {

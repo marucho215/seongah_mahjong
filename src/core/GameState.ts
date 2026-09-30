@@ -137,8 +137,6 @@ export interface FinalStanding {
   player: number;
   rawScore: number;
   placement: number; // 1 through rules.playerCount
-  uma: number; // placement bonus in game-score units (e.g. +15, not +15000)
-  points: number; // (rawScore - returnScore) / 1000 + uma, in "score units" (not raw points)
 }
 
 export interface PhysicalHandBootstrap {
@@ -377,8 +375,7 @@ export class GameState {
     return event;
   }
 
-  /** Final ranked standings: raw score is untouched (kept for the conservation invariant),
-   *  `points` applies the return-score baseline and uma placement bonus for display/ranking. */
+  /** Final ranked standings by raw score (ties broken by initial seat order). Scores are untouched. */
   computeFinalStandings(): FinalStanding[] {
     this.assertFullGameplaySupported();
     const order = allSeats(this.rules.playerCount).sort(
@@ -388,8 +385,6 @@ export class GameState {
       player,
       rawScore: this.scores[player]!,
       placement: i + 1,
-      uma: this.rules.uma[i]! / 1000,
-      points: (this.scores[player]! - this.rules.returnScore) / 1000 + this.rules.uma[i]! / 1000,
     }));
   }
 

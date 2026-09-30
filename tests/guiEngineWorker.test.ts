@@ -90,7 +90,13 @@ describe("엔진 worker 풀 (engineWorkerPool)", () => {
     const a = await playThrough(inline.baseUrl, config);
     const b = await playThrough(worker.baseUrl, config);
     expect(b.length).toBe(a.length);
-    expect(b).toEqual(a);
+    // gameId는 서버 프로세스 안의 대국 번호라 두 서버에서 다르다 - 한 대국 안에서 하나로 같은지만 보고 나머지를 비교한다
+    const withoutGameId = (messages: any[]) => {
+      const ids = new Set(messages.filter((m) => "gameId" in m).map((m) => m.gameId));
+      expect(ids.size).toBe(1);
+      return messages.map(({ gameId: _gameId, ...rest }) => rest);
+    };
+    expect(withoutGameId(b)).toEqual(withoutGameId(a));
     expect(a.at(-1).type).toBe("game_end");
     // worker 대국은 서버 스레드에 세션이 없다
     expect(inline.handle.getSession()).not.toBeNull();

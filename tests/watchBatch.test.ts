@@ -26,7 +26,7 @@ function fakeRecord(events: unknown[], standings: [number, number, number][]): G
     },
     events: events as GameReplayRecord["events"],
     aiDecisions: [],
-    finalStandings: standings.map(([player, placement, rawScore]) => ({ player, placement, rawScore, uma: 0, points: (rawScore - 40000) / 1000 })),
+    finalStandings: standings.map(([player, placement, rawScore]) => ({ player, placement, rawScore })),
   };
 }
 
@@ -60,12 +60,11 @@ describe("관전 통계 (watchStats)", () => {
     ]);
   });
 
-  it("좌석별 합계: 순위 분포, 평균 순위/1위율/점수/pt, 국당 화료·방총·리치 비율", () => {
+  it("좌석별 합계: 순위 분포, 평균 순위/1위율/점수, 국당 화료·방총·리치 비율", () => {
     const g1 = summarizeWatchGame(fakeRecord([{ type: "hand_start" }, { type: "win", player: 0, ronFrom: 1, isTsumo: false }], [[0, 1, 50000], [1, 3, 25000], [2, 2, 30000]]), 0);
     const g2 = summarizeWatchGame(fakeRecord([{ type: "hand_start" }, { type: "hand_start" }, { type: "riichi", player: 0 }], [[0, 2, 40000], [1, 1, 45000], [2, 3, 20000]]), 1);
     const [s0, s1] = aggregateWatchStats([g1, g2], 3);
     expect(s0).toMatchObject({ seat: 0, characterId: "a", games: 2, placementCounts: [1, 1, 0], averagePlacement: 1.5, firstRate: 0.5, averageRawScore: 45000, hands: 3 });
-    expect(s0!.averagePoints).toBeCloseTo(5);
     expect(s0!.winRate).toBeCloseTo(1 / 3);
     expect(s0!.riichiRate).toBeCloseTo(1 / 3);
     expect(s1!.dealInRate).toBeCloseTo(1 / 3);
@@ -179,7 +178,6 @@ describe("로비 여러 판 관전 (/watch/batch)", () => {
       0
     );
     expect(done.games[0].placements).toEqual(single.seats.map((s) => s.placement));
-    expect(done.games[0].points).toEqual(single.seats.map((s) => s.points));
 
     // 결과를 지우면 로비에서 사라진다 (리플레이 파일은 남는다)
     expect((await post("/watch/batch/clear")).status).toBe(204);

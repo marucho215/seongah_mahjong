@@ -847,8 +847,7 @@ body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 .final-standings .col-rank { width: 3.5em; }
-.final-standings .col-score,
-.final-standings .col-pt { text-align: right; }
+.final-standings .col-score { text-align: right; }
 .final-standings tr.is-me td { font-weight: 700; }
 .final-standings tr.is-me .col-rank { color: #ffd54a; }
 .standing-badge {

@@ -49,13 +49,8 @@ export interface RuleConfig {
   tsumoSplitEven: boolean;
 
   startingScore: number;
-  /** "Return score" (oka baseline): final placement points are (finalScore - returnScore) / 1000 + uma. */
-  returnScore: number;
   /** Score threshold used only for all-last, extension, and automatic dealer-end decisions. */
   targetScore: number;
-  /** Placement bonus/penalty in raw points, applied at game end in finishing-place order.
-   *  Does not mutate mid-game scores - see GameState.computeFinalStandings(). */
-  uma: number[];
 
   gameLength: GameLength;
 
@@ -128,9 +123,7 @@ export const DEFAULT_SANMA_RULES: RuleConfig = {
   kuikae: false,
   tsumoSplitEven: false,
   startingScore: MAJSOUL_SANMA_RULESET.scores.starting,
-  returnScore: MAJSOUL_SANMA_RULESET.scores.return,
   targetScore: MAJSOUL_SANMA_RULESET.scores.target,
-  uma: [15000, 0, -15000],
   gameLength: MAJSOUL_SANMA_RULESET.rounds.normalGameLength,
   renchanOnDealerWin: true,
   renchanOnDealerTenpaiDraw: true,
@@ -166,9 +159,7 @@ export const MAJSOUL_YONMA_RULES: RuleConfig = {
   kuikae: true,
   tsumoSplitEven: false,
   startingScore: MAJSOUL_YONMA_RULESET.scores.starting,
-  returnScore: MAJSOUL_YONMA_RULESET.scores.return,
   targetScore: MAJSOUL_YONMA_RULESET.scores.target,
-  uma: [15000, 5000, -5000, -15000],
   gameLength: MAJSOUL_YONMA_RULESET.rounds.normalGameLength,
   renchanOnDealerWin: true,
   renchanOnDealerTenpaiDraw: true,
@@ -194,6 +185,5 @@ export function cloneRuleConfig(rules: RuleConfig): RuleConfig {
   return {
     ...rules,
     akaDoraCount: { ...rules.akaDoraCount },
-    uma: [...rules.uma],
   };
 }

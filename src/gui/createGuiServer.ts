@@ -178,6 +178,9 @@ const AWAY_AFTER_TIMEOUTS = 2;
 /** 자리 비움 좌석을 대신 둘 때 기다리는 시간 (화면이 바뀌는 것을 볼 수 있게) */
 const AWAY_ANSWER_DELAY_MS = 400;
 
+/** 대국마다 새 번호. 메시지의 `gameId`로 보내 클라이언트가 새 대국을 알아채게 한다 (효과음 seq가 새 대국에서 1부터 다시 매겨지므로). */
+let nextGameId = 1;
+
 /** `startedConfig`: 시작 화면이 있는 서버에서 시작한 대국이면 그 구성. 있으면 종료 화면에 새 대국/다시 하기 버튼이 나온다. */
 /** `frameDelayMs`: 재생 속도 설정. 장면마다 새로 읽는다 (재생 중에 바꾸면 다음 장면부터 적용). */
 function createGameHost(
@@ -190,6 +193,7 @@ function createGameHost(
   hostOptions: GameHostOptions = {}
 ): GameHost {
   const multiplayer = start.multiplayer;
+  const gameId = nextGameId++;
   /** 메시지 받는 쪽들: 사람끼리 대국이면 사람 좌석마다, 아니면 null 하나 (모두 같은 메시지) */
   const viewers: (number | null)[] = multiplayer ? start.controllers.flatMap((c, seat) => (c === "human" ? [seat] : [])) : [null];
   const keyOf = (viewer: number | null): number => viewer ?? -1;
@@ -382,14 +386,15 @@ function createGameHost(
   /** 최근 행동 목록을 만들 때 어디까지 읽었는지 (로그 인덱스) */
   let actionLogIndex = log.length;
 
-  function currentStateMessage(viewer: number | null, extra: { cues: AudioCue[]; cueBase?: number }): string {
+  function currentStateMessage(viewer: number | null, cueFields: { cues: AudioCue[]; cueBase?: number }): string {
+    const extra = { gameId, ...cueFields };
     const key = keyOf(viewer);
     const phase = snapshot.phase;
     const canAbandon = canAbandonFor(viewer);
     // 종료 화면 뒤에 그릴 작탁: 마지막 장면, 없으면 마지막 결정 요청의 view (그 좌석 view라 숨은 정보가 없다)
     const view = lastFrameView.get(key) ?? lastRequestView.get(key);
     if (phase === "game_end") {
-      // 순위/우마는 엔진의 computeFinalStandings() 결과를 그대로 보낸다 (GUI가 따로 정렬하지 않는다).
+      // 순위는 엔진의 computeFinalStandings() 결과를 그대로 보낸다 (GUI가 따로 정렬하지 않는다).
       return JSON.stringify({
         type: "game_end",
         event: snapshot.gameEndEvent,
@@ -465,7 +470,7 @@ function createGameHost(
     for (const viewer of viewers) {
       const frame = viewer === null ? moment[0]! : moment.find((f) => f.view.seat === viewer);
       if (!frame) continue;
-      out.set(keyOf(viewer), JSON.stringify({ type: "watch", view: frame.view, actor, latestDiscardSeat, actions, characterNames, canAbandon: canAbandonFor(viewer), ...(timeLimit ? { awaySeats: [...away].sort() } : {}), cues }));
+      out.set(keyOf(viewer), JSON.stringify({ type: "watch", view: frame.view, actor, latestDiscardSeat, actions, characterNames, canAbandon: canAbandonFor(viewer), ...(timeLimit ? { awaySeats: [...away].sort() } : {}), gameId, cues }));
     }
     return out;
   }
@@ -1301,7 +1306,6 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
         seed: g.seed,
         hands: g.hands,
         placements: g.seats.map((st) => st.placement),
-        points: g.seats.map((st) => st.points),
         ...(g.replayFile ? { replayFile: g.replayFile } : {}),
       })),
       stats: aggregateWatchStats(batch.results, batch.playerCount),

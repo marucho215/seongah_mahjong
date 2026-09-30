@@ -82,6 +82,7 @@ describe("GUI 스모크", () => {
     await page.reload();
     await page.getByText("최종 결과 보기").click();
     expect(await page.locator(".final-standings tbody tr").count()).toBe(4);
+    expect(await page.locator(".final-standings thead th").allTextContents()).toEqual(["순위", "이름", "점수"]); // pt 증감은 보이지 않는다
     expect(await page.locator("#zone-bottom .hand img").count()).toBeGreaterThan(0); // 새로고침 뒤에도 작탁이 비지 않는다
 
     await page.getByText("설정 바꾸기").click();

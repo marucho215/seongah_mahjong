@@ -122,7 +122,7 @@
   `writeGameReplay`는 경로 문자가 섞인 라벨을 거절한다(`tests/replayFileName.test.ts`).
 - 여러 판 연속 관전(판 수 2~20): `POST /watch/batch {mode, seats, seed?, games, saveReplays}`(`parseAiWatchBatchConfig`)는 바로 끝나고,
   `Room.watchBatch`가 판을 하나씩 엔진에서 돌린다(판 i의 시드 `<시드>-i`). 판이 끝날 때마다 `summarizeWatchGame`(`src/sim/watchStats.ts`:
-  순위/점수/pt, 화료, 방총(더블 론도 국당 한 번), 리치, 국 수)만 남기고, 리플레이 파일은 `saveReplays`일 때만 쓴다. 진행 상황은 SSE
+  순위/점수, 화료, 방총(더블 론도 국당 한 번), 리치, 국 수)만 남기고, 리플레이 파일은 `saveReplays`일 때만 쓴다. 진행 상황은 SSE
   `{type:"watch_batch"}`로 보내고 설정 메시지(`setup.watchBatch`)에도 실려 새로고침해도 이어진다. 좌석별 통계는
   `aggregateWatchStats`. 취소(`/watch/batch/cancel`)는 도는 판이 끝난 뒤 멈추고(`cancelled`, 끝난 판 결과 유지), 결과 지우기는
   `/watch/batch/clear`(파일은 남긴다). 도는 동안 이 사용자의 새 대국/관전은 거절하고 동시 대국 한 판으로 센다(로비 이동은 된다).
@@ -248,7 +248,7 @@
 | FF-09 | Sanma agari-yame/tenpai-yame | `tests/ff09-sanma-dealer-yame.test.ts` |
 | FF-10 | Nagashi Mangan | `tests/ff10-nagashi-mangan.test.ts` |
 | FF-11 | Daisangen/Daisuushii Pao | `tests/ff11-pao.test.ts` |
-| FF-12 | target/return 분리 및 최종 uma standings | `tests/ff12-final-standings.test.ts` |
+| FF-12 | target 점수와 최종 순위(pt/우마 없음) | `tests/ff12-final-standings.test.ts` |
 | FF-13 | Tenhou initial-14 최상 scoring interpretation | `tests/ff13-tenhou-initial-interpretation.test.ts` |
 | FF-14 | auditable hand-result replay logging | `tests/ff14-replay-observability.test.ts` |
 | FF-15 | Kokushi + Chiihou 복합 역만 | `tests/ff15-kokushi-chiihou.test.ts` |

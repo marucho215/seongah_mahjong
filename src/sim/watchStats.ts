@@ -10,8 +10,6 @@ export interface WatchSeatGameResult {
   /** 1부터 인원 수까지 (엔진 computeFinalStandings) */
   placement: number;
   rawScore: number;
-  /** 우마 포함 pt (엔진 FinalStanding.points) */
-  points: number;
   /** 화료 횟수 (더블 론이면 화료자마다 한 번) */
   wins: number;
   /** 이 좌석의 버림패로 론 당한 국 수 (더블 론도 한 국은 한 번) */
@@ -60,7 +58,6 @@ export function summarizeWatchGame(record: GameReplayRecord, index: number, repl
       characterId: seat.characterId ?? null,
       placement: standing.placement,
       rawScore: standing.rawScore,
-      points: standing.points,
       wins: wins[seat.seat]!,
       dealIns: dealIns[seat.seat]!,
       riichi: riichi[seat.seat]!,
@@ -80,8 +77,6 @@ export interface WatchSeatStats {
   /** 1위 비율 (0~1) */
   firstRate: number;
   averageRawScore: number;
-  averagePoints: number;
-  totalPoints: number;
   hands: number;
   /** 국당 화료 비율 (0~1) */
   winRate: number;
@@ -99,7 +94,6 @@ export function aggregateWatchStats(games: readonly WatchGameSummary[], playerCo
     for (const r of rows) placementCounts[r.placement - 1]!++;
     const hands = games.reduce((sum, g) => sum + g.hands, 0);
     const sum = (pick: (r: WatchSeatGameResult) => number) => rows.reduce((acc, r) => acc + pick(r), 0);
-    const totalPoints = sum((r) => r.points);
     return {
       seat,
       characterId: rows[0]?.characterId ?? null,
@@ -108,8 +102,6 @@ export function aggregateWatchStats(games: readonly WatchGameSummary[], playerCo
       averagePlacement: ratio(sum((r) => r.placement), rows.length),
       firstRate: ratio(placementCounts[0]!, rows.length),
       averageRawScore: ratio(sum((r) => r.rawScore), rows.length),
-      averagePoints: ratio(totalPoints, rows.length),
-      totalPoints,
       hands,
       winRate: ratio(sum((r) => r.wins), hands),
       dealInRate: ratio(sum((r) => r.dealIns), hands),

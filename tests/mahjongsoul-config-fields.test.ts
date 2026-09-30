@@ -36,8 +36,8 @@ function baseCtx(overrides: Partial<WinContext> = {}): WinContext {
   };
 }
 
-describe("returnScore + uma feed a real final-standings calculation", () => {
-  it("computeFinalStandings ranks players and applies the return-score baseline + uma without touching raw scores", () => {
+describe("final standings", () => {
+  it("computeFinalStandings ranks players by raw score without touching raw scores", () => {
     const gs = new GameState({ rules: DEFAULT_SANMA_RULES, seed: "standings-test" });
     gs.scores = [40000, 38000, 32000];
     const standings = gs.computeFinalStandings();
@@ -45,12 +45,8 @@ describe("returnScore + uma feed a real final-standings calculation", () => {
     expect(standings.map((s) => s.player)).toEqual([0, 1, 2]); // already in descending score order
     expect(standings[0]!.placement).toBe(1);
     expect(standings[2]!.placement).toBe(3);
-    // player 0: (40000 - 35000)/1000 + 15000/1000 = 20
-    expect(standings[0]!.points).toBe(20);
-    // player 1: (38000 - 35000)/1000 + 0/1000 = 3
-    expect(standings[1]!.points).toBe(3);
-    // player 2: (32000 - 35000)/1000 + (-15000)/1000 = -18
-    expect(standings[2]!.points).toBe(-18);
+    expect(standings.map((s) => s.rawScore)).toEqual([40000, 38000, 32000]);
+    expect(Object.keys(standings[0]!).sort()).toEqual(["placement", "player", "rawScore"]); // pt(우마/반환점)는 없다
     // raw scores are untouched - the conservation invariant used elsewhere still holds
     expect(gs.scores).toEqual([40000, 38000, 32000]);
   });

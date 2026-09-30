@@ -8,7 +8,6 @@ describe("Mahjong Soul sanma ruleset", () => {
     expect(MAJSOUL_SANMA_RULESET.id).toBe("mahjongsoul-sanma");
     expect(MAJSOUL_SANMA_RULESET.playerCount).toBe(3);
     expect(MAJSOUL_SANMA_RULESET.scores.starting).toBe(35000);
-    expect(MAJSOUL_SANMA_RULESET.scores.return).toBe(35000);
     expect(MAJSOUL_SANMA_RULESET.scores.target).toBe(40000);
     expect(MAJSOUL_SANMA_RULESET.calls.allowChi).toBe(false);
     expect(MAJSOUL_SANMA_RULESET.calls.allowKita).toBe(true);
@@ -20,7 +19,6 @@ describe("Mahjong Soul sanma ruleset", () => {
   it("feeds the existing sanma RuleConfig without changing its values", () => {
     expect(DEFAULT_SANMA_RULES.playerCount).toBe(MAJSOUL_SANMA_RULESET.playerCount);
     expect(DEFAULT_SANMA_RULES.startingScore).toBe(MAJSOUL_SANMA_RULESET.scores.starting);
-    expect(DEFAULT_SANMA_RULES.returnScore).toBe(MAJSOUL_SANMA_RULESET.scores.return);
     expect(DEFAULT_SANMA_RULES.targetScore).toBe(MAJSOUL_SANMA_RULESET.scores.target);
     expect(DEFAULT_SANMA_RULES.removeManzu2to8).toBe(MAJSOUL_SANMA_RULESET.tiles.removeManzu2to8);
     expect(DEFAULT_SANMA_RULES.chiForbidden).toBe(!MAJSOUL_SANMA_RULESET.calls.allowChi);

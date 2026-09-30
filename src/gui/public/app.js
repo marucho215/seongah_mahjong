@@ -1243,13 +1243,6 @@ const GAME_END_REASON_KO = {
 
 const MODE_KO = { sanma: "산마", yonma: "4마" };
 
-function formatPt(points) {
-  const text = Math.abs(points).toFixed(1);
-  if (points > 0) return `+${text}`;
-  if (points < 0) return `-${text}`;
-  return "±0.0";
-}
-
 /** 게임 종료 상태: 마지막 국 결과를 먼저 보여주고, "최종 결과 보기"로 최종 결과 화면에 넘어간다. */
 let gameEndState = null;
 
@@ -1279,7 +1272,7 @@ function renderFinalStandings(standings, gameEndEvent, mySeat) {
   const table = el("table", "final-standings");
   const thead = el("thead");
   const headRow = el("tr");
-  for (const [text, cls] of [["순위", "col-rank"], ["이름", "col-name"], ["점수", "col-score"], ["pt", "col-pt"]]) {
+  for (const [text, cls] of [["순위", "col-rank"], ["이름", "col-name"], ["점수", "col-score"]]) {
     const th = el("th", cls, { scope: "col" });
     th.textContent = text;
     headRow.appendChild(th);
@@ -1299,9 +1292,7 @@ function renderFinalStandings(standings, gameEndEvent, mySeat) {
     }
     const score = el("td", "col-score");
     score.textContent = formatPoints(s.rawScore);
-    const pt = el("td", "col-pt");
-    pt.textContent = formatPt(s.points);
-    tr.append(rank, name, score, pt);
+    tr.append(rank, name, score);
     tbody.appendChild(tr);
   }
   table.append(thead, tbody);
@@ -1644,7 +1635,15 @@ function mountControlsToggle() {
 
 mountControlsToggle();
 
+/** 마지막으로 받은 대국 번호. 바뀌면(종료 화면의 "다시 플레이" 등으로 설정 화면을 거치지 않고 새 대국이 열리면)
+ *  효과음 seq가 1부터 다시 매겨지므로 기준점을 비운다. 비우지 않으면 새 대국의 효과음이 모두 "이미 본 신호"로 버려진다. */
+let lastGameId = null;
+
 function handleMessage(msg) {
+  if (typeof msg.gameId === "number" && msg.gameId !== lastGameId) {
+    if (lastGameId !== null) AudioManager.reset();
+    lastGameId = msg.gameId;
+  }
   handleMessageBody(msg);
   // 접속 직후 메시지의 cueBase 이하는 과거 신호라 재생하지 않는다.
   AudioManager.setBase(msg.cueBase);
@@ -2343,7 +2342,6 @@ async function postWatchBatch(path) {
 
 const WATCH_BATCH_STATUS_KO = { running: "진행 중", done: "완료", cancelled: "취소됨", failed: "실패" };
 const percent = (x) => `${(x * 100).toFixed(1)}%`;
-const signed = (x, digits = 1) => (x > 0 ? "+" : "") + x.toFixed(digits);
 
 /** AI 연속 관전 결과: 진행률, 취소/지우기, 좌석별 통계 표, 판 목록. 숫자는 모두 서버(watchStats.ts)가 계산한 값이다. */
 function renderWatchBatchPanel(batch) {
@@ -2385,7 +2383,7 @@ function renderWatchBatchPanel(batch) {
     const table = el("table", "watch-batch-table");
     const thead = el("thead");
     const hr = el("tr");
-    const headers = ["좌석", "캐릭터", "평균 순위", "1위율", ...Array.from({ length: n }, (_, k) => `${k + 1}위`), "평균 pt", "합계 pt", "평균 점수", "화료율", "방총율", "리치율"];
+    const headers = ["좌석", "캐릭터", "평균 순위", "1위율", ...Array.from({ length: n }, (_, k) => `${k + 1}위`), "평균 점수", "화료율", "방총율", "리치율"];
     for (const h of headers) {
       const th = el("th");
       th.textContent = h;
@@ -2401,8 +2399,6 @@ function renderWatchBatchPanel(batch) {
         st.averagePlacement.toFixed(2),
         percent(st.firstRate),
         ...st.placementCounts.map(String),
-        signed(st.averagePoints),
-        signed(st.totalPoints),
         formatPoints(Math.round(st.averageRawScore)),
         percent(st.winRate),
         percent(st.dealInRate),

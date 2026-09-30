@@ -239,7 +239,7 @@ describe("kyotaku (riichi sticks) interacts correctly with dealer/hand progressi
 });
 
 describe("game_end / final standings stay consistent with dealer progression and RuleConfig", () => {
-  it("every played game ends with roundWind/roundHandNumber past the configured game length, and final standings sum to zero net uma-adjusted points", () => {
+  it("every played game ends with roundWind/roundHandNumber past the configured game length, and final raw scores are conserved", () => {
     for (const seed of [0]) {
       const gs = new GameState({ rules: DEFAULT_SANMA_RULES, seed: `dealer-gameend-${seed}` });
       gs.playGame();
