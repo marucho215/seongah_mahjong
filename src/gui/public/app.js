@@ -411,7 +411,7 @@ function renderNameplate(plate, seat, mySeat, view, extras) {
     f.textContent = "후리텐";
     f.title = [
       extras.furiten.selfDiscard && "자신의 버림패에 대기패가 있음 (영구)",
-      extras.furiten.temporary && "론을 패스함 (다음 자기 쯔모까지)",
+      extras.furiten.temporary && "화료패를 놓침 (자기 다음 타패까지)",
       extras.furiten.riichi && "리치 중 론을 패스함 (이번 국 내내)",
     ].filter(Boolean).join(" / ");
     plate.appendChild(f);
@@ -614,6 +614,14 @@ function showWaits(zone, label, waits, furiten, status) {
     const n = el("span", "wait-count");
     n.textContent = "×" + wait.unseenCount;
     item.appendChild(n);
+    // 역 없음 (엔진 계산, 손 상태 줄의 대기에만 있다): 론도 쯔모도 안 되면 "역 없음", 멘젠이라 쯔모만 되면 "쯔모만"
+    if (wait.yaku) {
+      item.classList.add(wait.yaku === "none" ? "no-yaku" : "tsumo-only");
+      const tag = el("span", "wait-yaku");
+      tag.textContent = wait.yaku === "none" ? "역 없음" : "쯔모만";
+      item.title += wait.yaku === "none" ? " - 역이 없어 이 패로는 화료할 수 없습니다" : " - 론은 역이 없고, 쯔모(멘젠쯔모)로만 화료할 수 있습니다";
+      item.appendChild(tag);
+    }
     box.appendChild(item);
   }
   if (furiten && furiten.active) {
@@ -2461,8 +2469,8 @@ function renderWatchBatchPanel(batch) {
   return panel;
 }
 
-// --- 친선전 (A단계): 방을 만들어 코드를 받고, 코드를 아는 사람이 들어온다. 좌석/시작 규칙은 서버(friendRooms.ts)가 정하고
-// 화면은 서버가 보낸 방 상태를 그대로 그린다. 지금은 방장 + AI로만 시작할 수 있다(사람끼리 대국은 다음 단계). ---
+// --- 친선전: 방을 만들어 코드를 받고, 코드를 아는 사람이 들어온다. 좌석/시작 규칙은 서버(friendRooms.ts)가 정하고
+// 화면은 서버가 보낸 방 상태를 그대로 그린다. 빈자리가 없으면 방장이 시작한다(사람이 둘 이상이면 사람끼리 대국). ---
 
 async function postFriend(path, body) {
   setupState.error = "";
@@ -2575,7 +2583,7 @@ function renderFriendRoom() {
   });
   codeBox.append(code, copy);
   const info = el("p", "setup-lead");
-  info.textContent = `${MODE_KO[fr.mode] ?? fr.mode} · 시간 제한 ${fr.thinkingTime}초 (시간 제한은 사람끼리 대국 단계에서 적용됩니다)`;
+  info.textContent = `${MODE_KO[fr.mode] ?? fr.mode} · 시간 제한 ${fr.thinkingTime}초 (한 수 기본 시간 + 국마다 채워지는 여유 시간)`;
   side.appendChild(setupSection("방 코드", codeBox, info));
 
   // 좌석

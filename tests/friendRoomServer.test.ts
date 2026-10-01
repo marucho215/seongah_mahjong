@@ -1,5 +1,5 @@
-// 친선전 방 서버 흐름 (A단계): 공개 모드 서버에 두 사람이 각자 입장해, 방을 만들고 코드로 들어오고, 방장이 좌석을 정하고,
-// 방장 + AI일 때만 시작한다. 방 상태는 방에 있는 모든 사람의 로비(SSE)로 간다.
+// 친선전 방 서버 흐름: 공개 모드 서버에 두 사람이 각자 입장해, 방을 만들고 코드로 들어오고, 방장이 좌석을 정하고,
+// 빈자리가 없으면 방장이 시작한다. 방 상태는 방에 있는 모든 사람의 로비(SSE)로 간다.
 import { afterEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

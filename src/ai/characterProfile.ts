@@ -1,5 +1,6 @@
 /**
- * Character AI parameter schema, per character-ai-spec.txt.
+ * Character AI parameter schema, per the original character AI spec (character-ai-spec.txt -
+ * not kept in this repository; this file and characterProfiles.ts are now the reference).
  *
  * GLOBAL RULES (apply to every profile, enforced in characterAI.ts, never bypassed):
  * - All parameters are evaluation weights, not direct action probabilities.
@@ -41,7 +42,8 @@ export interface CharacterProfile {
   mistakeRate: number;
   candidateScoreTolerance: number;
 
-  // Character-specific mechanics - only ever read for the four characters that declare them.
+  // Character-specific mechanics - only ever read for the characters that declare them
+  // (Nahui, Kyle, Tosuke, Ari, Mageuna, Effie, Optima-215, Jo Sangmin; see characterProfiles.ts).
   /** Nahui: raises glitch probability as decision complexity rises. */
   overloadSensitivity?: number;
   /** Nahui: limits how far below the best candidate a glitch may fall. */

@@ -265,7 +265,13 @@
 - **FF-17**: called-away discard는 강에서 삭제하지 않는다(후리텐/replay에 필요). `collectVisibleTileKinds()`와 대기 장수
   계산(`unseenCountOf`, view의 `discards`는 called-away 제외)이 각자 중복 없이 센다.
 - **쯔모/론 넘기기와 후리텐**: 론을 놓친 것만 `FuritenTracker.onMissedRonChance()`로 후리텐을 만든다. 사람이 쯔모를 넘기는
-  것은 후리텐과 무관하다(테스트로 고정).
+  것은 후리텐과 무관하다(테스트로 고정). 역이 없어 론할 수 없는 화료패도 놓친 것으로 친다(일시 후리텐).
+- **일시 후리텐 해제**: 자기 타패(`onOwnDiscard`)로 풀린다 - 쯔모 없이 퐁/치하고 버려도 풀린다(표준 규칙). 자기 쯔모(`onOwnDraw`)에서도
+  풀지만 쯔모와 타패 사이에 남의 타패가 없으므로 결과는 같다. 남의 울기로 쯔모가 건너뛰어지면 자기 타패까지 이어진다. 리치 중 놓치면
+  그 국 내내. (예전에는 쯔모로만 풀어서 울고 버린 뒤에도 후리텐이 남았다 - `tests/furitenTiming.test.ts`.)
+- **역 없음 표시**: `HandStatus.tenpaiWaits[].yaku`("none" | "tsumo_only", 역이 있으면 없음). `GameState`의 `waitYakuOf`가 대기를 다시 계산할
+  때 떠 둔 3n+1장 손으로 평소 조건(론은 다음 좌석에게서, 쯔모는 패산에서, 해저/영상/창깡 제외) 점수 계산을 돌린다. 표시 전용이며
+  대기가 바뀔 때까지 캐시한다(`tests/waitYaku.test.ts`, `e2e/waitYaku.e2e.ts`).
 - 4마 human 경로: 사람의 pon/daiminkan/chi와 후로 뒤 버림은 `offerCallsForDiscard` 4마 분기에서 human일 때만 yield하고,
   AI 좌석은 기존 호출(예: `chooseDiscardFor` 한 번, 리치 판단 없음)을 그대로 유지한다.
 

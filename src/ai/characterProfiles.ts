@@ -1,7 +1,8 @@
 import type { CharacterProfile } from "./characterProfile.js";
 
 /**
- * The registered character profiles from character-ai-spec.txt. Do not alter
+ * The registered character profiles from the character AI spec (character-ai-spec.txt / -complete.txt,
+ * not kept in this repository). Do not alter
  * these values without explicit instruction - see the spec's own note: "Do not automatically
  * retune parameter values without explicit instruction."
  */
@@ -194,10 +195,11 @@ export const CHARACTER_PROFILES: Record<string, CharacterProfile> = {
     shapeCleanlinessBias: 0.78,
     contaminationAversion: 0.74,
   },
-  // Student profiles (character-ai-spec-complete.txt STUDENT PROFILES section). None of
-  // these declare any of the four special-mechanic fields - per that spec's own
-  // IMPLEMENTATION NOTES, only jegalnahui/kyletyler/seiyatosuke/byeonari get bespoke
-  // mechanics; every other profile is expressed entirely through the shared parameters.
+  // Student profiles (character-ai-spec-complete.txt STUDENT PROFILES section). Most are
+  // expressed entirely through the shared parameters; the ones with a bespoke mechanic are
+  // effieminos (attachment), mageuna (plan persistence / disruption), optima215 (entropy
+  // reinterpretation) and josangmin (effort / commitment aversion). Of the profiles above,
+  // jegalnahui, kyletyler, seiyatosuke and byeonari have one.
   kangunsim: {
     characterId: "kangunsim",
     displayName: "강운심",

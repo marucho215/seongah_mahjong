@@ -122,6 +122,18 @@ body {
 .waits .hand-status { font-weight: 600; margin-right: 8px; }
 .waits .wait-item { display: inline-flex; align-items: center; gap: 1px; margin-right: 6px; }
 .waits .wait-count { font-variant-numeric: tabular-nums; opacity: 0.95; }
+/* 역이 없는 대기: 패를 흐리게 하고 짧은 꼬리표를 붙인다 */
+.waits .wait-item.no-yaku .tile-img { opacity: 0.45; filter: grayscale(0.7); }
+.waits .wait-yaku {
+  margin-left: 3px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.waits .wait-item.no-yaku .wait-yaku { background: #6d4c41; color: #fff; }
+.waits .wait-item.tsumo-only .wait-yaku { background: #37474f; color: #ffe082; }
 .waits .furiten-badge {
   margin-left: 6px;
   padding: 1px 6px;

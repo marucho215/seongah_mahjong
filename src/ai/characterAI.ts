@@ -52,8 +52,8 @@ export interface CharacterDecisionContext {
   rules: RuleConfig;
   riichiOpponentDiscardKinds: TileKind[][];
   doraIndicatorKinds: TileKind[];
-  /** Every tile kind currently visible on the table OUTSIDE this hand: all 3 seats'
-   *  discards, meld tiles, and extracted kita tiles, plus the revealed dora indicators (ura
+  /** Every tile kind currently visible on the table OUTSIDE this hand: every seat's
+   *  discards (3 in sanma, 4 in yonma), meld tiles, and extracted kita tiles, plus the revealed dora indicators (ura
    *  indicators are hidden until a win and are NOT included). Used to compute true
    *  unseen-copy counts (computeImprovingTileCount) - never includes this hand's own
    *  concealed tiles, which callers subtract separately. */
@@ -61,7 +61,7 @@ export interface CharacterDecisionContext {
   seatWind: number;
   roundWind: number;
   wallRemainingLive: number;
-  /** This player's own score and the other two seats' scores, for Tosuke's intervention check. */
+  /** This player's own score and every other seat's score (2 in sanma, 3 in yonma), for Tosuke's intervention check. */
   ownScore: number;
   opponentScores: number[];
   /** Seats corresponding to opponentScores, in table turn order. */
@@ -69,8 +69,8 @@ export interface CharacterDecisionContext {
   /** Riichi seats corresponding to riichiOpponentDiscardKinds when available. */
   riichiOpponentSeats?: number[];
   isLastHandOfGame: boolean;
-  /** Whether this seat is the current hand's dealer. Plumbing only in this pass - no
-   *  decision formula reads it yet; wire it into an existing formula (via this shared
+  /** Whether this seat is the current hand's dealer. Plumbing only - no decision formula
+   *  reads it; if one ever should, wire it into an existing formula (via this shared
    *  context) rather than adding a new dealer-specific profile parameter. */
   isDealer: boolean;
 }

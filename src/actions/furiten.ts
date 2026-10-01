@@ -5,7 +5,10 @@ import type { TileKind } from "../core/tiles.js";
  * - Permanent (own-discard) furiten: any of your current winning tiles is sitting in
  *   your own river. Recomputed fresh every time from the live discard pile - no state needed.
  * - Temporary furiten: you declined a ron chance (your winning tile was discarded by
- *   someone and you chose not to call it, or auto-passed). Clears on your own next draw...
+ *   someone and you chose not to call it, or auto-passed). Clears at your own next discard -
+ *   including a discard right after your own pon/chi/daiminkan with no draw. (A draw always
+ *   precedes the discard on a normal turn, so it also clears there; nobody else can discard in
+ *   between.) If someone else's call skips your draw, it stays until you next discard...
  * - ...unless you're in riichi, in which case any missed ron chance locks you into
  *   furiten for the rest of the hand (drawing no longer clears it).
  */
@@ -31,6 +34,13 @@ export class FuritenTracker {
   }
 
   onOwnDraw(): void {
+    if (!this.permanentFromRiichiMiss) {
+      this.temporaryUntilNextDraw = false;
+    }
+  }
+
+  /** 자기 타패: 일시 후리텐이 풀린다 (울고 바로 버린 경우 포함). 리치 중 놓친 후리텐은 그대로. */
+  onOwnDiscard(): void {
     if (!this.permanentFromRiichiMiss) {
       this.temporaryUntilNextDraw = false;
     }

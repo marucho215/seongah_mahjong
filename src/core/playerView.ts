@@ -29,6 +29,16 @@ export interface WaitInfo {
   unseenCount: number;
 }
 
+/** 대기패로 화료할 때 역이 없는 경우 (HandStatus.tenpaiWaits에만 붙는다, 역이 있으면 필드가 없다).
+ *  "none": 론도 쯔모도 역이 없다 (울어서 멘젠쯔모도 없는 손). "tsumo_only": 론은 역이 없고 쯔모만 멘젠쯔모로 화료할 수 있다.
+ *  해저/하저/영상/창깡처럼 그 순간에만 붙는 역은 셈하지 않는다. */
+export type WaitYaku = "none" | "tsumo_only";
+
+/** HandStatus의 대기패 하나: WaitInfo + 역 유무 */
+export interface TenpaiWaitInfo extends WaitInfo {
+  yaku?: WaitYaku;
+}
+
 /**
  * view 안에 이미 담긴 공개 정보만으로 `kind`의 미확인 장수를 센다 (4 - 보이는 장수, 0 미만은 0).
  * 이 함수는 PlayerView의 필드만 읽으므로, view에 없는 정보(상대 손패, 패산)는 구조적으로 쓸 수 없다.
@@ -126,7 +136,7 @@ export interface HandStatus {
   shanten: number;
   /** 마지막 타패/울기 뒤(3n+1장 상태)의 대기패. 텐파이가 아니면 빈 배열. 쯔모 직후에도 그 직전의 대기를 유지한다
    *  (리치 중 `waits`, 후리텐 판정과 같은 엔진 대기 캐시). */
-  tenpaiWaits: WaitInfo[];
+  tenpaiWaits: TenpaiWaitInfo[];
 }
 
 /** 타패 후보 한 종류의 위험도 (상대적 표시용 등급이며 "안전하다"는 판정이 아니다). */
@@ -143,6 +153,8 @@ export interface BuildPlayerViewOptions {
   waits?: readonly TileKind[];
   /** 리치 여부와 무관한 이 좌석의 현재 대기패 (HandStatus.tenpaiWaits). 생략하면 빈 배열. */
   tenpaiWaits?: readonly TileKind[];
+  /** tenpaiWaits 중 역이 없는 대기 (엔진 계산, 표시 전용). 생략하면 모두 역이 있는 것으로 둔다. */
+  tenpaiWaitYaku?: ReadonlyMap<TileKind, WaitYaku>;
   hands: readonly Hand[];
   doraIndicators: readonly Tile[];
   scores: readonly number[];
@@ -155,7 +167,7 @@ export interface BuildPlayerViewOptions {
 }
 
 export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
-  const { seat, hands, doraIndicators, scores, furiten, waits, tenpaiWaits, ...rest } = options;
+  const { seat, hands, doraIndicators, scores, furiten, waits, tenpaiWaits, tenpaiWaitYaku, ...rest } = options;
   const own = hands[seat]!;
   const opponents: PlayerViewOpponent[] = hands
     .map((hand, i) => ({ hand, seat: i }))
@@ -187,7 +199,10 @@ export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
   // 대기패의 미확인 장수는 방금 만든 view의 공개 정보만으로 센다
   const handStatus: HandStatus = {
     shanten: minShanten(tilesToCounts(own.concealed), own.melds.length),
-    tenpaiWaits: withUnseenCounts(base, tenpaiWaits ?? []),
+    tenpaiWaits: withUnseenCounts(base, tenpaiWaits ?? []).map((w) => {
+      const yaku = tenpaiWaitYaku?.get(w.kind);
+      return yaku ? { ...w, yaku } : w;
+    }),
   };
   return { ...base, waits: withUnseenCounts(base, waits ?? []), handStatus, discardRisk: discardRiskFor(seat, hands) };
 }

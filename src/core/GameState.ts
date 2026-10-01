@@ -1,7 +1,7 @@
 import type { RuleConfig } from "../rules/RuleConfig.js";
 import { Wall } from "./Wall.js";
 import { Hand } from "./Hand.js";
-import { allKindsForRules, isTerminalOrHonor, type Tile, type TileKind } from "./tiles.js";
+import { allKindsForRules, isTerminalOrHonor, parseKind, type Tile, type TileKind } from "./tiles.js";
 import { tilesToCounts } from "./tileIndex.js";
 import { FuritenTracker } from "../actions/furiten.js";
 import { computeWinningTiles } from "../actions/winSearch.js";
@@ -11,7 +11,7 @@ import { canRiichiAnkan } from "../actions/riichiAnkan.js";
 import { canDeclareRiichi, riichiDiscardCandidates } from "../actions/riichi.js";
 import { claimResponseProblem } from "./decisions.js";
 import type { CallDecisionRequest, CallDecisionResponse, ChiDecisionRequest, ChiDecisionResponse, ChiOption, ClaimDecisionRequest, SeatDecisionRequest, SeatDecisionResponse, DecisionRequest, DecisionResponse, DiscardDecisionRequest, EngineRequest, EngineResponse, MultiDecisionResponse, DiscardDecisionResponse, NineTerminalsDecisionRequest, NineTerminalsDecisionResponse, RonDecisionContext, RonDecisionRequest, RonDecisionResponse, TsumoDecisionRequest, TsumoDecisionResponse, WinPreview } from "./decisions.js";
-import { buildPlayerView, withUnseenCounts, type PlayerView, type WaitInfo } from "./playerView.js";
+import { buildPlayerView, withUnseenCounts, type PlayerView, type WaitInfo, type WaitYaku } from "./playerView.js";
 import { isKokushiAnkanRon } from "../actions/kokushiAnkan.js";
 import {
   chooseDiscard,
@@ -462,8 +462,13 @@ export class GameState {
     };
 
     const cachedWinningTiles: TileKind[][] = seats.map(() => []);
+    /** 대기패별 역 유무 (표시 전용, waitYakuOf). 대기를 다시 계산할 때 그 순간의 손(3n+1장)을 떠 두고, 필요할 때만 계산한다. */
+    const waitYakuHand: { concealed: Tile[]; melds: ReturnType<typeof meldsToGroups> }[] = seats.map(() => ({ concealed: [], melds: [] }));
+    const waitYakuCache: (Map<TileKind, WaitYaku> | null)[] = seats.map(() => null);
     const refreshWinningTiles = (p: number) => {
       cachedWinningTiles[p] = computeWinningTiles(tilesToCounts(hands[p]!.concealed), hands[p]!.melds.length, this.rules);
+      waitYakuHand[p] = { concealed: [...hands[p]!.concealed], melds: meldsToGroups(hands[p]!.melds) };
+      waitYakuCache[p] = null;
     };
     for (const p of seats) refreshWinningTiles(p);
 
@@ -525,6 +530,39 @@ export class GameState {
       return isTenhou
         ? evaluateInitialDealerWin(input)
         : evaluateWin({ ...input, winTile });
+    };
+
+    /** 표시 전용: 지금 대기패마다 그 패로 화료할 때 역이 있는지 ("역 없음" 표시). 해저/하저/영상/창깡처럼 그 순간에만 붙는 역은
+     *  빼고 평소 조건(론은 다음 좌석에게서, 쯔모는 패산에서)으로 엔진의 점수 계산을 그대로 돌린다. 게임 상태/RNG는 바꾸지 않는다.
+     *  역이 있는 대기는 맵에 넣지 않는다. */
+    const waitYakuOf = (seat: number): Map<TileKind, WaitYaku> => {
+      const cached = waitYakuCache[seat];
+      if (cached) return cached;
+      const result = new Map<TileKind, WaitYaku>();
+      const { concealed, melds } = waitYakuHand[seat]!;
+      const hasYaku = (kind: TileKind, isTsumo: boolean): boolean => {
+        const parsed = parseKind(kind);
+        const winTile: Tile = { id: -1, kind, suit: parsed.suit, rank: parsed.rank, isRed: false };
+        return (
+          evaluateWin({
+            concealedTiles: [...concealed, winTile],
+            melds,
+            winTile,
+            context: scoringContextFor(seat, isTsumo, false, false, false, false, false, false),
+            rules: this.rules,
+            winner: seat,
+            dealer: this.dealerSeat,
+            ronFrom: isTsumo ? undefined : nextSeat(seat, this.rules.playerCount),
+            honba: this.honba,
+          }) !== null
+        );
+      };
+      for (const kind of cachedWinningTiles[seat]!) {
+        if (hasYaku(kind, false)) continue;
+        result.set(kind, hasYaku(kind, true) ? "tsumo_only" : "none");
+      }
+      waitYakuCache[seat] = result;
+      return result;
     };
 
     const tryRon = (player: number, tile: Tile, ronFrom: number, isHoutei: boolean, isChankan = false): FullWinResult | null => {
@@ -987,6 +1025,7 @@ export class GameState {
         ),
         waits: hands[seat]!.riichi ? cachedWinningTiles[seat]! : [],
         tenpaiWaits: cachedWinningTiles[seat]!,
+        tenpaiWaitYaku: waitYakuOf(seat),
         hands,
         doraIndicators: wall.doraIndicators(),
         scores: this.scores,
@@ -1437,6 +1476,7 @@ export class GameState {
           : chooseDiscardFor(selected.seat, hands[selected.seat]!, applied.forbiddenDiscardKinds);
         const newTile = hands[selected.seat]!.discardById(discardId, { tsumogiri: false, isRiichiDeclaration: false });
         this.log.push({ type: "discard", player: selected.seat, tile: newTile.kind, tsumogiri: false, riichiDeclaration: false });
+        furiten[selected.seat]!.onOwnDiscard();
         wall.revealPendingKanDora();
         emitNewlyRevealedDoraIndicators();
         refreshWinningTiles(selected.seat);
@@ -1488,6 +1528,7 @@ export class GameState {
           const { discardId } = yield* decideDiscardAndRiichi(p, hands[p]!, isHumanSeat(p), this.scores[p]!, wall.remainingLiveCount());
           const newTile = hands[p]!.discardById(discardId, { tsumogiri: false, isRiichiDeclaration: false });
           this.log.push({ type: "discard", player: p, tile: newTile.kind, tsumogiri: false, riichiDeclaration: false });
+          furiten[p]!.onOwnDiscard();
           refreshWinningTiles(p);
           emitFrame(p);
           return yield* handleDiscardResponses(p, newTile, wall.isExhausted());
@@ -1769,6 +1810,7 @@ export class GameState {
         tsumogiri,
         riichiDeclaration: declaringRiichi,
       });
+      furiten[current]!.onOwnDiscard();
       wall.revealPendingKanDora();
       emitNewlyRevealedDoraIndicators();
       refreshWinningTiles(current);

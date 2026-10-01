@@ -62,7 +62,7 @@ describe("furiten: own-discard furiten is recomputed fresh, not cached", () => {
     const tracker = new FuritenTracker();
     tracker.onMissedRonChance(); // declined an actual ron chance (non-riichi)
     // even though the current wait no longer overlaps the river, temporary furiten (from
-    // the missed chance itself) still holds until this player's own next draw
+    // the missed chance itself) still holds until this player's own next draw (or discard)
     expect(tracker.isFuriten(["s4", "s7"], [])).toBe(true);
     tracker.onOwnDraw();
     expect(tracker.isFuriten(["s4", "s7"], [])).toBe(false);

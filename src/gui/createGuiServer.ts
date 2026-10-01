@@ -1091,8 +1091,9 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     return `${label}_game0.json`;
   }
 
-  // --- 친선전 방 (사람끼리 대전 A단계, friendRooms.ts). 방 상태는 저장소에 있고, 바뀔 때마다 방에 있는 모든 사람의 로비에
-  // 설정 메시지를 다시 보낸다. 공개 방 목록은 없다(코드를 아는 사람만 들어온다). A단계에서는 방장 한 사람 + AI로만 시작한다. ---
+  // --- 친선전 방 (friendRooms.ts). 방 상태는 저장소에 있고, 바뀔 때마다 방에 있는 모든 사람의 로비에 설정 메시지를 다시
+  // 보낸다. 공개 방 목록은 없다(코드를 아는 사람만 들어온다). 방장 + AI면 일반 대국(startGame)으로, 사람이 2명 이상이면
+  // 사람끼리 대국(startFriendGame)으로 시작한다. ---
 
   const friendRooms = access ? new FriendRoomStore() : null;
 
@@ -1114,7 +1115,6 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     }
   }
 
-  /** 방장 한 사람 + AI만일 때 시작할 수 있다 (사람 2명 이상 대국은 B단계). 시작할 수 없으면 이유. */
   /** 빈자리가 없고, 방에 있는 사람 모두가 다른 대국/관전 중이 아니면 시작할 수 있다. 시작할 수 없으면 이유. */
   function friendStartBlocker(friendRoom: FriendRoom): string | null {
     if (friendRoom.seats.some((st) => st.kind === "open")) return "빈자리가 있습니다. 사람이 들어오거나 AI를 앉혀 주세요";
@@ -1134,7 +1134,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   }
 
   /** 사람 2명 이상인 친선전 대국을 연다 (사람끼리 대국 모드). 좌석은 방 좌석 그대로이고, 사람 좌석마다 그 사람이 앉는다.
-   *  재생 속도는 방장 설정을 쓰고, 대국은 방장만 끝낼 수 있다. 리플레이 저장은 다음 단계. */
+   *  재생 속도는 방장 설정을 쓰고, 대국은 방장만 끝낼 수 있다. 끝나면 참가자 모두의 리플레이 폴더에 저장한다. */
   async function startFriendGame(hostRoom: Room, friendRoom: FriendRoom): Promise<void> {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     if (limits && openGameCount() >= limits.maxOpenGames) {
@@ -1409,7 +1409,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     if (!table || !host) throw new Error("GuiServer: 진행 중인 대국이 없습니다");
     if (host.phase() === "game_end") throw new Error("GuiServer: 이미 끝난 대국입니다");
     if (host.multiplayer) {
-      // 사람끼리 대국은 방장만 끝낼 수 있고, 끝내면 모두 방으로 돌아간다 (자리 비움 대행은 다음 단계)
+      // 사람끼리 대국은 방장만 끝낼 수 있고, 끝내면 모두 방으로 돌아간다
       if (table.seatUsers[0] !== room.userId) throw new Error("GuiServer: 사람끼리 대국은 방장만 끝낼 수 있습니다");
       for (const userId of new Set(table.seatUsers)) {
         if (userId === null || userId === room.userId) continue;
