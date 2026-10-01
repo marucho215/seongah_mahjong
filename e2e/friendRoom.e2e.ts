@@ -119,7 +119,8 @@ describe("친선전 방 스모크", () => {
         const text = (await bar.textContent()) ?? "";
         if (text.includes("버릴 패")) {
           await page.locator("#zone-bottom .hand img.clickable").first().click();
-          page.once("dialog", (d) => d.dismiss()); // 리치 확인창이 뜨면 그냥 버린다
+          const plain = bar.locator("button", { hasText: "그냥 버리기" }); // 리치 가능한 패였으면 리치 없이 버린다
+          if (await plain.count()) await plain.click();
         } else if (await bar.locator("button", { hasText: "넘기기" }).count()) {
           await bar.locator("button", { hasText: "넘기기" }).click();
         } else if (await bar.locator("button", { hasText: "아니오" }).count()) {

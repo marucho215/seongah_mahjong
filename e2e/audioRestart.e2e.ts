@@ -51,7 +51,6 @@ beforeEach(async () => {
   page = await browser.newPage({ viewport: { width: 1280, height: 820 } });
   errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  page.on("dialog", (d) => d.dismiss()); // 리치 확인 창이 뜨면 그냥 버린다
   await page.addInitScript(fakeAudio);
   await page.route("**/assets/audio/**", (route) => route.fulfill({ status: 200, body: new URL(route.request().url()).pathname }));
   await page.goto(`http://localhost:${(handle.server.address() as AddressInfo).port}/`);
@@ -96,6 +95,8 @@ describe("효과음", () => {
     }
     const before = (await played()).filter((u) => u.includes(DISCARD_SOUND)).length;
     await page.locator("#zone-bottom .hand img.clickable").last().click();
+    const plain = page.locator("#action-bar button", { hasText: "그냥 버리기" }); // 리치 가능한 패였으면 리치 없이 버린다
+    if (await plain.count()) await plain.click();
     await expect.poll(async () => (await played()).filter((u) => u.includes(DISCARD_SOUND)).length, { timeout: 15_000 }).toBeGreaterThan(before);
   }, 180_000);
 });

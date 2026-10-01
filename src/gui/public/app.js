@@ -536,12 +536,14 @@ function renderMySeat(view, options) {
       img.classList.add("not-legal");
       img.title = `${img.title} - 지금은 버릴 수 없습니다`;
     }
-    if (clickable) img.addEventListener("click", () => options.onTileClick(t, riichiLegal));
+    if (clickable) img.addEventListener("click", () => options.onTileClick(t, riichiLegal, img));
     // 리치 전 미리보기: 리치 가능한 패에 마우스를 올리면 그 패를 버린 뒤의 대기패를 보여준다 (엔진이 계산한 값)
     const previewWaits = riichiLegal ? waitsForTile(options.riichiWaits, t.id) : null;
     if (previewWaits) {
       img.addEventListener("mouseenter", () => showWaits(zone, "리치하면 대기", previewWaits, view.furiten));
-      img.addEventListener("mouseleave", () => showHandStatus(zone, view));
+      img.addEventListener("mouseleave", () => {
+        if (!img.classList.contains("riichi-pending")) showHandStatus(zone, view); // 리치를 고르는 중에는 대기를 계속 보인다
+      });
     }
     const risk = riskByKind.get(t.kind);
     hand.appendChild(risk ? withRiskBadge(img, risk) : img);
@@ -705,22 +707,45 @@ function renderDiscardRequest(request) {
     riichiLegalTileIds: request.riichiLegalTileIds,
     riichiWaits: request.riichiWaits,
     legalTileIds: request.legalTileIds,
-    onTileClick: (tile, riichiLegal) => {
-      let declareRiichi = false;
-      if (riichiLegal) {
-        const tileName = koreanTileLabel(tile.kind, tile.red);
-        const waits = waitsForTile(request.riichiWaits, tile.id);
-        const waitText = waits && waits.length ? "\n대기: " + waits.map((w) => `${koreanTileLabel(w.kind)} ×${w.unseenCount}`).join(" / ") : "";
-        declareRiichi = window.confirm(`${tileName}${josaEulReul(tileName)} 버리면서 리치를 선언할까요?${waitText}\n(취소를 누르면 그냥 버립니다)`);
-      }
-      sendResponse({ type: "discard", tileId: tile.id, declareRiichi });
+    onTileClick: (tile, riichiLegal, img) => {
+      if (riichiLegal) showRiichiChoice(request, tile, img);
+      else sendResponse({ type: "discard", tileId: tile.id, declareRiichi: false });
     },
   });
+  showDiscardPrompt(request);
+}
 
+function showDiscardPrompt(request) {
   clearActionBar();
   const label = el("span", "section-label");
   label.textContent = "버릴 패를 클릭하세요" + (request.riichiLegalTileIds.length > 0 ? " (노란 테두리 = 리치 가능)" : "");
   document.getElementById("action-bar").appendChild(label);
+  placeActionBar();
+}
+
+/** 리치 가능한 패를 눌렀을 때: 브라우저 확인 창(window.confirm) 대신 행동 막대에서 고른다. 모바일 브라우저(앱 안 브라우저,
+ *  전체 화면 등)는 확인 창을 막고 바로 "취소"로 돌려주는 경우가 있어, 리치를 선언할 방법이 없어지기 때문이다.
+ *  고르는 동안 그 패를 들어 올려 두고, 리치하면 기다릴 패를 보여준다 (마우스를 올릴 수 없는 터치 화면에서도 보이게). */
+function showRiichiChoice(request, tile, img) {
+  const zone = zoneEl("bottom");
+  for (const other of zone.querySelectorAll(".tile-img.riichi-pending")) other.classList.remove("riichi-pending");
+  img.classList.add("riichi-pending");
+  const waits = waitsForTile(request.riichiWaits, tile.id);
+  if (waits) showWaits(zone, "리치하면 대기", waits, request.view.furiten);
+
+  clearActionBar();
+  const tileName = koreanTileLabel(tile.kind, tile.red);
+  const label = el("span", "section-label");
+  label.textContent = `${tileName}${josaEulReul(tileName)} 버리면서 리치할까요?`;
+  document.getElementById("action-bar").appendChild(label);
+  addActionButton("리치", () => sendResponse({ type: "discard", tileId: tile.id, declareRiichi: true })).classList.add("ron-button");
+  addActionButton("그냥 버리기", () => sendResponse({ type: "discard", tileId: tile.id, declareRiichi: false }));
+  addActionButton("다른 패 고르기", () => {
+    img.classList.remove("riichi-pending");
+    showHandStatus(zone, request.view);
+    showDiscardPrompt(request);
+  }, "cancel");
+  placeActionBar();
 }
 
 function renderCallRequest(request) {

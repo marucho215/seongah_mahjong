@@ -400,6 +400,13 @@ body {
   outline-offset: 1px;
 }
 
+/* 리치할지 고르는 중인 패: 들어 올려 둔다 (행동 막대에서 리치 / 그냥 버리기 / 다른 패 고르기) */
+.tile-img.riichi-pending,
+.tile-img.riichi-pending:hover {
+  transform: translateY(-12px);
+  outline-color: #fff3b0;
+}
+
 .suit-gap {
   width: 14px;
   flex: 0 0 auto;
