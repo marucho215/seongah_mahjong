@@ -36,6 +36,7 @@ import {
 import { meldsToGroups } from "../yaku/meldConvert.js";
 import { buildWinContext } from "../yaku/winContext.js";
 import { evaluateInitialDealerWin, evaluateWin, type FullWinResult } from "../yaku/evaluate.js";
+import { nextDoraKind } from "../yaku/dora.js";
 import { buildDoraBreakdown, tileToRef } from "../yaku/doraBreakdown.js";
 import { buildWinSnapshot } from "../yaku/winSnapshot.js";
 import type { GameEvent, AiDecisionEntry, AuditableWinResult, GameEndEvent, HandResultSnapshot } from "./GameLog.js";
@@ -1028,6 +1029,7 @@ export class GameState {
         tenpaiWaitYaku: waitYakuOf(seat),
         hands,
         doraIndicators: wall.doraIndicators(),
+        doraKinds: wall.doraIndicators().map((t) => nextDoraKind(t.kind, this.rules)),
         scores: this.scores,
         dealerSeat: this.dealerSeat,
         roundWind: this.roundWind,

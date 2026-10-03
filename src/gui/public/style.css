@@ -318,6 +318,10 @@ body {
 .chip-row { display: flex; gap: 6px; }
 .chip { font-size: 14px; font-weight: 600; padding: 2px 9px; border-radius: 10px; background: rgba(255, 255, 255, 0.16); }
 .dora-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 13px; }
+/* 표시패는 실제 도라 옆에 작고 흐리게 (도라를 읽는 데 방해되지 않게) */
+.dora-row .dora-indicators { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; opacity: 0.7; }
+.dora-row .dora-indicators .tile-img.small { width: calc(var(--tile-w-small) * 0.7); height: calc(var(--tile-h-small) * 0.7); }
+.dora-row .dora-indicator-label { font-size: 11px; margin-right: 2px; }
 .dora-row .tile-img.small {
   width: calc(var(--tile-w-small) * 1.25);
   height: calc(var(--tile-h-small) * 1.25);

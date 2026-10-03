@@ -342,6 +342,7 @@ function rvBuildView(table, anchor, openHands, drawn) {
         ...(openHands ? { concealedTiles: s.concealed, drawnTileId: drawn && drawn.seat === seat ? drawn.tileId : undefined } : {}),
       })),
     doraIndicators: table.doraIndicators,
+    doraKinds: table.doraKinds || [],
     scores: table.scores,
     dealerSeat: table.dealer,
     roundWind: table.roundWind,

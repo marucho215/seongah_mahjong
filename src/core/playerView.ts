@@ -120,6 +120,9 @@ export interface PlayerView {
   discardRisk: DiscardRisk[];
   opponents: PlayerViewOpponent[];
   doraIndicators: TileRef[];
+  /** 지금 공개된 도라 표시패마다 그 표시패가 가리키는 실제 도라 종류 (doraIndicators와 같은 순서, 엔진 nextDoraKind - 산마 1만<->9만
+   *  같은 규칙 포함). 화면이 규칙을 다시 구현하지 않게 엔진이 계산해 준다. 적5/북 같은 다른 도라는 들어 있지 않다. */
+  doraKinds: TileKind[];
   scores: number[];
   dealerSeat: number;
   roundWind: number;
@@ -157,6 +160,8 @@ export interface BuildPlayerViewOptions {
   tenpaiWaitYaku?: ReadonlyMap<TileKind, WaitYaku>;
   hands: readonly Hand[];
   doraIndicators: readonly Tile[];
+  /** doraIndicators마다 가리키는 도라 종류 (PlayerView.doraKinds). 생략하면 빈 배열. */
+  doraKinds?: readonly TileKind[];
   scores: readonly number[];
   dealerSeat: number;
   roundWind: number;
@@ -167,7 +172,7 @@ export interface BuildPlayerViewOptions {
 }
 
 export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
-  const { seat, hands, doraIndicators, scores, furiten, waits, tenpaiWaits, tenpaiWaitYaku, ...rest } = options;
+  const { seat, hands, doraIndicators, doraKinds, scores, furiten, waits, tenpaiWaits, tenpaiWaitYaku, ...rest } = options;
   const own = hands[seat]!;
   const opponents: PlayerViewOpponent[] = hands
     .map((hand, i) => ({ hand, seat: i }))
@@ -193,6 +198,7 @@ export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
     furiten: furiten ?? NO_FURITEN,
     opponents,
     doraIndicators: doraIndicators.map(tileToRef),
+    doraKinds: [...(doraKinds ?? [])],
     scores: [...scores],
     ...rest,
   };

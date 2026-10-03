@@ -17,6 +17,8 @@ import { getCharacterProfile } from "../ai/characterProfiles.js";
 import { isUsableProfileSnapshot } from "../customai/customAiSchema.js";
 import { GuiSession } from "../gui/guiSession.js";
 import { tileToRef } from "../yaku/doraBreakdown.js";
+import { nextDoraKind } from "../yaku/dora.js";
+import type { TileKind } from "../core/tiles.js";
 import { meldToSnapshot } from "../yaku/winSnapshot.js";
 import type { GameReplayRecord, ReplaySeatInfo } from "../sim/replayRecorder.js";
 
@@ -39,6 +41,8 @@ export interface ReplaySeatState {
 export interface ReplayTableState {
   seats: ReplaySeatState[];
   doraIndicators: TileRef[];
+  /** 표시패마다 가리키는 도라 종류 (PlayerView.doraKinds와 같다) */
+  doraKinds: TileKind[];
   scores: number[];
   roundWind: number;
   roundHandNumber: number;
@@ -110,6 +114,7 @@ function tableState(game: GameState, doraIndicators: TileRef[]): ReplayTableStat
       riichi: h.riichi,
     })),
     doraIndicators: [...doraIndicators],
+    doraKinds: doraIndicators.map((t) => nextDoraKind(t.kind, game.rules)),
     scores: [...game.scores],
     roundWind: game.roundWind,
     roundHandNumber: game.roundHandNumber,

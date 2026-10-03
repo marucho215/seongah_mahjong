@@ -456,11 +456,25 @@ function renderCenter(view, n, turnSeat) {
     chips.appendChild(chip);
   }
   main.appendChild(chips);
+  // 도라: 엔진이 계산한 실제 도라 종류(view.doraKinds)를 크게, 그 옆에 공개된 표시패를 작게. 적5와 (산마) 북도 도라지만 여기에는 없다.
   const dora = el("div", "dora-row");
   const label = el("span", "section-label");
   label.textContent = "도라";
   dora.appendChild(label);
-  for (const t of view.doraIndicators) dora.appendChild(tileImg(t, { small: true }));
+  const kinds = view.doraKinds || [];
+  for (const kind of kinds) {
+    const img = tileImg({ kind }, { small: true });
+    img.classList.add("dora-tile");
+    img.title = `도라: ${koreanTileLabel(kind)}`;
+    dora.appendChild(img);
+  }
+  const indicators = el("span", "dora-indicators");
+  indicators.title = "도라 표시패 (이 패의 다음 패가 도라)";
+  const indLabel = el("span", "dora-indicator-label");
+  indLabel.textContent = "표시패";
+  indicators.appendChild(indLabel);
+  for (const t of view.doraIndicators) indicators.appendChild(tileImg(t, { small: true }));
+  dora.appendChild(indicators);
   main.appendChild(dora);
 
   for (let seat = 0; seat < n; seat++) {
