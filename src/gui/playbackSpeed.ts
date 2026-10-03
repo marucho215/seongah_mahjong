@@ -3,11 +3,12 @@
 
 export type PlaybackSpeed = "slow" | "normal" | "fast" | "instant";
 
-/** 일반 타패 한 장면의 기본 유지 시간(ms). 울기/리치/화료는 createGuiServer의 배수만큼 더 오래 보여준다. 0이면 재생 없이 바로 다음 상태. */
+/** 일반 타패 한 장면의 기본 유지 시간(ms). 울기/리치/화료는 createGuiServer의 배수만큼 더 오래 보여준다. 0이면 재생 없이 바로 다음 상태.
+ *  리플레이 화면(replayMode.js의 REPLAY_SPEEDS)도 같은 값을 쓴다 - 바꾸면 함께 바꾼다. */
 export const PLAYBACK_FRAME_DELAY_MS: Record<PlaybackSpeed, number> = {
-  slow: 700,
-  normal: 400,
-  fast: 150,
+  slow: 1300,
+  normal: 800,
+  fast: 350,
   instant: 0,
 };
 

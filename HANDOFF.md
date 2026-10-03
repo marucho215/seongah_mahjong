@@ -202,7 +202,7 @@
   이번 대국 구성(`gameConfig`, 실제 시드 포함)이 실린다. 종료 화면의 "같은 설정으로 다시"(시드 생략)와 "같은 시드로 다시"는
   그 구성으로 다시 `POST /start`, "설정 바꾸기"는 `POST /setup`으로 마지막 모드의 설정 화면에 돌아간다(거기서 허브로 갈 수 있다). 진행 중인 대국에 다시
   접속하면 새로고침 복구로 그 대국 화면이 나온다. 게임마다 GameHost를 새로 만든다.
-  AI 진행 속도는 `POST /speed`(`src/gui/playbackSpeed.ts`: slow 700 / normal 400 / fast 150 / instant 0ms)로 서버 단위 장면 간격만
+  AI 진행 속도는 `POST /speed`(`src/gui/playbackSpeed.ts`: slow 1300 / normal 800 / fast 350 / instant 0ms, 리플레이 화면도 같은 값)로 서버 단위 장면 간격만
   바꾼다. AI 판단은 사람 응답 때 이미 끝나 있고 장면은 그 스냅샷이므로 결과/RNG와 무관하다(테스트로 로그 동일성 확인).
   자동 플레이 옵션(자동 쯔모기리/울기 패스/자동 화료, 기본 꺼짐)은 클라이언트(`app.js`의 `autoResponseFor`)가 해당 결정에 정해진
   응답을 기존 `/respond`로 보내는 것뿐이라 사람 결정 기록과 리플레이 재현에 그대로 포함된다. 자동 쯔모기리는 엔진이 쯔모 뒤 타패

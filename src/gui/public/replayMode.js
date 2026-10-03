@@ -9,10 +9,33 @@
 // 서버 이벤트(대국/로비)에는 연결하지 않는다 (app.js의 IS_REPLAY_MODE).
 
 const REPLAY_CALL_KO = { chi: "치", pon: "퐁", kan_open: "대명깡", kan_closed: "암깡", kan_added: "가깡" };
-const REPLAY_SPEEDS = { slow: 900, normal: 450, fast: 200 };
+/** 타패 한 수의 기본 유지 시간(ms). 대국 화면의 AI 장면 속도(playbackSpeed.ts PLAYBACK_FRAME_DELAY_MS)와 같은 값이다. */
+const REPLAY_SPEEDS = { slow: 1300, normal: 800, fast: 350 };
 const REPLAY_SPEED_KO = { slow: "느림", normal: "보통", fast: "빠름" };
-/** 자동 재생에서 국 결과 창을 보여 주는 시간 (수 간격의 배수) */
-const REPLAY_HAND_END_HOLD = 8;
+/** 자동 재생에서 그 수에 머무는 시간 (기본 유지 시간의 배수). 대국 화면의 장면 배수(createGuiServer holdMultiplier: 울기·북 x1.5,
+ *  리치 x2.2, 쯔모 화료 x2.5, 론 x3)와 같고, 리플레이는 쯔모와 타패가 따로 한 칸씩이라 쯔모 칸은 짧게 지나가 다음 타패에서 머문다. */
+function rvHoldOf(e) {
+  switch (e.type) {
+    case "draw":
+    case "dora_indicator_revealed":
+    case "deal":
+      return 0.3;
+    case "call":
+    case "kita":
+      return 1.5;
+    case "riichi":
+      return 2.2;
+    case "win":
+      return e.isTsumo ? 2.5 : 3;
+    case "exhaustive_draw":
+    case "abortive_draw":
+      return 2.5;
+    case "hand_end":
+      return 5; // 국 결과 창을 읽는 시간
+    default:
+      return 1;
+  }
+}
 const REPLAY_PREF_KEY = "seongah.replayView";
 
 const rv = {
@@ -583,17 +606,16 @@ function rvStop() {
   if (btn) btn.textContent = "재생";
 }
 
-/** 자동 재생: 수 간격은 속도 설정, 국 결과에서는 결과 창을 읽을 시간만큼 더 머문다. */
+/** 자동 재생: 기본 유지 시간(속도 설정) × 그 수의 배수(rvHoldOf)만큼 머문 뒤 다음 수로. */
 function rvPlay() {
   rv$("rv-play").textContent = "정지";
   const tick = () => {
     if (!rv.data || rv.pos >= rv.data.reproduction.steps.length - 1) return rvStop();
     rvGoTo(rv.pos + 1, { sound: true });
     const e = rv.data.reproduction.steps[rv.pos].event;
-    const hold = e.type === "hand_end" ? REPLAY_HAND_END_HOLD : 1;
-    rv.playTimer = setTimeout(tick, REPLAY_SPEEDS[rv.speed] * hold);
+    rv.playTimer = setTimeout(tick, REPLAY_SPEEDS[rv.speed] * rvHoldOf(e));
   };
-  rv.playTimer = setTimeout(tick, REPLAY_SPEEDS[rv.speed]);
+  rv.playTimer = setTimeout(tick, REPLAY_SPEEDS[rv.speed] * rvHoldOf(rv.data.reproduction.steps[rv.pos].event));
 }
 
 function rvAct(name) {
