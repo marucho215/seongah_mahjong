@@ -272,8 +272,40 @@ npm run sim:yonma -- --players jegalmina,toumesuayo,byeonari,seiyakouri --seed y
 npm run validate -- --games 100 [--seed S] [--format sanma|yonma] [--save-failures]   # 대량 자체 대국 불변식 검사
 ```
 
-좌석 순서는 `--players`에 적은 순서를 따르고, 같은 characterId를 여러 번 적어도 된다. 등록된 characterId 목록은
-`src/ai/characterProfiles.ts`에 있다.
+좌석 순서는 `--players`에 적은 순서를 따르고(첫 캐릭터가 처음 친), 같은 characterId를 여러 번 적어도 된다.
+
+#### 캐릭터 목록 (터미널 명령의 characterId)
+
+`--players` 등 터미널 명령에는 아래 characterId를 쓴다. 태그는 로비 캐릭터 카드와 같다(`src/gui/characterRoster.ts`).
+수치는 `src/ai/characterProfiles.ts`에 있다. 로비에서 만든 CustomAI는 터미널 명령에서 쓸 수 없다.
+
+| characterId | 이름 | 태그 |
+|---|---|---|
+| `jegalmina` | 제갈 미나 | 읽기 어려움, 타점 중시, 칠대자 선호 |
+| `jegalnahui` | 제갈 나희 | 안정적인 선택, 복잡한 국면에서 실수 |
+| `seiyamouri` | 세이야 모우리 | 울기 많음, 공격적, 빠른 템포 |
+| `seiyakouri` | 세이야 코우리 | 다마텐 선호, 리치 적음, 신중함 |
+| `kyletyler` | 카일 타일러 | 특이한 수순, 고집 있는 운영, 위험 감수 |
+| `seiyatosuke` | 세이야 토스케 | 수비 중시, 다마텐 선호, 울기 적음, 여유 있을 땐 힘을 뺌 |
+| `toumesuashi` | 토우메 스아시 | 수비 중시, 다마텐 선호, 일관된 선택 |
+| `toumesuayo` | 토우메 스아요 | 직선적인 공격, 리치 적극적, 울기도 사용 |
+| `byeonari` | 변아리 | 좋은 모양 선호, 위험 회피 |
+| `kangunsim` | 강운심 | 빠른 템포, 울기 많음, 속도 우선 |
+| `kimwooju` | 김우주 | 위협에 민감, 멘젠 중시, 다마텐 선호 |
+| `ryumint` | 류민트 | 울기 많음, 위험 감수 |
+| `inan` | 이난 | 수비 중시, 무리하지 않음, 다마텐 선호 |
+| `effieminos` | 에피 미노스 | 타점 재료 수집, 모은 패에 애착 |
+| `hwayoung` | 화영 | 리치 적극적, 끈질긴 승부, 공격적 |
+| `mageuna` | 마근아 | 계획형, 일관된 선택, 변수가 겹치면 흔들림 |
+| `magnum` | 매그넘 | 변칙적인 선택, 울기 많음, 공격적 |
+| `optima215` | 옵티마-215 | 명확하면 단호함, 애매하면 흔들림 |
+| `yuwen` | 여온 | 속도 우선 |
+| `josangmin` | 조상민 | 꼭 필요한 행동만, 울기 적음, 수비 중시 |
+| `seiyahikudo` | 세이야 히쿠도 | 큰 손 지향, 역만 욕심, 혼일색 선호 |
+| `ryuheart` | 류하트 | 울기 많음, 저타점 속공 |
+
+예전 id `ryuhart`도 `ryuheart`로 받아들인다. 캐릭터를 추가하거나 이름·태그를 바꾸면 이 표도 고친다(`tests/readmeRoster.test.ts`가
+코드와 비교한다).
 
 #### 역만이 나올 때까지 돌리기
 
