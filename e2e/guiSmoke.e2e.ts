@@ -1,5 +1,5 @@
 /* GUI 핵심 흐름 스모크 테스트 (최소 범위): 로비 → 대국 방식 선택 → 설정 → 대국 시작 → 그만두기 / 종료 → 설정 바꾸기,
- * 그리고 로비의 AI끼리 관전 → 리플레이 뷰어 자동 재생.
+ * 그리고 로비의 AI끼리 관전 → 대국 화면과 같은 작탁에서 리플레이 자동 재생.
  * 규칙/AI는 단위 테스트가 다루고, 여기서는 화면 흐름이 끊기지 않는지만 본다. 서버는 테스트 안에서 임시 폴더로 띄운다. */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -93,7 +93,7 @@ describe("GUI 스모크", () => {
     expect(await modeRow("4마").count()).toBe(1);
   });
 
-  it("AI끼리 관전: 허브 → 산마 관전 설정(3좌석 모두 AI) → 관전 시작 → 리플레이 뷰어 자동 재생", async () => {
+  it("AI끼리 관전: 허브 → 산마 관전 설정(3좌석 모두 AI) → 관전 시작 → 같은 작탁에서 리플레이 자동 재생", async () => {
     await watchRow("산마").click();
     await page.getByText("관전 시작").waitFor();
     expect(await seatLabels()).toEqual(["동가", "남가", "서가"]);
@@ -105,9 +105,30 @@ describe("GUI 스모크", () => {
     await start.evaluate((b) => b.scrollIntoView({ block: "center" }));
     const box = (await start.boundingBox())!;
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-    await page.waitForURL(/\/replay\.html\?file=watch-sanma-.*_game0\.json&autoplay=1$/, { timeout: 120_000 });
+    await page.waitForURL(/\/\?replay=watch-sanma-.*_game0\.json&autoplay=1$/, { timeout: 120_000 });
     await page.locator("#rv-play", { hasText: "정지" }).waitFor({ timeout: 120_000 }); // 재현이 끝나면 스스로 재생을 시작한다
     expect(handle.getSession()).toBeNull(); // 사람 대국 화면(세션)은 쓰지 않는다
+
+    // 대국 화면과 같은 작탁: 3인 좌석, 아래 자리 손패, 상대 손패는 기본 전원 공개(앞면)
+    await page.locator("#rv-play").click(); // 정지
+    expect(await page.locator("#table").getAttribute("data-players")).toBe("3");
+    await page.locator("#zone-bottom .hand img").first().waitFor();
+    expect(await page.locator("#zone-right .open-hand img").count()).toBeGreaterThan(0);
+    expect(await page.locator("#zone-right .hand-edge .back-tile").count()).toBe(0);
+    // "아래 자리만"으로 바꾸면 상대 손패는 뒷면이 된다
+    await page.locator("#rv-open-hands").click();
+    expect(await page.locator("#zone-right .open-hand img").count()).toBe(0);
+    expect(await page.locator("#zone-right .hand-edge .back-tile").count()).toBeGreaterThan(0);
+    await page.locator("#rv-open-hands").click();
+    // 화료·유국 지점 → 다음 수(국 종료)에서 대국과 같은 결과 창이 뜨고, 이어서 보기로 넘어간다
+    await page.locator(".rv-btn", { hasText: "화료·유국" }).click();
+    await page.locator(".rv-btn", { hasText: "▶" }).click();
+    await page.locator("#hand-end-overlay:not(.hidden) .continue-button", { hasText: "이어서 보기" }).waitFor();
+    await page.locator("#hand-end-overlay .continue-button").click();
+    await page.locator("#hand-end-overlay.hidden").waitFor({ state: "attached" });
+    // AI 판단 패널을 열면 오른쪽에 판단 기록이 보인다
+    await page.locator("#rv-ai-toggle").click();
+    await page.locator("#rv-ai-panel:not(.hidden)").waitFor();
   }, 240_000);
 
   it("휴대폰: 세로 로비는 가로로 넘치지 않고, 대국은 세로면 돌려 달라는 안내, 가로면 조작 막대가 메뉴로 접힌다", async () => {

@@ -135,6 +135,14 @@ function formatDelta(n) {
 
 // --- DOM helpers ---
 
+/** 리플레이는 대국 화면에서 리플레이 모드(replayMode.js)로 연다. file이 빈 문자열이면 파일 고르기부터. */
+function replayUrl(file, autoplay = false) {
+  return `/?replay=${encodeURIComponent(file)}${autoplay ? "&autoplay=1" : ""}`;
+}
+
+/** 이 페이지가 리플레이 모드인지 (주소에 ?replay=). 리플레이 모드는 서버 이벤트(대국/로비)에 연결하지 않는다. */
+const IS_REPLAY_MODE = new URLSearchParams(location.search).has("replay");
+
 function el(tag, className, attrs) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -368,6 +376,22 @@ function renderHandEdge(container, count, pos) {
   }
 }
 
+/** 리플레이(전원 공개)의 상대 손패: 앞면 작은 패를 정렬해 한 줄로 놓고 그 좌석 쪽으로 돌린다 (강과 같은 방향).
+ *  방금 뽑은 패(drawnTileId)는 조금 떼어 끝에 둔다. 대국 중에는 쓰지 않는다 (PlayerView에 상대 패가 없다). */
+function renderOpenHandEdge(container, tiles, pos, drawnTileId) {
+  container.innerHTML = "";
+  const row = el("div", "open-hand");
+  const drawn = drawnTileId === undefined ? undefined : tiles.find((t) => t.id === drawnTileId);
+  for (const t of tiles.filter((x) => x !== drawn).sort(compareTilesForDisplay)) row.appendChild(tileImg(t, { small: true }));
+  if (drawn) {
+    row.appendChild(el("span", "open-hand-gap"));
+    row.appendChild(tileImg(drawn, { small: true }));
+  }
+  const wrap = el("div", "open-hand-wrap");
+  container.appendChild(wrap);
+  placeRotated(wrap, row, RIVER_TURN_DEG[pos]);
+}
+
 const WIND_KO = ["", "동", "남", "서", "북"];
 
 /** Three visually separate groups: [turn marker, outside the plate] | [seat wind + dealer badge]
@@ -484,7 +508,10 @@ function renderTable(view, turnSeat, emphasis) {
     melds.innerHTML = "";
     for (const m of data.melds) melds.appendChild(renderMeldGroup(m, seat, n));
 
-    if (!isMe) renderHandEdge(zone.querySelector(".hand-edge"), data.concealedCount, pos);
+    if (!isMe) {
+      if (data.concealedTiles) renderOpenHandEdge(zone.querySelector(".hand-edge"), data.concealedTiles, pos, data.drawnTileId);
+      else renderHandEdge(zone.querySelector(".hand-edge"), data.concealedCount, pos);
+    }
 
     const cell = riverCellEl(pos);
     const wrap = cell.querySelector(".river-wrap");
@@ -1449,7 +1476,7 @@ function renderFinalResultStep() {
 
   // 이 대국을 리플레이로 저장했으면 뷰어로 바로 간다 (새 탭: 종료 화면과 "다시 하기" 버튼은 그대로 남는다)
   if (msg.replayFile) {
-    const link = el("a", "final-replay-link", { href: `/replay.html?file=${encodeURIComponent(msg.replayFile)}`, target: "_blank", rel: "noopener" });
+    const link = el("a", "final-replay-link", { href: replayUrl(msg.replayFile), target: "_blank", rel: "noopener" });
     link.textContent = "이 대국 리플레이 보기";
     panel.appendChild(link);
   }
@@ -1930,7 +1957,8 @@ function renderNicknameLine() {
   return line;
 }
 
-fetch("/api/me")
+// 로비 머리말의 닉네임 (리플레이 모드에는 로비가 없다)
+if (!IS_REPLAY_MODE) fetch("/api/me")
   .then((res) => (res.ok ? res.json() : null))
   .then((me) => {
     if (!me) return;
@@ -1964,9 +1992,9 @@ function renderSetup() {
   lead.textContent = isHub
     ? "대국 방식을 고르면 좌석과 상대를 정할 수 있습니다."
     : watching
-      ? "모든 좌석에 AI를 앉힙니다. 대국을 끝까지 진행한 뒤 리플레이 뷰어에서 자동 재생합니다."
+      ? "모든 좌석에 AI를 앉힙니다. 대국을 끝까지 진행한 뒤 대국 화면과 같은 작탁에서 리플레이로 자동 재생합니다."
       : "좌석을 고르고 캐릭터를 눌러 앉힙니다. 같은 캐릭터는 한 좌석에만 앉을 수 있습니다.";
-  const replayLink = el("a", "setup-replay-link", { href: "/replay.html", target: "_blank", rel: "noopener" });
+  const replayLink = el("a", "setup-replay-link", { href: replayUrl(""), target: "_blank", rel: "noopener" });
   replayLink.textContent = "저장된 리플레이 보기";
   header.append(h1, lead, replayLink);
   if (onlineNickname !== null) header.appendChild(renderNicknameLine());
@@ -2336,7 +2364,7 @@ async function startWatchFromSetup() {
     const res = await fetch("/watch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(await res.text());
     const { file } = await res.json();
-    location.href = `/replay.html?file=${encodeURIComponent(file)}&autoplay=1`;
+    location.href = replayUrl(file, true);
   } catch (err) {
     setupState.pending = false;
     setupState.error = err instanceof Error ? err.message : String(err);
@@ -2458,7 +2486,7 @@ function renderWatchBatchPanel(batch) {
       li.append(`${g.index + 1}판 (${g.seed}, ${g.hands}국): ${ranks}`);
       if (g.replayFile) {
         li.append(" · ");
-        const a = el("a", "setup-replay-link", { href: `/replay.html?file=${encodeURIComponent(g.replayFile)}`, target: "_blank", rel: "noopener" });
+        const a = el("a", "setup-replay-link", { href: replayUrl(g.replayFile), target: "_blank", rel: "noopener" });
         a.textContent = "리플레이";
         li.appendChild(a);
       }
@@ -2873,13 +2901,15 @@ function handleMessageBody(msg) {
   maybeAutoRespond();
 }
 
-const events = new EventSource("/events");
-events.onmessage = (ev) => handleMessage(JSON.parse(ev.data));
-// 입장 세션이 없으면(온라인 서버에서 쿠키가 없거나 무효) 이벤트 연결이 401로 끊긴다: 입장 화면으로 보낸다.
-events.onerror = () => {
-  fetch("/api/me")
-    .then((res) => {
-      if (res.status === 401) location.href = "/join.html";
-    })
-    .catch(() => {});
-};
+if (!IS_REPLAY_MODE) {
+  const events = new EventSource("/events");
+  events.onmessage = (ev) => handleMessage(JSON.parse(ev.data));
+  // 입장 세션이 없으면(온라인 서버에서 쿠키가 없거나 무효) 이벤트 연결이 401로 끊긴다: 입장 화면으로 보낸다.
+  events.onerror = () => {
+    fetch("/api/me")
+      .then((res) => {
+        if (res.status === 401) location.href = "/join.html";
+      })
+      .catch(() => {});
+  };
+}

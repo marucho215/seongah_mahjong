@@ -14,7 +14,7 @@
   GUI는 설정 화면의 "리플레이 저장"(또는 `--save-replays`)으로 게임 종료 시 저장하며, 중단한 대국은 저장하지 않는다.
 - **GUI 흐름 (1.1)**: 로비(대국 방식 선택 → 같은 화면의 좌석/CustomAI/시드/리플레이 설정) → 대국(AI 진행 속도, 자동 쯔모기리/
   울기 패스/자동 화료, 샹텐·텐파이 대기 표시, 대국 그만두기) → 국 결과(손패/도라 내역/판·부·등급/점수 이동) → 최종 결과(엔진 순위,
-  같은 설정/같은 시드로 다시, 설정 바꾸기). 리플레이 뷰어(`/replay.html`), CustomAI 편집기. 변경 내역은 `RELEASE_NOTES.md`.
+  같은 설정/같은 시드로 다시, 설정 바꾸기). 리플레이(대국 화면의 리플레이 모드 `/?replay=`), CustomAI 편집기. 변경 내역은 `RELEASE_NOTES.md`.
 - **온라인 플레이 (1.2)**: 닉네임 입장(공개 모드, 1.2.0 이후) 또는 초대 코드 + 닉네임(비공개 모드), 사용자별
   로비/대국/CustomAI/리플레이, 엔진 worker 풀, 자원 제한.
   운영은 Windows 노트북 + Tailscale Funnel(`docs/ONLINE_HOSTING.md`)이며, 운영자의 노트북에서 모바일 데이터 접속까지 확인했다.
@@ -102,7 +102,12 @@
   관찰은 재현용 인스턴스의 `log.push`와 엔진의 표시 전용 접근자 `GameState.observeCurrentHands()`만 쓴다. AI 판단은 "이 이벤트
   직전에 새로 기록된 판단"만 붙인다. 원본 파일은 읽기만 한다. 관찰 기능 추가 전후 리플레이 바이트 동일성은
   `tests/replayParity.test.ts`(고정 해시)가 지킨다.
-- 서버: `GET /api/replays`(목록), `GET /api/replays/<파일>`(재현 결과, 파일별 캐시). 화면: `src/gui/public/replay.html`, `replay.js`.
+- 서버: `GET /api/replays`(목록), `GET /api/replays/<파일>`(재현 결과, 파일별 캐시). 예전 `/replay.html?file=`은 `/?replay=`로 302.
+- 화면: 대국 화면(`index.html`)의 리플레이 모드 `src/gui/public/replayMode.js`. 주소에 `?replay=`가 있으면 app.js는 이벤트
+  스트림을 열지 않고(`IS_REPLAY_MODE`), replayMode.js가 재현 결과의 수마다 표시용 상태를 대국 view 모양(`rvBuildView`)으로 바꿔
+  app.js의 `renderTable`/`renderMySeat`/`renderHandEndPanel`로 그린다. 상대 손패 앞면은 view의 상대 항목에 `concealedTiles`가
+  있을 때만 `renderOpenHandEdge`로 그린다(대국 중 PlayerView에는 없다). 손패 공개/아래 자리/AI 패널/재생 속도는 화면 상태이며
+  보기 설정만 localStorage에 둔다. 테스트: `e2e/guiSmoke.e2e.ts`(AI 관전 → 리플레이), `tests/replayViewerServer.test.ts`.
 - 향후 replay schema 개선 후보 (이번에는 확장하지 않음): 치 이벤트의 멘츠 구성 패(지금은 울은 패 종류만 있음), 배패/쯔모의 적5
   정보(지금은 종류만 있음), AI 판단 기록과 이벤트의 직접 연결 필드(지금은 handIndex/player만 있음). 이것들이 있으면 재시뮬레이션
   없이도(또는 엔진이 바뀐 뒤의 옛 기록도) 복원할 수 있다.
@@ -112,7 +117,7 @@
 - 로비 상태에 용도(`Room.lobbyPurpose`: `play|watch`)와 모드별 관전 좌석(`lastSetup.watchSeats`, 기본 `DEFAULT_WATCH_SEATS`)이 있다.
   `POST /lobby {screen:"setup", mode, purpose:"watch"}`로 관전 설정 화면에 가고(용도를 생략하면 사람 대국), `POST /watch
   {mode, seats, seed?}`(`parseAiWatchConfig`: 좌석 수 = 인원, 같은 캐릭터 중복 불가)가 한 게임을 끝까지 돌려 사용자 리플레이 폴더에
-  저장하고 `{file}`을 돌려준다. 클라이언트는 `/replay.html?file=<파일>&autoplay=1`로 이동하고, 뷰어는 재현이 끝나면 자동 재생한다.
+  저장하고 `{file}`을 돌려준다. 클라이언트는 `/?replay=<파일>&autoplay=1`로 이동하고, 리플레이 모드는 재현이 끝나면 자동 재생한다.
 - 엔진: `engineRunner.ts runAiWatchGame`(GuiSession 없이 `createAiWatchGame` + `playGame()`), worker op `watch`,
   `EngineWorkerPool.runAiWatch`. GameState/frameObserver/정보 공개 경계는 바꾸지 않았다. 등록 캐릭터 좌석은 `characterAI`,
   CustomAI 좌석은 `customAI`로, 같은 시드와 좌석이면 `npm run sim`과 같은 대국이다(`tests/aiWatch.test.ts`).

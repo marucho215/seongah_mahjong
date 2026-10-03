@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8" />
-<!-- 휴대폰이 PC 폭으로 그린 뒤 축소하지 않도록 (join.html, replay.html과 같다) -->
+<!-- 휴대폰이 PC 폭으로 그린 뒤 축소하지 않도록 (join.html과 같다) -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Seongah Majak — Human Play</title>
 <link rel="stylesheet" href="/style.css" />
@@ -52,7 +52,7 @@
     <div class="rotate-hint-box">
       <div class="rotate-hint-icon" aria-hidden="true">⟳</div>
       <p>휴대폰을 가로로 돌려 주세요.</p>
-      <p class="rotate-hint-sub">대국 화면은 가로 화면에 맞춰져 있습니다. 로비와 리플레이 뷰어는 세로로도 쓸 수 있습니다.</p>
+      <p class="rotate-hint-sub">대국과 리플레이 화면은 가로 화면에 맞춰져 있습니다. 로비는 세로로도 쓸 수 있습니다.</p>
     </div>
   </div>
 
@@ -62,5 +62,7 @@
 
   <script src="/audioManager.js"></script>
   <script src="/app.js"></script>
+  <!-- 리플레이 모드(/?replay=): 같은 작탁에서 리플레이를 본다 -->
+  <script src="/replayMode.js"></script>
 </body>
 </html>

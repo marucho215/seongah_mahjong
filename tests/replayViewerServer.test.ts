@@ -46,5 +46,12 @@ describe("리플레이 뷰어 서버 (/api/replays)", () => {
 
     expect((await fetch(`${base}/api/replays/..%2Fpackage.json`)).status).toBe(400);
     expect((await fetch(`${base}/api/replays/missing_game0.json`)).status).toBe(404);
+
+    // 옛 리플레이 뷰어 주소는 대국 화면의 리플레이 모드로 넘긴다 (예전 링크/즐겨찾기)
+    const old = await fetch(`${base}/replay.html?file=good_game0.json&autoplay=1`, { redirect: "manual" });
+    expect(old.status).toBe(302);
+    expect(old.headers.get("location")).toBe("/?replay=good_game0.json&autoplay=1");
+    expect((await fetch(`${base}/replay.html`, { redirect: "manual" })).headers.get("location")).toBe("/?replay=");
+    expect((await fetch(`${base}/replay.js`)).status).toBe(404); // 옛 뷰어 스크립트는 없다
   }, 120_000);
 });

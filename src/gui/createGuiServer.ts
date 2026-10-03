@@ -64,7 +64,7 @@ const MIME_TYPES: Record<string, string> = {
 
 /** The frontend files that change constantly during development are never cached, so a normal
  *  reload always shows the current UI. Tile SVGs and other static assets are left cacheable. */
-const NO_STORE_FILES = new Set(["/index.html", "/app.js", "/audioManager.js", "/style.css", "/replay.html", "/replay.js", "/join.html", "/join.js"]);
+const NO_STORE_FILES = new Set(["/index.html", "/app.js", "/audioManager.js", "/style.css", "/replayMode.js", "/join.html", "/join.js"]);
 
 /** 입장 게이트가 켜져 있을 때 입장 전에도 열리는 경로 (입장 화면과 그 스타일). */
 const JOIN_PUBLIC_PATHS = new Set(["/join.html", "/join.js", "/style.css"]);
@@ -1809,6 +1809,15 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
 
     if (req.method === "POST" && url.pathname === "/setup") {
       reply(res, () => returnToSetup(room));
+      return;
+    }
+
+    // 옛 리플레이 뷰어 주소: 리플레이는 이제 대국 화면(/?replay=<파일>)에서 본다. 예전 링크/즐겨찾기도 그대로 열리게 넘겨 준다.
+    if (req.method === "GET" && url.pathname === "/replay.html") {
+      const next = new URLSearchParams();
+      next.set("replay", url.searchParams.get("file") ?? "");
+      if (url.searchParams.get("autoplay") === "1") next.set("autoplay", "1");
+      res.writeHead(302, { Location: `/?${next.toString()}`, "Cache-Control": "no-store" }).end();
       return;
     }
 
