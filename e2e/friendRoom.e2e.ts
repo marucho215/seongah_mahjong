@@ -160,6 +160,6 @@ describe("친선전 방 스모크", () => {
     await watcher.locator(".abandon-button").click();
     await watcher.locator(".friend-spectate").waitFor();
     // 방장의 대국은 그대로다
-    await host.locator("#zone-bottom .hand img.clickable").first().waitFor();
+    await host.locator("#zone-bottom .hand img").first().waitFor();
   }, 120_000);
 });

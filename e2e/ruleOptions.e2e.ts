@@ -70,7 +70,7 @@ describe("규칙 옵션", () => {
     await rules().locator("summary").click();
     expect(await rules().locator(".rule-label").allTextContents()).not.toContain("쿠이카에 금지");
     await page.locator(".setup-side .setup-start").click();
-    await page.locator("#zone-bottom .hand img.clickable").first().waitFor({ timeout: 30_000 });
+    await page.locator("#zone-bottom .hand img").first().waitFor({ timeout: 30_000 }); // (첫 요청이 북빼기 등이면 아직 클릭할 수 있는 패가 없다)
     expect(await page.locator("#center-info .rule-chips").count()).toBe(0);
   }, 60_000);
 });

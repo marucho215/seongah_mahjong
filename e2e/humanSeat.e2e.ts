@@ -61,7 +61,7 @@ describe("내 자리 선택", () => {
     expect(await page.locator(".seat-picker button").allTextContents()).toEqual(["랜덤", "동가 (친)", "남가", "서가"]);
     await pick("남가").click();
     await page.locator(".setup-side .setup-start").click();
-    await page.locator("#zone-bottom .hand img.clickable").first().waitFor({ timeout: 30_000 });
+    await page.locator("#zone-bottom .hand img").first().waitFor({ timeout: 30_000 });
     expect((handle.getSession()!.getCurrentRequest() as unknown as { view: { seat: number } }).view.seat).toBe(1);
 
     page.once("dialog", (d) => void d.accept());

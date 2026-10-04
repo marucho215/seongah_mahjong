@@ -60,12 +60,13 @@ describe("자동 옵션은 국이 끝나면 꺼진다", () => {
     expect(["hand_end", "game_end"]).toContain(session.getPhase());
     if (session.getPhase() === "hand_end") {
       await page.locator("#hand-end-overlay .continue-button").last().click();
-      await page.locator("#zone-bottom .hand img.clickable").first().waitFor();
-      // 다음 국 첫 타패 요청이 사람의 선택을 기다린다 (자동 쯔모기리가 켜져 있었다면 바로 사라졌을 것이다)
-      await page.waitForTimeout(800);
-      expect(session.getPhase()).toBe("decision");
-      expect(session.getCurrentRequest()!.type).toBe("discard");
-      await page.getByText("버릴 패를", { exact: false }).first().waitFor();
+      // 다음 국의 첫 사람 요청 (친이 아니면 퐁/치 제안이 먼저 올 수도 있다)이 사람의 선택을 기다린다.
+      // 자동 옵션이 남아 있었다면 울기 패스/자동 쯔모기리가 곧바로 그 요청에 답해 요청이 바뀌었을 것이다.
+      await expect.poll(() => session.getPhase() === "decision" && session.getCurrentRequest() !== null, { timeout: 30_000 }).toBe(true);
+      const pending = session.getCurrentRequest();
+      await page.waitForTimeout(1000);
+      expect(session.getCurrentRequest()).toBe(pending);
+      expect(await pressed()).toEqual(["false", "false", "false"]);
     }
   }, 120_000);
 

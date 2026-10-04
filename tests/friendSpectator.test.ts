@@ -84,13 +84,16 @@ describe("친선전 방 관전", () => {
     expect((await watcher.post("/friend/spectate", { code: "ZZZZZZ" })).status).toBe(404);
 
     expect((await host.post("/friend/start")).status).toBe(204);
+    // 첫 타패 요청까지: 북빼기 같은 다른 요청이 먼저 오면 "하지 않음"으로 넘긴다 (시드가 무작위라 첫 요청이 타패가 아닐 수 있다)
     let hostDecision: any;
     for (;;) {
       const m = await host.next();
-      if (m.type === "decision") {
+      if (m.type !== "decision") continue;
+      if (m.request.type === "discard") {
         hostDecision = m;
         break;
       }
+      expect((await host.post("/respond", { type: m.request.type, declare: false })).status).toBe(204);
     }
     expect((hostDecision.request.view.concealedTiles as unknown[]).length).toBeGreaterThanOrEqual(13);
 
