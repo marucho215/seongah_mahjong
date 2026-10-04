@@ -130,6 +130,8 @@ describe("시작 화면 서버 (createGuiLobbyServer)", () => {
       watchSaveReplays: false,
       seed: "cli-seed",
       saveReplays: true,
+      humanSeat: 0, // 내 자리 (기본 동가)
+      rules: {}, // 규칙 옵션 (기본 규칙)
     });
     expect(msg.purpose).toBe("play");
     expect(lobby.getSession()).toBeNull();
