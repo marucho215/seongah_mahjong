@@ -313,6 +313,11 @@ function rvRiichiIndex(discards) {
   return before < total ? before : null;
 }
 
+/** 패보용 전체 버림패 기록 (대국 화면의 PlayerView.discardLog와 같은 모양) */
+function rvDiscardLog(seat) {
+  return seat.discards.map((d) => ({ tile: d.tile, tsumogiri: !!d.tsumogiri, riichiDeclaration: !!d.riichi, calledAway: !!d.calledAway }));
+}
+
 function rvBuildView(table, anchor, openHands, drawn) {
   const n = table.seats.length;
   const river = (s) => s.discards.filter((d) => !d.calledAway).map((d) => d.tile.kind);
@@ -323,6 +328,7 @@ function rvBuildView(table, anchor, openHands, drawn) {
     melds: own.melds,
     kitaTiles: own.kita,
     discards: river(own),
+    discardLog: rvDiscardLog(own),
     riichiDiscardIndex: rvRiichiIndex(own.discards),
     riichi: own.riichi,
     seatWinds: table.seats.map((_, s) => ((s - table.dealer + n) % n) + 1),
@@ -334,6 +340,7 @@ function rvBuildView(table, anchor, openHands, drawn) {
       .map(({ s, seat }) => ({
         seat,
         discards: river(s),
+        discardLog: rvDiscardLog(s),
         riichiDiscardIndex: rvRiichiIndex(s.discards),
         concealedCount: s.concealed.length,
         melds: s.melds,

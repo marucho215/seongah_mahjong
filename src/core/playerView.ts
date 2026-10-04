@@ -71,11 +71,32 @@ export function withUnseenCounts(
   return kinds.map((kind) => ({ kind, unseenCount: unseenCountOf(view, kind) }));
 }
 
+/** 버림패 한 장의 공개 기록 (패보). 모두 테이블에 보이는 정보다: 어떤 패를 어떤 순서로 버렸는지, 뽑자마자 버렸는지(쯔모기리),
+ *  리치 선언패인지, 남이 울어 갔는지. 손패 안의 패에 대한 정보는 없다. */
+export interface DiscardLogEntry {
+  tile: TileRef;
+  tsumogiri: boolean;
+  riichiDeclaration: boolean;
+  /** 남의 치/퐁/깡으로 울려 갔다 (그 패는 울어 간 사람의 멘츠에 있고, `discards`(강)에는 없다) */
+  calledAway: boolean;
+}
+
+export function discardLogOf(hand: Hand): DiscardLogEntry[] {
+  return hand.discards.map((d) => ({
+    tile: tileToRef(d.tile),
+    tsumogiri: d.tsumogiri,
+    riichiDeclaration: d.isRiichiDeclaration,
+    calledAway: d.calledAway,
+  }));
+}
+
 export interface PlayerViewOpponent {
   seat: number;
   /** Own discards only, excluding any that were called away (those tiles now live in the
    *  caller's meld, not the river) - matches collectVisibleTileKinds' own convention. */
   discards: TileKind[];
+  /** 이 좌석이 버린 순서대로의 전체 공개 기록 (울려 간 패 포함, 패보 화면용). `discards`와 달리 되돌려 쓰지 않는다. */
+  discardLog: DiscardLogEntry[];
   /** See riichiDiscardIndexOf. */
   riichiDiscardIndex: number | null;
   /** How many tiles this seat holds concealed - public information (a table sees the size of
@@ -101,6 +122,8 @@ export interface PlayerView {
    *  PlayerViewOpponent.discards. Additive field (GUI river rendering needs this;
    *  the CLI driver does not use it). */
   discards: TileKind[];
+  /** 내가 버린 순서대로의 전체 공개 기록 (PlayerViewOpponent.discardLog와 같다). */
+  discardLog: DiscardLogEntry[];
   /** See riichiDiscardIndexOf. */
   riichiDiscardIndex: number | null;
   riichi: boolean;
@@ -184,6 +207,7 @@ export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
     .map(({ hand, seat: i }) => ({
       seat: i,
       discards: hand.discards.filter((d) => !d.calledAway).map((d) => d.tile.kind),
+      discardLog: discardLogOf(hand),
       riichiDiscardIndex: riichiDiscardIndexOf(hand),
       concealedCount: hand.concealed.length,
       melds: hand.melds.map(meldToSnapshot),
@@ -196,6 +220,7 @@ export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
     melds: own.melds.map(meldToSnapshot),
     kitaTiles: own.kitaTiles.map(tileToRef),
     discards: own.discards.filter((d) => !d.calledAway).map((d) => d.tile.kind),
+    discardLog: discardLogOf(own),
     riichiDiscardIndex: riichiDiscardIndexOf(own),
     riichi: own.riichi,
     seatWinds: hands.map((_, s) => seatDistance(options.dealerSeat, s, hands.length) + 1),

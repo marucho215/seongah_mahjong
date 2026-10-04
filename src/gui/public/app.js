@@ -537,6 +537,147 @@ function renderTable(view, turnSeat, emphasis) {
       if (last) last.classList.add("latest");
     }
   }
+  lastTableView = view;
+  renderLogPanel();
+}
+
+// --- 패보: 모두의 버림패 전체와 울기 내역. 작탁의 강은 울려 간 패를 빼고 보여 주지만, 여기서는 버린 순서대로 전부(울려 간 패,
+// 쯔모기리, 리치 선언패 표시) 보여 준다. 모두 테이블에 보이는 정보이며 엔진이 view에 담아 준 기록을 그대로 그린다 (켜고 끄는
+// 상태는 이 브라우저에 저장). ---
+
+let lastTableView = null;
+const LOG_STORAGE_KEY = "seongah.logPanelOpen";
+let logPanelOpen = (() => {
+  try {
+    return localStorage.getItem(LOG_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+})();
+
+function setLogPanelOpen(open) {
+  logPanelOpen = open;
+  try {
+    localStorage.setItem(LOG_STORAGE_KEY, open ? "1" : "0");
+  } catch {
+    // 저장소를 못 쓰는 환경이면 이번 접속에서만 유지된다
+  }
+  const btn = document.querySelector("#audio-controls .log-toggle");
+  if (btn) {
+    btn.setAttribute("aria-pressed", String(open));
+    btn.classList.toggle("is-on", open);
+  }
+  renderLogPanel();
+}
+
+function renderLogPanel() {
+  let panel = document.getElementById("log-panel");
+  if (!logPanelOpen || !lastTableView) {
+    if (panel) panel.classList.add("hidden");
+    return;
+  }
+  if (!panel) {
+    panel = el("aside", "log-panel", { "aria-label": "패보" });
+    panel.id = "log-panel";
+    document.body.appendChild(panel);
+  }
+  panel.classList.remove("hidden");
+  const view = lastTableView;
+  const n = view.scores.length;
+  panel.innerHTML = "";
+
+  const head = el("div", "log-head");
+  const title = el("strong");
+  title.textContent = `패보 · ${ROUND_WIND_KO[view.roundWind] ?? view.roundWind}${view.roundHandNumber}국`;
+  const close = el("button", "log-close");
+  close.type = "button";
+  close.textContent = "×";
+  close.title = "패보 닫기 (H)";
+  close.addEventListener("click", () => setLogPanelOpen(false));
+  head.append(title, close);
+  panel.appendChild(head);
+
+  const info = el("div", "log-info");
+  const dora = (view.doraKinds || []).map((k) => koreanTileLabel(k)).join(" ");
+  info.textContent = `도라 ${dora || "-"}` + (view.wallRemainingLive !== undefined ? ` · 남은 패 ${view.wallRemainingLive}장` : "");
+  panel.appendChild(info);
+
+  for (let i = 0; i < n; i++) {
+    const seat = (view.seat + i) % n;
+    const data = seat === view.seat ? view : view.opponents.find((o) => o.seat === seat);
+    if (!data) continue;
+    const section = el("section", "log-seat" + (seat === view.seat ? " is-me" : ""));
+    const name = el("div", "log-name");
+    const label = el("b");
+    label.textContent = displayNameForSeat(seat, view.seat);
+    name.appendChild(label);
+    if (data.riichi) {
+      const mark = el("span", "log-riichi");
+      mark.textContent = "리치";
+      name.appendChild(mark);
+    }
+    const count = el("span", "log-count");
+    count.textContent = `${(data.discardLog || []).length}장`;
+    name.appendChild(count);
+    section.appendChild(name);
+
+    const row = el("div", "log-tiles");
+    for (const d of data.discardLog || []) {
+      const img = tileImg(d.tile, { small: true });
+      const notes = [];
+      if (d.tsumogiri) {
+        img.classList.add("is-tsumogiri");
+        notes.push("쯔모기리");
+      }
+      if (d.calledAway) {
+        img.classList.add("is-called-away");
+        notes.push("울려 감");
+      }
+      if (d.riichiDeclaration) {
+        img.classList.add("is-riichi-decl");
+        notes.push("리치 선언패");
+      }
+      if (notes.length) img.title = `${img.title} - ${notes.join(", ")}`;
+      row.appendChild(img);
+    }
+    if (!(data.discardLog || []).length) {
+      const empty = el("span", "log-empty");
+      empty.textContent = "아직 버린 패가 없습니다";
+      row.appendChild(empty);
+    }
+    section.appendChild(row);
+
+    if (data.melds && data.melds.length > 0) {
+      const melds = el("div", "log-melds");
+      for (const meld of data.melds) {
+        const item = el("div", "log-meld");
+        item.appendChild(renderMeldGroup(meld, seat, n));
+        if (meld.fromPlayer !== undefined) {
+          const from = el("span", "log-from");
+          from.textContent = `← ${displayNameForSeat(meld.fromPlayer, view.seat)}`;
+          item.appendChild(from);
+        }
+        melds.appendChild(item);
+      }
+      section.appendChild(melds);
+    }
+    panel.appendChild(section);
+  }
+
+  const legend = el("div", "log-legend");
+  legend.textContent = "흐림 = 쯔모기리 · 취소선/옅음 = 울려 감 · 노란 테두리 = 리치 선언패";
+  panel.appendChild(legend);
+}
+
+function mountLogToggle() {
+  const btn = document.querySelector("#audio-controls .log-toggle");
+  if (!btn) return;
+  btn.setAttribute("aria-pressed", String(logPanelOpen));
+  btn.classList.toggle("is-on", logPanelOpen);
+  btn.addEventListener("click", () => {
+    setLogPanelOpen(!logPanelOpen);
+    btn.blur();
+  });
 }
 
 /** My concealed hand (sorted, with the just-drawn tile set apart) and my extracted kita. */
@@ -1937,18 +2078,31 @@ function mountAssistControls() {
 }
 
 mountAssistControls();
+mountLogToggle();
 
 // --- 키보드 (옵션 "키보드 단축키", 기본 켬): 타패 요청에서 ←/→ 패 고르기, Enter 버리기(리치 가능한 패면 리치 선택으로),
 // Esc 고르기 취소, T 쯔모패 그대로 버리기. 리치 선택 중에는 R 리치, Enter 그냥 버리기, Esc 다른 패 고르기.
 // 울기/론 요청에서는 아래 callKeyboard가 처리한다. 모두 화면의 버튼/패와 같은 응답 경로를 쓴다. ---
 
-function keyboardEnabled(e) {
+/** 키보드 단축키를 쓸 수 있는 입력 상황인가 (옵션이 켜져 있고, 글자 입력/선택 중이 아니다). */
+function keyboardAllowed(e) {
   if (!uiOptions.keyboard || e.altKey || e.ctrlKey || e.metaKey) return false;
   const tag = e.target && e.target.tagName;
-  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "BUTTON") return false;
+  return !(tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "BUTTON");
+}
+
+/** 대국 조작 단축키(타패/울기)는 결과 창이나 설정 화면 위에서는 쓰지 않고, 서버 응답을 기다리는 동안에도 쓰지 않는다. */
+function keyboardEnabled(e) {
+  if (!keyboardAllowed(e)) return false;
   if (!document.getElementById("hand-end-overlay").classList.contains("hidden")) return false;
   if (!document.getElementById("setup-screen").classList.contains("hidden")) return false;
   return !awaitingServer;
+}
+
+function logKeyboard(e) {
+  if (e.key !== "h" && e.key !== "H") return false;
+  setLogPanelOpen(!logPanelOpen);
+  return true;
 }
 
 function discardKeyboard(e) {
@@ -2002,6 +2156,11 @@ function discardKeyboard(e) {
 }
 
 document.addEventListener("keydown", (e) => {
+  // 패보(H)는 상대 차례나 리플레이에서도 쓴다
+  if (keyboardAllowed(e) && logKeyboard(e)) {
+    e.preventDefault();
+    return;
+  }
   if (IS_REPLAY_MODE || !keyboardEnabled(e)) return;
   if (discardKeyboard(e) || callKeyboard(e)) e.preventDefault();
 });
