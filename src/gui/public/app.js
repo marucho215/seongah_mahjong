@@ -2236,7 +2236,9 @@ function discardKeyboard(e) {
 
 document.addEventListener("keydown", (e) => {
   // 패보(H)는 상대 차례나 리플레이에서도 쓴다
-  if (keyboardAllowed(e) && logKeyboard(e)) {
+  // (H는 버튼 활성화 키가 아니므로 버튼에 포커스가 있어도 쓴다: 리플레이 막대 버튼을 누른 직후 등)
+  const onButton = e.target && e.target.tagName === "BUTTON";
+  if ((keyboardAllowed(e) || (onButton && uiOptions.keyboard && !e.altKey && !e.ctrlKey && !e.metaKey)) && logKeyboard(e)) {
     e.preventDefault();
     return;
   }
