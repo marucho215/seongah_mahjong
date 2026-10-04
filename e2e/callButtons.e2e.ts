@@ -72,4 +72,22 @@ describe("론 선택 버튼", () => {
     await expect.poll(() => pass.textContent(), { timeout: 6_000 }).toBe("패스");
     expect(handle.session.getCurrentRequest()!.type).toBe("ron");
   }, 60_000);
+
+  it("론하면 결과 창에 큰 화료 표시와 점수 변화가 나오고, 점수는 세어 올린 뒤 정확한 값이 된다", async () => {
+    await page.keyboard.press("Enter");
+    await page.locator("#hand-end-overlay:not(.hidden) .win-banner").waitFor({ timeout: 15_000 });
+    expect(await page.locator(".win-banner-method").textContent()).toBe("론!");
+    const rows = page.locator("#hand-end-overlay .score-changes .row");
+    expect(await rows.count()).toBe(3);
+    expect(await rows.first().getAttribute("class")).toContain("is-me"); // 나부터 차례로
+    // 애니메이션이 끝나면 모든 이후 점수가 엔진 값과 같다
+    await expect
+      .poll(() => page.locator("#hand-end-overlay .score-after").evaluateAll((els) => els.every((e) => Number((e.textContent ?? "").replace(/[^0-9-]/g, "")) === Number((e as HTMLElement).dataset.to))), { timeout: 5_000 })
+      .toBe(true);
+    const handEnd = game.log.find((e) => e.type === "hand_end") as unknown as { scores: number[] };
+    const shown = await page.locator("#hand-end-overlay .score-after").evaluateAll((els) => els.map((e) => Number((e.textContent ?? "").replace(/[^0-9-]/g, ""))));
+    expect(shown).toEqual(handEnd.scores); // 내 자리가 0번이라 표시 순서가 좌석 순서와 같다
+    // 이긴 나는 순위가 1위, 방총한 쪽은 내려간다
+    expect(await rows.first().locator(".score-rank").textContent()).toContain("1위");
+  }, 60_000);
 });

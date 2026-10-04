@@ -1359,28 +1359,92 @@ function renderYakuList(yaku) {
   return list;
 }
 
+/** 점수 순위 (1부터): 점수가 높은 순서이고, 같은 점수면 자리 번호가 빠른 쪽이 앞이다. 국 중의 "현재 순위"를 보여 주기 위한 표시이며
+ *  최종 순위(엔진의 동점 처리)와는 별개다. */
+function currentRanks(scores) {
+  return scores.map((score, seat) => 1 + scores.filter((other, o) => other > score || (other === score && o < seat)).length);
+}
+
+/** 점수 변화: 자리마다 "이전 → 이후", 증감 칩, 현재 순위(오르내림 표시). 이후 점수는 이전 점수에서 세어 올라가며(애니메이션)
+ *  끝나면 엔진이 준 값 그대로가 된다. */
 function renderScoreChanges(before, after, mySeat) {
   const wrap = el("div", "score-changes");
   const title = el("div", "section-label");
   title.textContent = "점수 변화";
   wrap.appendChild(title);
-  for (let seat = 0; seat < after.length; seat++) {
+  const ranksAfter = currentRanks(after);
+  const ranksBefore = before ? currentRanks(before) : null;
+  const n = after.length;
+  for (let i = 0; i < n; i++) {
+    const seat = ((mySeat ?? 0) + i) % n; // 나부터 차례로
     const delta = after[seat] - (before ? before[seat] : after[seat]);
-    const row = el("div", "row");
-    const name = el("span");
-    name.textContent = displayNameForSeat(seat, mySeat);
-    const value = el("span");
-    const deltaText = before ? ` (${formatDelta(delta)})` : "";
-    value.textContent = before
-      ? `${formatPoints(before[seat])} → ${formatPoints(after[seat])}${deltaText}`
-      : formatPoints(after[seat]);
-    if (delta > 0) value.classList.add("delta-pos");
-    if (delta < 0) value.classList.add("delta-neg");
-    row.appendChild(name);
-    row.appendChild(value);
+    const row = el("div", "row" + (seat === mySeat ? " is-me" : ""));
+    const name = el("span", "score-name");
+    const rank = el("span", "score-rank");
+    rank.textContent = `${ranksAfter[seat]}위`;
+    if (ranksBefore && ranksBefore[seat] !== ranksAfter[seat]) {
+      const up = ranksAfter[seat] < ranksBefore[seat];
+      const arrow = el("span", up ? "rank-up" : "rank-down");
+      arrow.textContent = up ? "▲" : "▼";
+      arrow.title = `순위 ${ranksBefore[seat]}위 → ${ranksAfter[seat]}위`;
+      rank.appendChild(arrow);
+    }
+    const label = el("span");
+    label.textContent = displayNameForSeat(seat, mySeat);
+    name.append(rank, label);
+
+    const value = el("span", "score-values");
+    if (before) {
+      const was = el("span", "score-before");
+      was.textContent = formatPoints(before[seat]);
+      const arrow = el("span", "score-arrow");
+      arrow.textContent = "→";
+      const now = el("span", "score-after");
+      now.textContent = formatPoints(after[seat]);
+      now.dataset.from = String(before[seat]);
+      now.dataset.to = String(after[seat]);
+      value.append(was, arrow, now);
+      if (delta !== 0) {
+        const chip = el("span", "score-delta " + (delta > 0 ? "delta-pos" : "delta-neg"));
+        chip.textContent = formatDelta(delta);
+        value.appendChild(chip);
+      }
+    } else {
+      const now = el("span", "score-after");
+      now.textContent = formatPoints(after[seat]);
+      value.appendChild(now);
+    }
+    row.append(name, value);
     wrap.appendChild(row);
   }
   return wrap;
+}
+
+/** `.score-after[data-from][data-to]`의 숫자를 이전 점수에서 이후 점수까지 세어 올린다 (0.7초). 줄어든 움직임을 줄이는 설정이거나
+ *  패널을 눌러 한 번에 보면 곧바로 최종 값을 보여 준다. 끝에는 항상 엔진이 준 이후 점수가 정확히 나온다. */
+function animateScoreChanges(panel) {
+  const targets = [...panel.querySelectorAll(".score-after[data-from]")];
+  if (targets.length === 0) return;
+  const finish = () => {
+    for (const t of targets) t.textContent = formatPoints(Number(t.dataset.to));
+  };
+  const reduce = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce || typeof requestAnimationFrame !== "function") return finish();
+  for (const t of targets) t.textContent = formatPoints(Number(t.dataset.from));
+  const start = performance.now() + 450; // 위의 구획이 먼저 나타난 뒤에 움직이기 시작한다
+  const DURATION = 700;
+  const tick = (now) => {
+    if (!targets[0].isConnected || panel.classList.contains("reveal-done")) return finish();
+    const t = Math.min(1, Math.max(0, (now - start) / DURATION));
+    const eased = 1 - Math.pow(1 - t, 3);
+    for (const node of targets) {
+      const from = Number(node.dataset.from);
+      const to = Number(node.dataset.to);
+      node.textContent = formatPoints(t >= 1 ? to : Math.round((from + (to - from) * eased) / 100) * 100);
+    }
+    if (t < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }
 
 function nextHandLine(result) {
@@ -1483,6 +1547,20 @@ function renderDoraIndicators(win) {
 /** 한 화료의 표시 구획들 (위에서 아래로 읽는 순서). */
 function renderWinDetail(win, mySeat, playerCount) {
   const sections = [];
+
+  // 큰 화료 표시: 론/쯔모와 등급(만관 이상이면 한 번 더 크게). 역만은 따로 색을 준다.
+  const banner = el("div", "win-banner");
+  banner.dataset.tier = win.yakumanUnits > 0 ? "yakuman" : limitNameOf(win) ? "limit" : "normal";
+  const bannerMethod = el("span", "win-banner-method");
+  bannerMethod.textContent = methodLabel(win.method) + "!";
+  banner.appendChild(bannerMethod);
+  const bannerLimit = limitNameOf(win);
+  if (bannerLimit) {
+    const limit = el("span", "win-banner-limit");
+    limit.textContent = bannerLimit;
+    banner.appendChild(limit);
+  }
+  sections.push(banner);
 
   const headline = el("div", "result-headline win-headline");
   const who = el("span", "win-who");
@@ -1635,6 +1713,7 @@ function renderHandEndPanel(handEndEvent, mySeat, isFinalHand) {
   panel.appendChild(toggle);
   panel.appendChild(json);
   startResultReveal(panel);
+  animateScoreChanges(panel);
 }
 
 async function postContinue() {

@@ -915,11 +915,44 @@ body.is-setup .log-panel { display: none !important; }
 .overlay-panel .score-changes .row {
   display: flex;
   justify-content: space-between;
-  padding: 2px 0;
+  align-items: baseline;
+  gap: 10px;
+  padding: 3px 4px;
+  border-radius: 4px;
 }
+.overlay-panel .score-changes .row.is-me { background: rgba(255, 213, 74, 0.12); }
+.overlay-panel .score-name { display: inline-flex; align-items: baseline; gap: 6px; }
+.overlay-panel .score-rank { min-width: 2.6em; font-size: 11px; opacity: 0.85; font-variant-numeric: tabular-nums; }
+.overlay-panel .rank-up { color: #7fe08a; margin-left: 2px; }
+.overlay-panel .rank-down { color: #ff8a80; margin-left: 2px; }
+.overlay-panel .score-values { display: inline-flex; align-items: baseline; gap: 6px; font-variant-numeric: tabular-nums; }
+.overlay-panel .score-before { opacity: 0.6; }
+.overlay-panel .score-arrow { opacity: 0.5; }
+.overlay-panel .score-after { font-weight: 700; min-width: 4.2em; text-align: right; }
+.overlay-panel .score-delta { min-width: 4.4em; text-align: right; font-weight: 700; }
 
 .overlay-panel .delta-pos { color: #7fe08a; }
 .overlay-panel .delta-neg { color: #ff8a80; }
+
+/* 큰 화료 표시 (론!/쯔모! + 만관 이상 등급) */
+@keyframes win-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.overlay-panel .win-banner {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 2px 0 6px;
+}
+.overlay-panel .win-banner-method { font-size: 30px; font-weight: 800; letter-spacing: 1px; color: #fff3b0; animation: win-pop 380ms ease-out both; }
+.overlay-panel .win-banner-limit { font-size: 20px; font-weight: 700; padding: 1px 10px; border-radius: 5px; background: #ffd54a; color: #1b1b1b; animation: win-pop 380ms ease-out 120ms both; }
+.overlay-panel .win-banner[data-tier="yakuman"] .win-banner-method { color: #ff8a80; }
+.overlay-panel .win-banner[data-tier="yakuman"] .win-banner-limit { background: linear-gradient(90deg, #ff8a80, #ffd54a); }
+@media (prefers-reduced-motion: reduce) {
+  .overlay-panel .win-banner-method, .overlay-panel .win-banner-limit { animation: none; }
+}
 
 .overlay-panel .next-hand {
   margin-top: 14px;
@@ -966,7 +999,7 @@ body.is-setup .log-panel { display: none !important; }
 .win-score-points { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* 더블 론: 두 번째 화료부터 앞 화료와 구분한다 */
-.overlay-panel .win-score + .win-headline {
+.overlay-panel .win-score + .win-banner {
   margin-top: 16px;
   padding-top: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.25);
