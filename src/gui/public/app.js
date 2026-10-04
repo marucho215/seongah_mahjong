@@ -544,10 +544,13 @@ function renderTable(view, turnSeat, emphasis) {
 let lastMySeat = null;
 
 function renderMySeat(view, options) {
-  lastMySeat = { view, options };
+  const entries = [];
+  lastMySeat = { view, options, entries };
   const zone = zoneEl("bottom");
   // 위험도 표시: 엔진이 공개 정보만으로 매긴 view.discardRisk를 그대로 쓴다 (리치한 상대가 없으면 비어 있다)
-  const riskByKind = assist.risk ? new Map((view.discardRisk || []).map((r) => [r.kind, r.level])) : new Map();
+  const riskByKind = assist.risk ? new Map((view.discardRisk || []).map((r) => [r.kind, r])) : new Map();
+  // 유효패 표시: 엔진이 타패 요청에 담은 discardUkeire (타패 요청이 아니면 없다)
+  const ukeireByKind = assist.ukeire && options && options.discardUkeire ? new Map(options.discardUkeire.map((u) => [u.kind, u])) : new Map();
 
   const kita = zone.querySelector(".kita");
   kita.innerHTML = "";
@@ -587,21 +590,122 @@ function renderMySeat(view, options) {
       });
     }
     const risk = riskByKind.get(t.kind);
-    hand.appendChild(risk ? withRiskBadge(img, risk) : img);
+    const ukeire = ukeireByKind.get(t.kind);
+    // 선택한 패/패 위에 올린 패의 상세 (위험도 근거, 유효패)는 켜 둔 보조 항목만 보여 준다
+    const info = risk || ukeire ? { tile: t, risk, ukeire, view } : null;
+    if (info && legal) {
+      img.addEventListener("mouseenter", () => showAssistDetail(zone, info));
+      img.addEventListener("mouseleave", () => showAssistDetail(zone, selectedAssistInfo(entries)));
+    }
+    const node = risk || ukeire ? withAssistBadges(img, risk, ukeire, view) : img;
+    hand.appendChild(node);
+    entries.push({ tile: t, img, legal, riichiLegal, info });
   }
   showHandStatus(zone, view);
+  // 다시 그린 뒤에도(보조 토글 변경 등) 고르고 있던 패와 상세를 되살린다
+  applySelection();
 }
 
 const RISK_LABEL = { low: "낮음", caution: "주의", high: "높음" };
 
-/** 패 아래에 위험도 등급을 붙인다. 등급은 리치한 상대에 대한 상대적인 표시이며 "안전"을 뜻하지 않는다. */
-function withRiskBadge(img, level) {
-  const box = el("span", `tile-risk risk-${level}`);
-  const badge = el("span", "risk-badge");
-  badge.textContent = RISK_LABEL[level];
-  img.title = `${img.title} - 위험도 ${RISK_LABEL[level]} (리치한 상대의 버림패 기준, 현물·스지만 봄)`;
-  box.append(img, badge);
+/** 위험도 근거 한 줄 (엔진이 준 against: 리치한 상대마다 현물/스지/없음). 등급은 가장 위험한 상대 기준이다. */
+function riskReasonText(risk, view) {
+  const basisText = { genbutsu: "현물", suji: "스지", none: "근거 없음" };
+  const parts = risk.against.map((a) => `${displayNameForSeat(a.seat, view.seat)} ${basisText[a.basis]}`);
+  return `리치 ${parts.join(", ")}`;
+}
+
+/** 패 아래에 보조 표시를 붙인다: 위험도 등급(낮음/주의/높음)과 유효패 장수. 등급은 리치한 상대에 대한 상대적인 표시이며
+ *  "안전"을 뜻하지 않는다. 색만으로 구분하지 않도록 글자를 함께 쓴다. */
+function withAssistBadges(img, risk, ukeire, view) {
+  const box = el("span", "tile-assist" + (risk ? ` risk-${risk.level}` : ""));
+  const row = el("span", "assist-badges");
+  if (ukeire) {
+    const badge = el("span", ukeire.best ? "ukeire-badge is-best" : "ukeire-badge");
+    badge.textContent = ukeire.best ? `${ukeire.total}장` : `${shantenLabel(ukeire.shanten)}`;
+    row.appendChild(badge);
+    img.title = `${img.title} - 버리면 ${shantenLabel(ukeire.shanten)}${ukeire.best ? `, 유효패 ${ukeire.total}장` : ""}`;
+  }
+  if (risk) {
+    const badge = el("span", "risk-badge");
+    badge.textContent = RISK_LABEL[risk.level];
+    row.appendChild(badge);
+    img.title = `${img.title} - 위험도 ${RISK_LABEL[risk.level]} (${riskReasonText(risk, view)}, 현물·스지만 봄)`;
+  }
+  box.append(img, row);
   return box;
+}
+
+/** 상세 줄 (보조 표시 중 켜 둔 항목만): 선택하거나 마우스를 올린 패의 위험도 근거와 유효패 */
+function showAssistDetail(zone, info) {
+  let box = zone.querySelector(".assist-detail");
+  // 위험도/유효패 중 켜 둔 항목이 없으면 상세 줄 자체가 없다. 켜 두었으면 비어 있을 때도 자리를 잡아 둔다
+  // (줄이 생겼다 사라지면 손패가 위아래로 밀려 마우스를 올린 패가 움직이고, 올림/내림이 깜빡이는 문제가 생긴다).
+  if (!assist.risk && !assist.ukeire) {
+    if (box) box.remove();
+    return;
+  }
+  if (!box) {
+    box = el("div", "assist-detail");
+    zone.appendChild(box);
+  }
+  box.innerHTML = "";
+  box.classList.toggle("is-empty", !info);
+  if (!info) return;
+  const head = el("span", "assist-detail-head");
+  head.textContent = koreanTileLabel(info.tile.kind, info.tile.red) + " 버리면";
+  box.appendChild(head);
+  if (info.ukeire) {
+    const u = el("span", "assist-detail-part");
+    const state = el("b");
+    state.textContent = shantenLabel(info.ukeire.shanten);
+    u.appendChild(state);
+    if (info.ukeire.best) {
+      const label = el("span");
+      label.textContent = info.ukeire.ukeire.length > 0 ? ` · 유효패 ${info.ukeire.total}장:` : " · 유효패 없음";
+      u.appendChild(label);
+      for (const w of info.ukeire.ukeire) {
+        const item = el("span", "wait-item");
+        item.title = `아직 보이지 않은 ${koreanTileLabel(w.kind)}: 최대 ${w.unseenCount}장 (공개된 패 기준 추정)`;
+        item.appendChild(tileImg({ kind: w.kind }, { small: true }));
+        const n = el("span", "wait-count");
+        n.textContent = "×" + w.unseenCount;
+        item.appendChild(n);
+        u.appendChild(item);
+      }
+    } else {
+      const label = el("span");
+      label.textContent = " (더 낮은 샹텐을 유지하는 타패가 있습니다)";
+      u.appendChild(label);
+    }
+    box.appendChild(u);
+  }
+  if (info.risk) {
+    const r = el("span", `assist-detail-part risk-text risk-${info.risk.level}`);
+    r.textContent = `위험도 ${RISK_LABEL[info.risk.level]} · ${riskReasonText(info.risk, info.view)} · 미확인 ${info.risk.unseenCount}장`;
+    box.appendChild(r);
+  }
+}
+
+// --- 타패 선택 상태: "두 번 눌러 버리기"와 키보드 조작이 공유한다. 요청이 바뀌면 비운다. ---
+let selectedTileId = null;
+
+function selectedAssistInfo(entries) {
+  const entry = entries.find((e) => e.tile.id === selectedTileId);
+  return entry ? entry.info : null;
+}
+
+/** 현재 선택(selectedTileId)을 손패 그림과 상세 줄에 반영한다. 선택이 없으면 모두 해제한다. */
+function applySelection() {
+  if (!lastMySeat) return;
+  const zone = zoneEl("bottom");
+  for (const entry of lastMySeat.entries) entry.img.classList.toggle("is-selected", entry.tile.id === selectedTileId);
+  showAssistDetail(zone, selectedAssistInfo(lastMySeat.entries));
+}
+
+function selectTile(tileId) {
+  selectedTileId = tileId;
+  applySelection();
 }
 
 /** 샹텐 문구: 엔진이 계산한 view.handStatus.shanten을 그대로 읽는다 (-1 = 화료형). */
@@ -699,12 +803,32 @@ function clearActionBar() {
   document.getElementById("action-bar").innerHTML = "";
 }
 
-/** kind: "confirm"(기본) 또는 "cancel" - 눌렀을 때 나는 UI 소리를 정한다. */
-function addActionButton(label, onClick, kind = "confirm") {
+/** 터치 화면에서 울기/론/쯔모 선택 버튼이 막 나타난 직후의 오조작(타패를 누르던 손가락이나 더블탭이 새 버튼을 누르는 일)을 막는다.
+ *  이 시각 전의 누름은 무시한다. 마우스 화면은 막지 않는다. */
+let actionBarArmedAt = 0;
+const TOUCH_GUARD_MS = 250;
+
+function armActionBar() {
+  const touch = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  actionBarArmedAt = touch ? performance.now() + TOUCH_GUARD_MS : 0;
+}
+
+function actionBarGuarded() {
+  return performance.now() < actionBarArmedAt;
+}
+
+/** kind: "confirm"(기본) 또는 "cancel" - 눌렀을 때 나는 UI 소리를 정한다.
+ *  key: "accept"(Enter) 또는 "decline"(Esc, N) - 키보드 단축키가 누를 버튼 표시 (callKeyboard). */
+function addActionButton(label, onClick, kind = "confirm", key) {
   const bar = document.getElementById("action-bar");
   const btn = el("button");
   btn.textContent = label;
+  if (key) {
+    btn.dataset.key = key;
+    btn.title = (btn.title ? btn.title + " " : "") + (key === "accept" ? "(Enter)" : "(Esc / N)");
+  }
   btn.addEventListener("click", () => {
+    if (actionBarGuarded()) return;
     AudioManager.play(kind === "cancel" ? "ui.cancel" : "ui.confirm");
     onClick();
   });
@@ -746,29 +870,63 @@ async function sendResponse(response) {
   }
 }
 
+/** 지금 떠 있는 타패 요청의 조작 상태 (두 번 눌러 버리기, 키보드가 함께 쓴다). 타패 요청이 아니면 null. */
+let discardCtx = null;
+
 function renderDiscardRequest(request) {
   renderTable(request.view, turnSeatOf(request));
 
   const drawnId = drawnTileIdFor(request);
+  selectedTileId = null;
+  discardCtx = { request, drawnId, riichiTileId: null };
 
   renderMySeat(request.view, {
     drawnTileId: drawnId,
     riichiLegalTileIds: request.riichiLegalTileIds,
     riichiWaits: request.riichiWaits,
     legalTileIds: request.legalTileIds,
-    onTileClick: (tile, riichiLegal, img) => {
-      if (riichiLegal) showRiichiChoice(request, tile, img);
-      else sendResponse({ type: "discard", tileId: tile.id, declareRiichi: false });
-    },
+    discardUkeire: request.discardUkeire,
+    onTileClick: (tile, riichiLegal, img) => chooseDiscardTile(tile, riichiLegal, img),
   });
   showDiscardPrompt(request);
+}
+
+/** 손패의 패를 눌렀을 때. "두 번 눌러 버리기"가 켜져 있으면 첫 번째 누름은 고르기만 하고(위험도/유효패 상세가 보인다),
+ *  같은 패를 다시 누르거나 "버리기"를 눌러야 버린다. 리치 가능한 패는 어느 쪽이든 리치 선택 막대로 이어진다. */
+function chooseDiscardTile(tile, riichiLegal, img) {
+  const request = discardCtx.request;
+  if (riichiLegal) {
+    selectTile(tile.id);
+    showRiichiChoice(request, tile, img);
+    return;
+  }
+  if (uiOptions.confirmDiscard && selectedTileId !== tile.id) {
+    selectTile(tile.id);
+    showDiscardPrompt(request);
+    return;
+  }
+  sendResponse({ type: "discard", tileId: tile.id, declareRiichi: false });
 }
 
 function showDiscardPrompt(request) {
   clearActionBar();
   const label = el("span", "section-label");
-  label.textContent = "버릴 패를 클릭하세요" + (request.riichiLegalTileIds.length > 0 ? " (노란 테두리 = 리치 가능)" : "");
-  document.getElementById("action-bar").appendChild(label);
+  const selected = selectedTileId !== null ? request.view.concealedTiles.find((t) => t.id === selectedTileId) : null;
+  if (selected) {
+    const name = koreanTileLabel(selected.kind, selected.red);
+    label.textContent = `${name}${josaEulReul(name)} 버릴까요?`;
+    document.getElementById("action-bar").appendChild(label);
+    addActionButton("버리기", () => sendResponse({ type: "discard", tileId: selected.id, declareRiichi: false })).classList.add("confirm-discard");
+    addActionButton("다른 패 고르기", () => {
+      selectTile(null);
+      showDiscardPrompt(request);
+    }, "cancel");
+  } else {
+    label.textContent =
+      (uiOptions.confirmDiscard ? "버릴 패를 눌러 고르세요 (한 번 더 누르면 버립니다)" : "버릴 패를 클릭하세요") +
+      (request.riichiLegalTileIds.length > 0 ? " (노란 테두리 = 리치 가능)" : "");
+    document.getElementById("action-bar").appendChild(label);
+  }
   placeActionBar();
 }
 
@@ -779,6 +937,7 @@ function showRiichiChoice(request, tile, img) {
   const zone = zoneEl("bottom");
   for (const other of zone.querySelectorAll(".tile-img.riichi-pending")) other.classList.remove("riichi-pending");
   img.classList.add("riichi-pending");
+  if (discardCtx) discardCtx.riichiTileId = tile.id;
   const waits = waitsForTile(request.riichiWaits, tile.id);
   if (waits) showWaits(zone, "리치하면 대기", waits, request.view.furiten);
 
@@ -791,6 +950,8 @@ function showRiichiChoice(request, tile, img) {
   addActionButton("그냥 버리기", () => sendResponse({ type: "discard", tileId: tile.id, declareRiichi: false }));
   addActionButton("다른 패 고르기", () => {
     img.classList.remove("riichi-pending");
+    if (discardCtx) discardCtx.riichiTileId = null;
+    selectTile(null);
     showHandStatus(zone, request.view);
     showDiscardPrompt(request);
   }, "cancel");
@@ -818,8 +979,9 @@ function renderCallRequest(request) {
   const label = el("span", "section-label");
   label.textContent = promptText;
   document.getElementById("action-bar").appendChild(label);
-  addActionButton("예", () => sendResponse({ type: request.type, declare: true }));
-  addActionButton("아니오", () => sendResponse({ type: request.type, declare: false }), "cancel");
+  armActionBar();
+  addActionButton("예", () => sendResponse({ type: request.type, declare: true }), "confirm", "accept");
+  addActionButton("아니오", () => sendResponse({ type: request.type, declare: false }), "cancel", "decline");
 }
 
 function renderNineTerminalsRequest(request) {
@@ -831,8 +993,9 @@ function renderNineTerminalsRequest(request) {
   const label = el("span", "section-label");
   label.textContent = `구종구패: 요구패가 ${request.distinctTerminalKinds}종 있습니다. 유국을 선언하시겠습니까?`;
   document.getElementById("action-bar").appendChild(label);
+  armActionBar();
   addActionButton("유국 선언", () => sendResponse({ type: "nine_terminals", declare: true }));
-  addActionButton("계속 진행", () => sendResponse({ type: "nine_terminals", declare: false }), "cancel");
+  addActionButton("계속 진행", () => sendResponse({ type: "nine_terminals", declare: false }), "cancel", "decline");
 }
 
 const RON_CONTEXT_KO = {
@@ -850,6 +1013,7 @@ function renderChiRequest(request) {
 
   clearActionBar();
   const bar = document.getElementById("action-bar");
+  armActionBar();
   const label = el("span", "section-label");
   const called = koreanTileLabel(request.discardedTile.kind, request.discardedTile.red);
   label.textContent = `${called}${josaEulReul(called)} 치하시겠습니까? (${displayNameForSeat(request.fromSeat, request.view.seat)} 버림패)`;
@@ -867,12 +1031,13 @@ function renderChiRequest(request) {
     }
     btn.title = option.sequence.map((kind) => koreanTileLabel(kind)).join(" ");
     btn.addEventListener("click", () => {
+      if (actionBarGuarded()) return;
       AudioManager.play("ui.confirm");
       sendResponse({ type: "chi", optionId: option.id });
     });
     bar.appendChild(btn);
   }
-  addActionButton("넘기기", () => sendResponse({ type: "chi", optionId: null }), "cancel");
+  addActionButton("넘기기", () => sendResponse({ type: "chi", optionId: null }), "cancel", "decline");
 }
 
 /** 쯔모: 화료 가능 여부와 점수는 엔진이 준 preview를 그대로 보여준다. 넘기면 바로 버릴 패 선택으로 이어진다. */
@@ -894,9 +1059,10 @@ function renderTsumoRequest(request) {
     preview.yaku.map((y) => `${translateYaku(y.name)} ${y.han}`).join(", ") + ")";
   info.appendChild(text);
   bar.appendChild(info);
-  const btn = addActionButton("쯔모", () => sendResponse({ type: "tsumo", declare: true }));
+  armActionBar();
+  const btn = addActionButton("쯔모", () => sendResponse({ type: "tsumo", declare: true }), "confirm", "accept");
   btn.classList.add("ron-button");
-  addActionButton("넘기기", () => sendResponse({ type: "tsumo", declare: false }), "cancel");
+  addActionButton("넘기기", () => sendResponse({ type: "tsumo", declare: false }), "cancel", "decline");
 }
 
 /** 사람끼리 대국: 남이 내놓은 패 하나에 대한 내 선택지(론/깡/퐁/치 조합)를 한 번에 보여 준다. 선택지와 점수는 엔진이 준 그대로다.
@@ -922,7 +1088,9 @@ function renderClaimRequest(request) {
   info.appendChild(text);
   bar.appendChild(info);
 
-  if (request.ron) addActionButton("론", () => sendResponse({ type: "claim", choice: "ron" })).classList.add("ron-button");
+  armActionBar();
+  // 선택지는 우선순위(론 > 깡·퐁 > 치) 순서로 놓는다: 같은 패에 여러 사람이 반응하면 이 순서로 정해진다
+  if (request.ron) addActionButton("론", () => sendResponse({ type: "claim", choice: "ron" }), "confirm", "accept").classList.add("ron-button");
   if (request.daiminkan) addActionButton("깡", () => sendResponse({ type: "claim", choice: "daiminkan" }));
   if (request.pon) addActionButton("퐁", () => sendResponse({ type: "claim", choice: "pon" }));
   for (const option of request.chiOptions) {
@@ -937,13 +1105,22 @@ function renderClaimRequest(request) {
     }
     btn.title = "치: " + option.sequence.map((kind) => koreanTileLabel(kind)).join(" ");
     btn.addEventListener("click", () => {
+      if (actionBarGuarded()) return;
       AudioManager.play("ui.confirm");
       sendResponse({ type: "claim", choice: "chi", chiOptionId: option.id });
     });
     bar.appendChild(btn);
   }
-  const pass = addActionButton("넘기기", () => sendResponse({ type: "claim", choice: "pass" }), "cancel");
-  if (request.ron) pass.title = "론을 넘기면 후리텐이 됩니다";
+  const pass = addActionButton("넘기기", () => sendResponse({ type: "claim", choice: "pass" }), "cancel", "decline");
+  if (request.ron) {
+    pass.title = "론을 넘기면 후리텐이 됩니다";
+    confirmDangerousPass(pass);
+  }
+  if (request.ron || request.daiminkan || request.pon || request.chiOptions.length > 1) {
+    const hint = el("span", "claim-priority");
+    hint.textContent = "우선순위: 론 > 깡·퐁 > 치";
+    bar.appendChild(hint);
+  }
 }
 
 /** 사람끼리 대국에서 지금 내가 할 일이 없을 때: 작탁을 내 시점으로 그리고 기다린다 (다른 사람의 차례이거나, 내가 이미 고른 뒤). */
@@ -960,6 +1137,34 @@ function renderWaiting(msg) {
   document.getElementById("action-bar").appendChild(label);
   placeActionBar();
   awaitingServer = true; // 새 요청이 오기 전에는 응답을 보내지 않는다
+}
+
+/** 론을 넘기면 후리텐이 되어 되돌릴 수 없다: 넘기기/패스 버튼은 한 번 눌러 "정말 넘길까요?"로 바꾼 뒤 한 번 더 눌러야 넘어간다.
+ *  (버튼에 이미 붙은 클릭 핸들러보다 먼저 가로채야 하므로 캡처 단계에서 처리한다.) 키보드의 Esc/N도 같은 버튼을 누르므로 똑같이 두 번 필요하다. */
+function confirmDangerousPass(btn) {
+  const original = btn.textContent;
+  let armed = false;
+  let timer = null;
+  btn.addEventListener(
+    "click",
+    (e) => {
+      if (armed) {
+        clearTimeout(timer);
+        return; // 두 번째 누름: 원래 핸들러가 응답을 보낸다
+      }
+      e.stopImmediatePropagation();
+      if (actionBarGuarded()) return;
+      armed = true;
+      btn.textContent = "후리텐이 됩니다 - 한 번 더";
+      btn.classList.add("is-confirming");
+      timer = setTimeout(() => {
+        armed = false;
+        btn.textContent = original;
+        btn.classList.remove("is-confirming");
+      }, 4000);
+    },
+    true
+  );
 }
 
 function renderRonRequest(request) {
@@ -983,10 +1188,12 @@ function renderRonRequest(request) {
     preview.yaku.map((y) => `${translateYaku(y.name)} ${y.han}`).join(", ") + ")";
   info.appendChild(text);
   bar.appendChild(info);
-  const ronBtn = addActionButton("론", () => sendResponse({ type: "ron", declare: true }));
+  armActionBar();
+  const ronBtn = addActionButton("론", () => sendResponse({ type: "ron", declare: true }), "confirm", "accept");
   ronBtn.classList.add("ron-button");
-  const passBtn = addActionButton("패스", () => sendResponse({ type: "ron", declare: false }), "cancel");
+  const passBtn = addActionButton("패스", () => sendResponse({ type: "ron", declare: false }), "cancel", "decline");
   passBtn.title = "패스하면 후리텐이 됩니다";
+  confirmDangerousPass(passBtn);
 }
 
 // --- Hand-end result screen (human-readable overlay; raw JSON stays available only via
@@ -1560,7 +1767,7 @@ function mountSpeedControl() {
 
 mountSpeedControl();
 
-// --- 자동 플레이 옵션 (기본 모두 꺼짐, 새로고침하면 다시 꺼짐). 켜진 옵션에 해당하는 결정만 기존 /respond 경로로
+// --- 자동 플레이 옵션 (기본 모두 꺼짐, 새로고침하거나 국이 끝나면 다시 꺼짐). 켜진 옵션에 해당하는 결정만 기존 /respond 경로로
 // 대신 응답하므로 사람 결정 기록(리플레이 humanDecisions)에 그대로 남는다. 판단은 하지 않고, 정해진 응답만 보낸다:
 //   자동 화료   - 론/쯔모 요청에 선언
 //   울기 패스   - 치/퐁/대명깡 요청에 패스 (자기 차례의 암깡/가깡/북 빼기는 제외)
@@ -1603,13 +1810,52 @@ function maybeAutoRespond() {
   sendResponse(auto.response);
 }
 
+function syncAutoButtons() {
+  for (const btn of document.querySelectorAll("#audio-controls .auto-toggle[data-auto]")) {
+    const on = !!autoPlay[btn.dataset.auto];
+    btn.setAttribute("aria-pressed", String(on));
+    btn.classList.toggle("is-on", on);
+  }
+}
+
+/** 자동 옵션을 모두 끈다. 국이 끝나거나(결과 화면), 대국이 끝나거나, 로비로 돌아갈 때 부른다: 한 국을 위해 켠 "자동 쯔모기리"나
+ *  "울기 패스"가 다음 국까지 이어져 필요한 울기/타패를 막는 일이 없도록, 자동 옵션은 그 국에서만 유효하다.
+ *  켜져 있던 것이 있었으면 true를 돌려준다. */
+function resetAutoPlay() {
+  const wasOn = Object.keys(autoPlay).filter((key) => autoPlay[key]);
+  for (const key of Object.keys(autoPlay)) autoPlay[key] = false;
+  syncAutoButtons();
+  return wasOn;
+}
+
+let toastTimer = null;
+/** 화면 아래쪽에 잠깐 뜨는 안내 (응답/게임 진행과 무관한 표시) */
+function showToast(text) {
+  let box = document.getElementById("toast");
+  if (!box) {
+    box = el("div");
+    box.id = "toast";
+    box.setAttribute("role", "status");
+    document.body.appendChild(box);
+  }
+  box.textContent = text;
+  box.classList.add("is-visible");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => box.classList.remove("is-visible"), 4000);
+}
+
+/** 국 종료 시점: 켜져 있던 자동 옵션을 끄고, 끈 사실을 알린다. */
+function resetAutoPlayAtHandBoundary() {
+  const wasOn = resetAutoPlay();
+  if (wasOn.length > 0) showToast(`국이 끝나 자동 옵션을 껐습니다: ${wasOn.map((key) => AUTO_LABEL[key]).join(", ")}`);
+}
+
 function mountAutoPlayControls() {
   for (const btn of document.querySelectorAll("#audio-controls .auto-toggle[data-auto]")) {
     const key = btn.dataset.auto;
     btn.addEventListener("click", () => {
       autoPlay[key] = !autoPlay[key];
-      btn.setAttribute("aria-pressed", String(autoPlay[key]));
-      btn.classList.toggle("is-on", autoPlay[key]);
+      syncAutoButtons();
       if (autoPlay[key]) maybeAutoRespond(); // 켜는 순간 떠 있는 요청에도 적용
     });
   }
@@ -1621,47 +1867,156 @@ mountAutoPlayControls();
 // 리플레이에는 아무 영향이 없다. 설정은 이 브라우저에 저장해 다음 대국에도 유지한다 (기본: 샹텐 켬, 위험도 끔). ---
 
 const ASSIST_STORAGE_KEY = "seongah.playAssist";
-const ASSIST_DEFAULTS = { shanten: true, risk: false };
+const ASSIST_DEFAULTS = { shanten: true, risk: false, ukeire: false };
+// 조작 옵션 (표시/응답 내용과 무관한 입력 방식): 두 번 눌러 버리기는 마우스가 없는 터치 화면에서 기본으로 켠다
+const OPTION_STORAGE_KEY = "seongah.playOptions";
+const OPTION_DEFAULTS = {
+  confirmDiscard: typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches,
+  keyboard: true,
+};
 
-function loadAssist() {
+function loadFlags(key, defaults) {
   try {
-    const stored = JSON.parse(localStorage.getItem(ASSIST_STORAGE_KEY) || "{}");
-    const out = { ...ASSIST_DEFAULTS };
-    for (const key of Object.keys(ASSIST_DEFAULTS)) if (typeof stored[key] === "boolean") out[key] = stored[key];
+    const stored = JSON.parse(localStorage.getItem(key) || "{}");
+    const out = { ...defaults };
+    for (const name of Object.keys(defaults)) if (typeof stored[name] === "boolean") out[name] = stored[name];
     return out;
   } catch {
-    return { ...ASSIST_DEFAULTS };
+    return { ...defaults };
   }
 }
 
-function saveAssist() {
+function saveFlags(key, flags) {
   try {
-    localStorage.setItem(ASSIST_STORAGE_KEY, JSON.stringify(assist));
+    localStorage.setItem(key, JSON.stringify(flags));
   } catch {
     // 저장소를 못 쓰는 환경이면 이번 접속에서만 유지된다
   }
 }
 
-const assist = loadAssist();
+const assist = loadFlags(ASSIST_STORAGE_KEY, ASSIST_DEFAULTS);
+const uiOptions = loadFlags(OPTION_STORAGE_KEY, OPTION_DEFAULTS);
 
 function mountAssistControls() {
-  for (const btn of document.querySelectorAll("#audio-controls .auto-toggle[data-assist]")) {
-    const key = btn.dataset.assist;
-    const sync = () => {
-      btn.setAttribute("aria-pressed", String(assist[key]));
-      btn.classList.toggle("is-on", assist[key]);
-    };
-    sync();
-    btn.addEventListener("click", () => {
-      assist[key] = !assist[key];
-      saveAssist();
-      sync();
+  const panel = document.getElementById("assist-panel");
+  const toggle = document.querySelector("#audio-controls .assist-menu-toggle");
+  if (!panel || !toggle) return;
+  const setOpen = (open) => {
+    panel.classList.toggle("hidden", !open);
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.classList.toggle("is-on", open);
+  };
+  toggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setOpen(panel.classList.contains("hidden"));
+    toggle.blur();
+  });
+  document.addEventListener("click", (e) => {
+    if (!panel.classList.contains("hidden") && !panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+  // 버튼/체크박스를 누른 뒤에도 키보드 단축키가 동작하도록 포커스를 풀어 준다 (포커스가 남으면 Enter/Space가 그 버튼의 동작이 된다)
+  const controls = document.getElementById("audio-controls");
+  controls.addEventListener("click", (e) => {
+    const button = e.target.closest && e.target.closest("button");
+    if (button) button.blur();
+  });
+  panel.addEventListener("change", (e) => e.target.blur && e.target.blur());
+  for (const box of panel.querySelectorAll("input[type=checkbox]")) {
+    const isAssist = box.dataset.assist !== undefined;
+    const key = isAssist ? box.dataset.assist : box.dataset.option;
+    const flags = isAssist ? assist : uiOptions;
+    box.checked = !!flags[key];
+    box.addEventListener("change", () => {
+      flags[key] = box.checked;
+      saveFlags(isAssist ? ASSIST_STORAGE_KEY : OPTION_STORAGE_KEY, flags);
+      if (!isAssist && key === "confirmDiscard") selectedTileId = null;
       if (lastMySeat) renderMySeat(lastMySeat.view, lastMySeat.options);
+      if (discardCtx && pendingRequest && pendingRequest.type === "discard") showDiscardPrompt(discardCtx.request);
     });
   }
 }
 
 mountAssistControls();
+
+// --- 키보드 (옵션 "키보드 단축키", 기본 켬): 타패 요청에서 ←/→ 패 고르기, Enter 버리기(리치 가능한 패면 리치 선택으로),
+// Esc 고르기 취소, T 쯔모패 그대로 버리기. 리치 선택 중에는 R 리치, Enter 그냥 버리기, Esc 다른 패 고르기.
+// 울기/론 요청에서는 아래 callKeyboard가 처리한다. 모두 화면의 버튼/패와 같은 응답 경로를 쓴다. ---
+
+function keyboardEnabled(e) {
+  if (!uiOptions.keyboard || e.altKey || e.ctrlKey || e.metaKey) return false;
+  const tag = e.target && e.target.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "BUTTON") return false;
+  if (!document.getElementById("hand-end-overlay").classList.contains("hidden")) return false;
+  if (!document.getElementById("setup-screen").classList.contains("hidden")) return false;
+  return !awaitingServer;
+}
+
+function discardKeyboard(e) {
+  if (!discardCtx || !pendingRequest || pendingRequest.type !== "discard") return false;
+  const { request } = discardCtx;
+  const entries = lastMySeat ? lastMySeat.entries : [];
+  const legal = entries.filter((en) => en.legal);
+  if (discardCtx.riichiTileId !== null) {
+    const tileId = discardCtx.riichiTileId;
+    if (e.key === "r" || e.key === "R") sendResponse({ type: "discard", tileId, declareRiichi: true });
+    else if (e.key === "Enter") sendResponse({ type: "discard", tileId, declareRiichi: false });
+    else if (e.key === "Escape") {
+      const entry = entries.find((en) => en.tile.id === tileId);
+      if (entry) entry.img.classList.remove("riichi-pending");
+      discardCtx.riichiTileId = null;
+      selectTile(null);
+      showHandStatus(zoneEl("bottom"), request.view);
+      showDiscardPrompt(request);
+    } else return false;
+    return true;
+  }
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    if (legal.length === 0) return false;
+    const at = legal.findIndex((en) => en.tile.id === selectedTileId);
+    const step = e.key === "ArrowRight" ? 1 : -1;
+    const next = at === -1 ? (step === 1 ? 0 : legal.length - 1) : (at + step + legal.length) % legal.length;
+    selectTile(legal[next].tile.id);
+    showDiscardPrompt(request);
+    return true;
+  }
+  if (e.key === "Enter" || e.key === " ") {
+    const entry = legal.find((en) => en.tile.id === selectedTileId);
+    if (!entry) return false;
+    if (entry.riichiLegal) {
+      showRiichiChoice(request, entry.tile, entry.img);
+      return true;
+    }
+    sendResponse({ type: "discard", tileId: entry.tile.id, declareRiichi: false });
+    return true;
+  }
+  if (e.key === "Escape" && selectedTileId !== null) {
+    selectTile(null);
+    showDiscardPrompt(request);
+    return true;
+  }
+  if ((e.key === "t" || e.key === "T") && discardCtx.drawnId !== undefined && request.legalTileIds.includes(discardCtx.drawnId)) {
+    sendResponse({ type: "discard", tileId: discardCtx.drawnId, declareRiichi: false });
+    return true;
+  }
+  return false;
+}
+
+document.addEventListener("keydown", (e) => {
+  if (IS_REPLAY_MODE || !keyboardEnabled(e)) return;
+  if (discardKeyboard(e) || callKeyboard(e)) e.preventDefault();
+});
+
+/** 울기/론/쯔모 등 막대의 버튼 요청: 첫 번째 버튼이 "하기"(Enter), 마지막이 "넘기기"(Esc, N)다 (렌더러가 data-key로 표시). */
+function callKeyboard(e) {
+  if (!pendingRequest || pendingRequest.type === "discard") return false;
+  const wanted = e.key === "Enter" ? "accept" : e.key === "Escape" || e.key === "n" || e.key === "N" ? "decline" : null;
+  if (!wanted) return false;
+  const btn = document.querySelector(`#action-bar button[data-key="${wanted}"]`);
+  if (!btn || btn.disabled) return false;
+  btn.click();
+  return true;
+}
+
 
 // --- 대국 그만두기: 서버가 canAbandon을 보낸 대국 중에만 보인다. 확인 후 로비(그 모드의 설정 화면)로 돌아가며,
 // 중단한 대국의 리플레이는 저장되지 않는다. ---
@@ -1715,7 +2070,10 @@ let lastGameId = null;
 
 function handleMessage(msg) {
   if (typeof msg.gameId === "number" && msg.gameId !== lastGameId) {
-    if (lastGameId !== null) AudioManager.reset();
+    if (lastGameId !== null) {
+      AudioManager.reset();
+      resetAutoPlay();
+    }
     lastGameId = msg.gameId;
   }
   handleMessageBody(msg);
@@ -2823,13 +3181,22 @@ function updatePresence(msg) {
     return;
   }
   const startedAt = performance.now();
-  const { remainingMs, perTurnMs } = msg.timer;
+  const { remainingMs, perTurnMs, bankMs } = msg.timer;
+  const total = Math.max(remainingMs, perTurnMs + (bankMs ?? 0), 1);
+  if (!box.querySelector(".timer-track")) {
+    box.innerHTML = "";
+    box.append(el("span", "timer-text"), el("span", "timer-track"));
+    box.querySelector(".timer-track").appendChild(el("span", "timer-fill"));
+  }
+  const text = box.querySelector(".timer-text");
+  const fill = box.querySelector(".timer-fill");
   const draw = () => {
     const elapsed = performance.now() - startedAt;
     const left = Math.max(0, remainingMs - elapsed);
     const turn = Math.max(0, perTurnMs - elapsed);
     const bank = Math.max(0, left - turn);
-    box.textContent = turn > 0 ? `${Math.ceil(turn / 1000)}초${bank > 0 ? ` + 여유 ${Math.ceil(bank / 1000)}초` : ""}` : `여유 ${Math.ceil(bank / 1000)}초`;
+    text.textContent = turn > 0 ? `${Math.ceil(turn / 1000)}초${bank > 0 ? ` + 여유 ${Math.ceil(bank / 1000)}초` : ""}` : `여유 ${Math.ceil(bank / 1000)}초`;
+    fill.style.width = `${Math.round((left / total) * 100)}%`;
     box.classList.toggle("is-bank", turn <= 0);
     box.classList.toggle("is-low", left <= 3000);
     if (left <= 0 && timerTick) {
@@ -2858,14 +3225,20 @@ function handleMessageBody(msg) {
   awaitingServer = false; // 서버가 새 상태를 보냈으니 다음 응답을 보낼 수 있다
   updateAbandonButton(msg);
   if (msg.type === "setup") {
+    resetAutoPlay(); // 로비로 돌아가면(그만두기 등) 자동 옵션도 초기화
     showSetup(msg);
     return;
   }
   hideSetup();
   pendingRequest = null; // decision 메시지면 아래에서 다시 채운다
+  discardCtx = null;
+  selectedTileId = null;
   currentCharacterNames = msg.characterNames ?? [];
   updatePresence(msg);
-  if (msg.type === "hand_end" || msg.type === "game_end") clearRecentFeed();
+  if (msg.type === "hand_end" || msg.type === "game_end") {
+    clearRecentFeed();
+    resetAutoPlayAtHandBoundary(); // 자동 옵션은 그 국에서만 유효하다
+  }
   if (msg.type === "watch") {
     // AI 턴 진행 장면: 판을 그리되 행동창은 비운다 (아직 내가 할 일이 없다)
     document.getElementById("hand-end-overlay").classList.add("hidden");

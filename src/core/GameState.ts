@@ -25,6 +25,7 @@ import {
 } from "../ai/simpleAI.js";
 import type { CharacterProfile } from "../ai/characterProfile.js";
 import { CharacterAI, type CallDecisionTrace, type CharacterDecisionContext } from "../ai/characterAI.js";
+import { computeDiscardUkeire } from "../ai/discardUkeire.js";
 import { summarizeHumanDecision, type HumanDecisionEntry } from "./humanDecisionLog.js";
 import type { ChiCandidate } from "./discardResponses.js";
 import type { ChiDecisionEvaluation } from "../ai/chiDecision.js";
@@ -1291,6 +1292,9 @@ export class GameState {
       });
     };
 
+    /** 손패 종류별 "버린 뒤 샹텐 + 유효패" (사람 타패 요청에만 실린다, 표시 전용). */
+    const discardUkeireFor = (hand: Hand, view: PlayerView) => computeDiscardUkeire(hand.concealed, hand.melds.length, this.rules, view);
+
     /** Discard and riichi are answered together: riichi is a property of a specific
      *  discard, not an independent decision - see DiscardDecisionRequest. AI/SimpleAI seats
      *  keep the exact existing two-call sequence (chooseDiscardFor then
@@ -1321,6 +1325,7 @@ export class GameState {
         legalTileIds,
         riichiLegalTileIds,
         riichiWaits: riichiWaitsFor(hand, riichiLegalTileIds, view),
+        discardUkeire: discardUkeireFor(hand, view),
         ...(drawnTileId !== undefined ? { drawnTileId } : {}),
         view,
       } satisfies DiscardDecisionRequest) as DiscardDecisionResponse;

@@ -35,8 +35,17 @@
     <button type="button" class="auto-toggle" data-auto="tsumogiri" aria-pressed="false" title="쯔모 뒤 타패 차례에 뽑은 패를 자동으로 버립니다 (리치는 선언하지 않음)">자동 쯔모기리</button>
     <button type="button" class="auto-toggle" data-auto="passCalls" aria-pressed="false" title="치·퐁·대명깡 제안을 자동으로 넘깁니다 (암깡·가깡·북 빼기는 제외)">울기 패스</button>
     <button type="button" class="auto-toggle" data-auto="autoWin" aria-pressed="false" title="론·쯔모가 가능하면 자동으로 선언합니다">자동 화료</button>
-    <button type="button" class="auto-toggle" data-assist="shanten" aria-pressed="true" title="내 손의 샹텐/텐파이 문구를 보여 줍니다. 대기패와 후리텐 표시는 끄더라도 보입니다 (표시 전용)">샹텐 표시</button>
-    <button type="button" class="auto-toggle" data-assist="risk" aria-pressed="false" title="리치한 상대가 있을 때 내 손패마다 버림패 기준 위험도(낮음/주의/높음)를 보여 줍니다 (현물·스지만 보는 상대적 표시, 표시 전용)">위험도 표시</button>
+    <!-- 플레이 보조(표시 전용): 켜면 게임 진행에 도움이 되는 정보를 더 보여 준다. 메뉴 패널에서 항목별로 켜고 끈다 (app.js) -->
+    <button type="button" class="assist-menu-toggle" aria-expanded="false" aria-controls="assist-panel" title="플레이 보조 표시를 켜고 끕니다 (표시 전용)">보조 ▾</button>
+    <div id="assist-panel" class="assist-panel hidden" role="group" aria-label="플레이 보조">
+      <p class="assist-note">표시 전용입니다. 응답·결과·리플레이에는 영향이 없습니다.</p>
+      <label class="assist-row"><input type="checkbox" data-assist="shanten" /><span><b>샹텐 표시</b><small>내 손의 N샹텐 / 텐파이 문구 (대기패와 후리텐은 끄더라도 보입니다)</small></span></label>
+      <label class="assist-row"><input type="checkbox" data-assist="risk" /><span><b>위험도 표시</b><small>리치한 상대가 있을 때 손패마다 낮음/주의/높음. 근거(현물·스지)는 패를 고르거나 올려 보면 나옵니다</small></span></label>
+      <label class="assist-row"><input type="checkbox" data-assist="ukeire" /><span><b>유효패 표시</b><small>타패마다 버린 뒤의 샹텐과 진행에 도움이 되는 패 장수</small></span></label>
+      <p class="assist-note assist-note-sub">입력 방식</p>
+      <label class="assist-row"><input type="checkbox" data-option="confirmDiscard" /><span><b>두 번 눌러 버리기</b><small>패를 한 번 누르면 고르기만 하고, 한 번 더 누르거나 "버리기"를 눌러야 버립니다 (터치 화면은 기본으로 켜짐)</small></span></label>
+      <label class="assist-row"><input type="checkbox" data-option="keyboard" /><span><b>키보드 단축키</b><small>←/→ 패 고르기 · Enter 버리기/하기 · Esc 취소/넘기기 · T 쯔모기리 · R 리치</small></span></label>
+    </div>
     <select class="speed-select" aria-label="AI 진행 속도">
       <option value="slow">느림</option>
       <option value="normal">보통</option>

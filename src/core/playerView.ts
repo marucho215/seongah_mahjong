@@ -7,7 +7,7 @@ import { NO_FURITEN, type FuritenSnapshot } from "../actions/furiten.js";
 import { seatDistance } from "./seats.js";
 import { tilesToCounts } from "./tileIndex.js";
 import { minShanten } from "../shanten/shanten.js";
-import { discardRiskLevel, type DiscardRiskLevel } from "../ai/discardDanger.js";
+import { discardRiskBasis, discardRiskLevel, type DiscardRiskBasis, type DiscardRiskLevel } from "../ai/discardDanger.js";
 
 /** Position, within the visible river (`discards`, called-away tiles excluded), of the tile
  *  to draw sideways because it declared riichi - null when no riichi declaration. If the
@@ -146,6 +146,10 @@ export interface HandStatus {
 export interface DiscardRisk {
   kind: TileKind;
   level: DiscardRiskLevel;
+  /** 등급의 근거: 리치한 상대마다 이 패가 그 상대의 현물/스지인지 (등급은 가장 위험한 상대 기준이다). 화면의 "왜 위험한가" 설명용. */
+  against: { seat: number; basis: DiscardRiskBasis }[];
+  /** 이 패의 미확인 장수 (WaitInfo.unseenCount와 같은 공개 정보 기준 추정치) */
+  unseenCount: number;
 }
 
 export interface BuildPlayerViewOptions {
@@ -210,16 +214,20 @@ export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
       return yaku ? { ...w, yaku } : w;
     }),
   };
-  return { ...base, waits: withUnseenCounts(base, waits ?? []), handStatus, discardRisk: discardRiskFor(seat, hands) };
+  return { ...base, waits: withUnseenCounts(base, waits ?? []), handStatus, discardRisk: discardRiskFor(seat, hands, base) };
 }
 
 /** 리치한 상대들의 강(버림패 종류 전체 - 울어 간 패도 그 상대가 버린 공개 패다)만으로 자기 손패 종류별 위험도를 매긴다.
  *  상대 손패나 패산은 읽지 않는다. */
-function discardRiskFor(seat: number, hands: readonly Hand[]): DiscardRisk[] {
-  const riichiRivers = hands
-    .filter((hand, i) => i !== seat && hand.riichi)
-    .map((hand) => hand.discards.map((d) => d.tile.kind));
-  if (riichiRivers.length === 0) return [];
+function discardRiskFor(seat: number, hands: readonly Hand[], base: Parameters<typeof unseenCountOf>[0]): DiscardRisk[] {
+  const riichiSeats = hands.map((hand, i) => ({ hand, i })).filter(({ hand, i }) => i !== seat && hand.riichi);
+  if (riichiSeats.length === 0) return [];
+  const riichiRivers = riichiSeats.map(({ hand }) => hand.discards.map((d) => d.tile.kind));
   const kinds = [...new Set(hands[seat]!.concealed.map((t) => t.kind))];
-  return kinds.map((kind) => ({ kind, level: discardRiskLevel(kind, riichiRivers) }));
+  return kinds.map((kind) => ({
+    kind,
+    level: discardRiskLevel(kind, riichiRivers),
+    against: riichiSeats.map(({ i }, n) => ({ seat: i, basis: discardRiskBasis(kind, riichiRivers[n]!) })),
+    unseenCount: unseenCountOf(base, kind),
+  }));
 }

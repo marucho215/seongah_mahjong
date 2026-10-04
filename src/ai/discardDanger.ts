@@ -34,3 +34,13 @@ export function discardRiskLevel(kind: TileKind, riichiRivers: readonly (readonl
   if (danger < 1) return "caution";
   return "high";
 }
+
+/** 위험도 등급의 근거 한 줄: 리치한 상대 한 명의 강에 대해 이 패가 현물인지, 스지인지, 아무 근거가 없는지. */
+export type DiscardRiskBasis = "genbutsu" | "suji" | "none";
+
+/** `dangerOf(kind, river, true)`와 같은 판정을 근거 이름으로 돌려준다 (등급 계산과 항상 일치한다). */
+export function discardRiskBasis(kind: TileKind, riverKinds: readonly TileKind[]): DiscardRiskBasis {
+  if (riverKinds.includes(kind)) return "genbutsu";
+  if (isSuji(kind, riverKinds)) return "suji";
+  return "none";
+}

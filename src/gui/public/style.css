@@ -617,30 +617,124 @@ body {
 /* 자동 옵션이 하나라도 켜져 있으면 평소처럼 흐리게 두지 않는다 (켜진 상태가 늘 보이게). 표시 전용인 플레이 보조 토글은 제외 */
 #audio-controls:has(.auto-toggle[data-auto].is-on) { opacity: 1; }
 
-/* 플레이 보조 토글: 자동 옵션과 구분되게 다른 켜짐 색을 쓴다 */
-#audio-controls .auto-toggle[data-assist].is-on {
-  background: #8fd3ff;
-  border-color: #8fd3ff;
-}
 
-/* 위험도 표시: 내 손패 아래 등급 글자 (낮음/주의/높음). 색만으로 구분하지 않도록 글자를 함께 쓴다 */
-.tile-risk {
+/* 플레이 보조 표시: 내 손패 아래 위험도 등급(낮음/주의/높음)과 유효패 장수. 색만으로 구분하지 않도록 글자를 함께 쓴다 */
+.tile-assist {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
 }
-.tile-risk .risk-badge {
+.tile-assist .assist-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+}
+.tile-assist .risk-badge,
+.tile-assist .ukeire-badge {
   font-size: 10px;
   line-height: 1;
-  margin-top: 2px;
   padding: 1px 3px;
   border-radius: 3px;
   font-weight: 600;
   white-space: nowrap;
 }
-.tile-risk.risk-low .risk-badge { background: #2e7d32; color: #fff; }
-.tile-risk.risk-caution .risk-badge { background: #f9a825; color: #1b1b1b; }
-.tile-risk.risk-high .risk-badge { background: #c62828; color: #fff; }
+.tile-assist .ukeire-badge { background: rgba(0, 0, 0, 0.45); color: rgba(240, 240, 240, 0.7); }
+.tile-assist .ukeire-badge.is-best { background: #1565c0; color: #fff; }
+.tile-assist.risk-low .risk-badge { background: #2e7d32; color: #fff; }
+.tile-assist.risk-caution .risk-badge { background: #f9a825; color: #1b1b1b; }
+.tile-assist.risk-high .risk-badge { background: #c62828; color: #fff; }
+
+/* 선택한 패/올려 본 패의 상세 줄 (위험도 근거, 유효패) */
+.assist-detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+}
+.assist-detail { min-height: 30px; box-sizing: border-box; }
+.assist-detail.is-empty { visibility: hidden; }
+.assist-detail .assist-detail-head { font-weight: 700; }
+.assist-detail .assist-detail-part { display: inline-flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.assist-detail .wait-item { display: inline-flex; align-items: center; gap: 1px; margin-left: 4px; }
+.assist-detail .risk-text.risk-low { color: #9be59f; }
+.assist-detail .risk-text.risk-caution { color: #ffd54a; }
+.assist-detail .risk-text.risk-high { color: #ff8a80; }
+
+/* 고른 패(두 번 눌러 버리기, 키보드): 들어 올리고 테두리를 둔다 */
+.tile-img.is-selected,
+.tile-img.is-selected:hover {
+  transform: translateY(-12px);
+  outline: 3px solid #8fd3ff;
+  outline-offset: 1px;
+}
+.tile-img.riichi-legal.is-selected { outline-color: #fff3b0; }
+.claim-priority { font-size: 11px; opacity: 0.7; }
+#action-bar button.is-confirming { background: #ff8a80; color: #1b1b1b; font-weight: 700; }
+#action-bar button.confirm-discard { background: #ffd54a; color: #1b1b1b; font-weight: 700; }
+
+/* 보조 메뉴 패널 */
+#audio-controls .assist-menu-toggle {
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(143, 211, 255, 0.5);
+  background: rgba(0, 0, 0, 0.3);
+  color: #8fd3ff;
+  cursor: pointer;
+}
+#audio-controls .assist-menu-toggle.is-on { background: #8fd3ff; color: #1b1b1b; }
+.assist-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 8;
+  width: min(360px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(10, 30, 16, 0.97);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
+  font-size: 12px;
+  color: #f0f0f0;
+}
+.assist-panel.hidden { display: none; }
+.assist-panel .assist-note { margin: 0; opacity: 0.7; font-size: 11px; }
+.assist-panel .assist-note-sub { margin-top: 4px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.15); font-weight: 700; }
+.assist-row { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.assist-row input { margin-top: 3px; flex: 0 0 auto; width: 16px; height: 16px; }
+.assist-row span { display: flex; flex-direction: column; gap: 1px; }
+.assist-row small { opacity: 0.7; font-size: 11px; line-height: 1.35; }
+
+/* 안내 (자동 옵션을 껐을 때 등) */
+#toast {
+  position: fixed;
+  left: 50%;
+  top: 12px;
+  transform: translate(-50%, -8px);
+  z-index: 20;
+  max-width: 90vw;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(10, 30, 16, 0.95);
+  border: 1px solid rgba(255, 213, 74, 0.6);
+  color: #ffe9a8;
+  font-size: 13px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+#toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
 
 #audio-controls .abandon-button {
   font: inherit;
@@ -1298,6 +1392,8 @@ body.is-setup #audio-controls {
 body.is-replay #audio-controls { position: static; margin-left: auto; opacity: 1; background: none; padding: 0; }
 body.is-replay #audio-controls .abandon-button,
 body.is-replay #audio-controls .auto-toggle,
+body.is-replay #audio-controls .assist-menu-toggle,
+body.is-replay #audio-controls .assist-panel,
 body.is-replay #audio-controls .speed-select { display: none !important; }
 /* 리플레이를 고르기 전에는 빈 작탁을 그리지 않는다 */
 body.is-replay:not(.rv-ready) #table,
@@ -1554,6 +1650,8 @@ div.setup-seat { cursor: default; }
   #audio-controls:not(.is-open) > :not(.controls-toggle) { display: none !important; }
   #audio-controls.is-open { padding: 6px; background: rgba(10, 30, 16, 0.94); gap: 6px; }
   #audio-controls.is-open .audio-volume { width: 100%; }
+  /* 좁은 화면에서는 보조 패널이 막대 안에서 같이 스크롤되도록 흐름 안에 둔다 */
+  #audio-controls .assist-panel { position: static; width: auto; box-shadow: none; background: rgba(0, 0, 0, 0.25); }
 }
 
 @media (pointer: coarse) {
@@ -1634,6 +1732,13 @@ div.setup-seat { cursor: default; }
 }
 #turn-timer.is-bank { color: #ffd54a; }
 #turn-timer.is-low { color: #ff8a80; }
+/* 남은 시간 막대: 줄어드는 길이로 한눈에 보인다 (숫자와 함께) */
+#turn-timer { display: flex; align-items: center; gap: 8px; }
+#turn-timer.hidden { display: none; }
+#turn-timer .timer-track { width: 96px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
+#turn-timer .timer-fill { display: block; height: 100%; width: 100%; background: #8fd3ff; transition: width 0.2s linear; }
+#turn-timer.is-bank .timer-fill { background: #ffd54a; }
+#turn-timer.is-low .timer-fill { background: #ff8a80; }
 #away-banner {
   position: fixed;
   top: 40px;

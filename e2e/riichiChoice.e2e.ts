@@ -60,7 +60,7 @@ describe("리치 선언 (휴대폰)", () => {
 
     // 다른 패 고르기: 처음 안내로 돌아가고, 들린 패도 내려온다
     await bar().locator("button", { hasText: "다른 패 고르기" }).tap();
-    await bar().getByText("버릴 패를 클릭하세요").waitFor();
+    await bar().getByText("버릴 패를", { exact: false }).waitFor(); // 터치 화면은 "두 번 눌러 버리기"가 기본이라 문구가 다르다
     expect(await page.locator("#zone-bottom .hand img.riichi-pending").count()).toBe(0);
 
     // 다시 눌러 리치

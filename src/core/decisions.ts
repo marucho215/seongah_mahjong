@@ -1,5 +1,6 @@
 import type { TileKind } from "./tiles.js";
 import type { PlayerView, WaitInfo } from "./playerView.js";
+import type { DiscardUkeire } from "../ai/discardUkeire.js";
 import type { TileRef } from "./GameLog.js";
 
 /** A normal turn discard, optionally combined with declaring riichi on it - riichi is a
@@ -16,6 +17,9 @@ export interface DiscardDecisionRequest {
   /** 리치 가능한 각 버림패를 골랐을 때의 대기패 미리보기 (엔진의 기존 대기 계산). riichiLegalTileIds와 같은 패들만 담는다.
    *  내 손패에서만 계산되므로 숨은 정보를 더하지 않는다. */
   riichiWaits: { tileId: number; waits: WaitInfo[] }[];
+  /** 손패 종류별로 "그 패를 버리면 샹텐이 몇이고 어떤 패가 유효패인가" (GUI "유효패 표시"용, 표시 전용). 내 손패와 공개 정보만으로
+   *  계산하며 리플레이에는 담기지 않는다. 리치 후처럼 고를 수 없는 요청에는 없다. */
+  discardUkeire?: DiscardUkeire[];
   /** 이번 차례에 뽑은 패의 id (쯔모/영상패 뒤의 타패일 때만). 퐁/치/대명깡 직후의 타패처럼 뽑은 패가 없으면 없다.
    *  엔진이 쯔모기리 판정에 쓰는 것과 같은 패이며, GUI 자동 쯔모기리가 이 값만 쓴다 (GUI가 손패 순서로 추측하지 않는다). */
   drawnTileId?: number;
