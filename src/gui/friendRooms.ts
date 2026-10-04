@@ -140,6 +140,20 @@ export class FriendRoomStore {
     return room;
   }
 
+  /** 코드로 방을 찾는다 (관전용: 자리에 앉지 않는다). 틀린 코드는 입장과 같이 사용자별로 횟수를 제한한다. */
+  find(userId: string, codeInput: unknown): FriendRoom {
+    const now = this.now();
+    const recent = (this.failures.get(userId) ?? []).filter((t) => now - t < ROOM_CODE_FAILURE_WINDOW_MS);
+    if (recent.length >= ROOM_CODE_FAILURE_LIMIT) throw new FriendRoomError("방 코드 입력이 너무 많습니다. 잠시 뒤 다시 시도해 주세요", 429);
+    const code = normalizeRoomCode(codeInput);
+    const room = code ? this.rooms.get(code) : undefined;
+    if (!room) {
+      this.failures.set(userId, [...recent, now]);
+      throw new FriendRoomError("그런 방이 없습니다. 코드를 확인해 주세요", 404);
+    }
+    return room;
+  }
+
   /** 방에서 나간다. 방장이 나가면 방이 닫힌다. 영향을 받은 방과 닫혔는지, 그 방에 있던 사람들을 돌려준다. */
   leave(userId: string): { room: FriendRoom; closed: boolean; members: string[] } | null {
     const room = this.roomOf(userId);

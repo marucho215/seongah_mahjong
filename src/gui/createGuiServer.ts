@@ -11,6 +11,7 @@ import type { GameEvent } from "../core/GameLog.js";
 import { InlineEngineRunner, gameFromSpec, runAiWatchGame, type AiWatchSpec, type EngineRunner, type EngineSnapshot, type EngineStart, type GameSpec, type OpponentSpec } from "./engineRunner.js";
 import type { EngineWorkerPool } from "./engineWorkerPool.js";
 import { AudioCueTracker, toPublicAction, type AudioCue, type PublicAction } from "./audioCues.js";
+import { toSpectatorMessage } from "./spectator.js";
 import type { DecisionResponse, SeatDecisionRequest, SeatDecisionResponse } from "../core/decisions.js";
 import { replayFileNamePart, resolveReplayDir, writeGameReplay, type GameReplayRecord } from "../sim/replayRecorder.js";
 import { aggregateWatchStats, summarizeWatchGame, type WatchGameSummary } from "../sim/watchStats.js";
@@ -737,6 +738,8 @@ interface Room {
   frameDelayMs: number;
   /** 이 사용자가 앉아 있는 대국. 없으면 로비. */
   table: Table | null;
+  /** 이 사용자가 관전 중인 친선전 방 코드 (관전하지 않으면 null). 관전은 대국에 앉는 것이 아니라 table과 따로다. */
+  spectatingCode: string | null;
   /** 엔진이 새 대국을 만드는 중 (worker 응답 대기) */
   starting: boolean;
   /** 이 사용자의 CustomAI 저장소 (로컬 모드는 서버 설정 폴더, 온라인은 사용자 폴더). 로비가 없는 서버면 null. */
@@ -774,7 +777,14 @@ interface WatchBatch {
 interface Table {
   host: GameHost;
   seatUsers: (string | null)[];
+  /** 친선전 방 코드 (친선전 대국만). 관전자는 이 코드로 대국을 따라간다. */
+  friendCode?: string;
+  /** 사람끼리 대국에서 관전자가 따라가는 시점의 좌석 (가장 앞 사람 좌석), 아니면 null (모두 같은 메시지) */
+  spectatorViewer: number | null;
 }
+
+/** 방 하나당 관전자 수 상한 */
+const MAX_SPECTATORS_PER_ROOM = 10;
 
 function buildServer(initial: { game: GameState; options: GuiServerOptions } | null, lobby: GuiLobbyOptions | null): GuiLobbyServerHandle {
 
@@ -857,6 +867,8 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   const initialFrameDelayMs = (initial ? initial.options.frameDelayMs : lobby?.frameDelayMs) ?? DEFAULT_FRAME_DELAY_MS;
 
   const rooms = new Map<string, Room>();
+  /** 친선전 방 코드 -> 그 방 대국을 관전 중인 사용자 id들 */
+  const spectatorsByCode = new Map<string, Set<string>>();
   function roomOf(userId: string): Room {
     let room = rooms.get(userId);
     if (!room) {
@@ -881,6 +893,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
         },
         frameDelayMs: initialFrameDelayMs,
         table: null,
+        spectatingCode: null,
         starting: false,
         customAiStore: lobby ? new CustomAiStore(access ? join(userDataDir, userId, "custom-ai") : (lobby.customAiDir ?? "custom-ai")) : null,
         replayDir: access ? join(userDataDir, userId, "replays") : localReplayDir,
@@ -907,7 +920,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     start: EngineStart,
     options: GuiServerOptions,
     startedConfig: StartedGameConfig | null,
-    extra: { seatUsers?: (string | null)[]; hostOptions?: GameHostOptions } = {}
+    extra: { seatUsers?: (string | null)[]; hostOptions?: GameHostOptions; friendCode?: string } = {}
   ): Table {
     const seatUsers: (string | null)[] = extra.seatUsers ?? start.controllers.map((c) => (c === "human" ? room.userId : null));
     const deliver = (viewer: number | null, payload: string): void => {
@@ -922,8 +935,24 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       }
       for (const userId of new Set(seatUsers)) if (userId !== null) sendToRoom(roomOf(userId), payload);
     };
+    // 관전자: 한 시점의 메시지를 손패/요청을 지워서 따로 보낸다 (사람끼리 대국은 가장 앞 사람 좌석 시점 하나만 따라간다)
+    const spectatorViewer = start.multiplayer ? (start.controllers.findIndex((c) => c === "human") >= 0 ? start.controllers.findIndex((c) => c === "human") : null) : null;
+    const deliverAll = (viewer: number | null, payload: string): void => {
+      deliver(viewer, payload);
+      const code = extra.friendCode;
+      const watchers = code ? spectatorsByCode.get(code) : undefined;
+      if (!watchers || watchers.size === 0 || viewer !== spectatorViewer) return;
+      const message = toSpectatorMessage(payload.replace(/^data: /, "").trim());
+      if (!message) return;
+      for (const userId of watchers) sendToRoom(roomOf(userId), `data: ${message}\n\n`);
+    };
     // 재생 속도는 대국을 시작한 사용자의 설정을 장면마다 읽는다.
-    const table: Table = { host: createGameHost(runner, start, options, deliver, startedConfig, () => room.frameDelayMs, extra.hostOptions), seatUsers };
+    const table: Table = {
+      host: createGameHost(runner, start, options, deliverAll, startedConfig, () => room.frameDelayMs, extra.hostOptions),
+      seatUsers,
+      ...(extra.friendCode ? { friendCode: extra.friendCode } : {}),
+      spectatorViewer,
+    };
     for (const userId of new Set(seatUsers)) {
       if (userId === null) continue;
       const member = roomOf(userId);
@@ -1032,17 +1061,76 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
   }
 
   function connectMessage(room: Room): string {
+    if (room.spectatingCode) {
+      const table = tableOfFriendCode(room.spectatingCode);
+      const spectated = table ? toSpectatorMessage(table.host.connectMessage(table.spectatorViewer)) : null;
+      if (spectated) return spectated;
+      // 관전할 대국이 사라졌다
+      stopSpectating(room, "관전하던 대국이 끝났거나 방이 닫혔습니다.");
+    }
     return room.table ? room.table.host.connectMessage(viewerSeatOf(room, room.table)) : setupMessage(room);
+  }
+
+  /** 친선전 방 코드의 지금 대국 (방장 로비의 table). 없으면 null. */
+  function tableOfFriendCode(code: string): Table | null {
+    for (const candidate of rooms.values()) if (candidate.table?.friendCode === code) return candidate.table;
+    return null;
+  }
+
+  /** 방의 새 대국이 열렸을 때 (같은 멤버로 다시 등) 관전자에게 새 대국의 현재 상태를 보낸다 */
+  function refreshSpectators(code: string): void {
+    for (const userId of spectatorsByCode.get(code) ?? []) {
+      const member = roomOf(userId);
+      sendToRoom(member, `data: ${connectMessage(member)}\n\n`);
+    }
+  }
+
+  /** 관전을 끝낸다 (나가기, 방이 닫힘, 대국이 사라짐). */
+  function stopSpectating(room: Room, notice?: string): void {
+    const code = room.spectatingCode;
+    if (!code) return;
+    room.spectatingCode = null;
+    const watchers = spectatorsByCode.get(code);
+    watchers?.delete(room.userId);
+    if (watchers && watchers.size === 0) spectatorsByCode.delete(code);
+    if (notice) room.notice = notice;
+    room.lobbyScreen = "hub"; // 관전은 허브(친선전 입구)에서 시작했으니 허브로 돌아간다
+  }
+
+  /** 친선전 방이 닫혔을 때 그 방의 관전자를 모두 로비로 보낸다 */
+  function ejectSpectators(code: string, notice: string): void {
+    for (const userId of [...(spectatorsByCode.get(code) ?? [])]) {
+      const member = roomOf(userId);
+      stopSpectating(member, notice);
+      sendToRoom(member, `data: ${setupMessage(member)}\n\n`);
+    }
+  }
+
+  /** 코드로 방의 진행 중인 대국을 관전하기 시작한다. 관전자는 자리에 앉지 않고, 손패와 결정 요청은 받지 못한다. */
+  function spectateFriendRoom(room: Room, userId: string, codeInput: unknown): void {
+    const store = requireFriendRooms();
+    if (inActiveGame(room) || watchBatchRunning(room) || store.roomOf(userId)) throw new FriendRoomError("진행 중인 대국이나 방에서 나온 뒤 관전할 수 있습니다");
+    const friendRoom = store.find(userId, codeInput);
+    const table = tableOfFriendCode(friendRoom.code);
+    if (!table) throw new FriendRoomError("아직 대국이 시작되지 않았습니다. 시작한 뒤에 다시 들어와 주세요", 409);
+    const watchers = spectatorsByCode.get(friendRoom.code) ?? new Set<string>();
+    if (!watchers.has(userId) && watchers.size >= MAX_SPECTATORS_PER_ROOM) throw new FriendRoomError(`관전자가 가득 찼습니다 (최대 ${MAX_SPECTATORS_PER_ROOM}명)`, 409);
+    leaveTable(room); // 끝난 내 이전 대국 화면은 닫는다
+    watchers.add(userId);
+    spectatorsByCode.set(friendRoom.code, watchers);
+    room.spectatingCode = friendRoom.code;
+    room.notice = null;
+    sendToRoom(room, `data: ${connectMessage(room)}\n\n`);
   }
 
   /** 이 사용자가 진행 중인(끝나지 않았거나 장면 재생 중인) 대국에 앉아 있는지 */
   function inActiveGame(room: Room): boolean {
-    if (room.starting) return true;
+    if (room.starting || room.spectatingCode) return true; // 관전 중에도 새 대국/방/관전은 먼저 나온 뒤에 (관전 나가기: /abandon)
     const host = room.table?.host;
     return host !== undefined && (host.isPlaying() || host.phase() !== "game_end");
   }
 
-  async function startGame(room: Room, config: GuiGameConfig, friend: { timeLimit: GameHostOptions["timeLimit"]; nickname: string } | null = null): Promise<void> {
+  async function startGame(room: Room, config: GuiGameConfig, friend: { timeLimit: GameHostOptions["timeLimit"]; nickname: string; code?: string } | null = null): Promise<void> {
     const fromFriendRoom = friend !== null;
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
     if (inActiveGame(room)) throw new Error("GuiServer: 진행 중인 게임이 있습니다");
@@ -1091,7 +1179,8 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     } finally {
       room.starting = false;
     }
-    openTable(room, opened.runner, opened.start, options, started, friend ? { hostOptions: { timeLimit: friend.timeLimit, humanNames: [friend.nickname], awayAnswerDelayMs: AWAY_ANSWER_DELAY_MS * (lobby.friendTimeScale ?? 1) } } : {});
+    openTable(room, opened.runner, opened.start, options, started, friend ? { ...(friend.code ? { friendCode: friend.code } : {}), hostOptions: { timeLimit: friend.timeLimit, humanNames: [friend.nickname], awayAnswerDelayMs: AWAY_ANSWER_DELAY_MS * (lobby.friendTimeScale ?? 1) } } : {});
+    if (friend?.code) refreshSpectators(friend.code);
     lobby.onGameStarted?.(started, room.userId);
     sendToRoom(room, `data: ${connectMessage(room)}\n\n`);
   }
@@ -1205,8 +1294,10 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
     };
     openTable(hostRoom, opened.runner, opened.start, { replay }, started, {
       seatUsers,
+      friendCode: friendRoom.code,
       hostOptions: { humanNames, abandonSeat: 0, timeLimit: timeLimitOf(friendRoom), awayAnswerDelayMs: AWAY_ANSWER_DELAY_MS * (lobby!.friendTimeScale ?? 1) },
     });
+    refreshSpectators(friendRoom.code);
     for (const userId of new Set(seatUsers)) {
       if (userId === null) continue;
       const member = roomOf(userId);
@@ -1268,9 +1359,12 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
             const joined = store.join(me, input.code);
             room.notice = null;
             notifyFriendMembers(store.membersOf(joined));
+          } else if (pathname === "/friend/spectate") {
+            spectateFriendRoom(room, room.userId, input.code);
           } else if (pathname === "/friend/leave") {
             const left = store.leave(room.userId);
             if (!left) throw new FriendRoomError("친선전 방에 있지 않습니다");
+            if (left.closed) ejectSpectators(left.room.code, "방장이 방을 닫았습니다.");
             notifyFriendMembers([room.userId]);
             notifyFriendMembers(left.members.filter((u) => u !== room.userId), left.closed ? "방장이 방을 닫았습니다." : undefined);
           } else if (pathname === "/friend/seat") {
@@ -1296,7 +1390,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
             } else {
               const opponents = current.seats.slice(1).map((st) => (st.kind === "ai" ? st.characterId : ""));
               // 친선전은 리플레이를 항상 남긴다 (D단계)
-              await startGame(room, { mode: current.mode, opponents, saveReplays: true }, { timeLimit: timeLimitOf(current), nickname: me.nickname });
+              await startGame(room, { mode: current.mode, opponents, saveReplays: true }, { timeLimit: timeLimitOf(current), nickname: me.nickname, code: current.code });
             }
           } else {
             res.writeHead(404).end("Not found");
@@ -1310,7 +1404,10 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
 
   const friendSweepTimer = friendRooms
     ? setInterval(() => {
-        for (const { members } of friendRooms.sweepIdle()) notifyFriendMembers(members, "오래 쓰이지 않아 친선전 방이 닫혔습니다.");
+        for (const { members, room: closedRoom } of friendRooms.sweepIdle()) {
+          notifyFriendMembers(members, "오래 쓰이지 않아 친선전 방이 닫혔습니다.");
+          ejectSpectators(closedRoom.code, "오래 쓰이지 않아 친선전 방이 닫혔습니다.");
+        }
       }, 60_000)
     : null;
   friendSweepTimer?.unref();
@@ -1439,6 +1536,12 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
    *  게임이 이미 끝났다면 "설정 바꾸기"(/setup)를 쓴다. */
   function abandonGame(room: Room): void {
     if (!lobby) throw new Error("GuiServer: 이 서버는 시작 화면을 쓰지 않습니다");
+    if (room.spectatingCode) {
+      // 관전 나가기: 대국에는 아무 영향이 없다
+      stopSpectating(room);
+      sendToRoom(room, `data: ${setupMessage(room)}\n\n`);
+      return;
+    }
     const table = room.table;
     const host = table?.host;
     if (!table || !host) throw new Error("GuiServer: 진행 중인 대국이 없습니다");

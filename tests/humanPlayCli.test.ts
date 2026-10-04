@@ -3,7 +3,7 @@ import { GameState } from "../src/core/GameState.js";
 import { DEFAULT_SANMA_RULES } from "../src/rules/RuleConfig.js";
 import { getCharacterProfile } from "../src/ai/characterProfiles.js";
 import { collectAllInvariantViolations } from "../src/validation/invariants.js";
-import { runInteractiveHand } from "../src/cli/humanPlayDriver.js";
+import { runInteractiveGame, runInteractiveHand } from "../src/cli/humanPlayDriver.js";
 import { createScriptedIO } from "../src/cli/scriptedIO.js";
 import { compareTilesForDisplay } from "../src/cli/tileFormat.js";
 import { parseKind } from "../src/core/tiles.js";
@@ -173,4 +173,26 @@ describe("CLI human-play driver (scripted IO, no real stdin)", () => {
     }
     expect(verifiedAtLeastOneMismatch).toBe(true);
   });
+});
+
+describe("CLI 게임 전체 진행 (--game)", () => {
+  it("모든 국을 이어서 두고, 국마다 결과를 보여 주며, 끝나면 최종 순위를 돌려준다 (불변식 위반 없음)", async () => {
+    const gs = newHumanGame("cli-whole-game");
+    const io = createScriptedIO(alwaysPassPolicy);
+    const standings = await runInteractiveGame(gs, io, (seat) => (seat === 0 ? "나" : `AI${seat}`));
+
+    expect(gs.log.filter((e) => e.type === "hand_start").length).toBeGreaterThan(1);
+    expect(gs.log.at(-1)?.type).toBe("game_end");
+    expect(standings.map((s) => s.placement)).toEqual([1, 2, 3]);
+    const handResults = io.transcript.filter((l) => l === "=== 국 결과 ===");
+    expect(handResults.length).toBe(gs.log.filter((e) => e.type === "hand_end").length);
+    expect(io.transcript).toContain("=== 게임 종료 ===");
+    expect(io.transcript.some((l) => /^1위 /.test(l))).toBe(true);
+    expect(io.transcript.some((l) => l.startsWith("점수: "))).toBe(true);
+    expect(io.transcript).toContain("--- 다음 국으로 넘어갑니다 ---");
+    // 숨은 정보 규칙은 한 국 CLI와 같다: 내 손패 구역만 Concealed로 표시된다
+    for (const line of io.transcript) if (line.startsWith("Seat ")) expect(line).not.toContain("Concealed");
+    const violations = collectAllInvariantViolations({ rules: DEFAULT_SANMA_RULES, events: gs.log });
+    expect(violations).toEqual([]);
+  }, 180_000);
 });

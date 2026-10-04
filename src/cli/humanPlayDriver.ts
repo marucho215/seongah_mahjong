@@ -1,7 +1,7 @@
 import type { GameState } from "../core/GameState.js";
 import type { CallDecisionRequest, ChiDecisionRequest, DecisionRequest, DecisionResponse, DiscardDecisionRequest, NineTerminalsDecisionRequest, RonDecisionRequest, TsumoDecisionRequest } from "../core/decisions.js";
 import type { PlayerView } from "../core/playerView.js";
-import type { TileRef, MeldSnapshot } from "../core/GameLog.js";
+import type { TileRef, MeldSnapshot, GameEvent } from "../core/GameLog.js";
 import { parseKind } from "../core/tiles.js";
 import { compareTilesForDisplay, josaEulReul, josaRo, koreanTileLabel } from "./tileFormat.js";
 import type { CliIO } from "./cliIO.js";
@@ -252,5 +252,59 @@ export async function runInteractiveHand(gs: GameState, io: CliIO): Promise<void
     const response = await resolveRequest(request, io);
     gs.recordHumanDecision(request, response);
     step = session.next(response);
+  }
+}
+
+const ABORTIVE_DRAW_LABEL: Record<string, string> = { nine_terminals: "구종구패", four_winds: "사풍자화", four_riichi: "사가입리", four_kans: "사깡산라" };
+
+/** 한 국의 결과를 터미널용 한국어 줄들로 (엔진이 기록한 hand_end.result를 그대로 읽는다). 결과가 없는 옛 기록이면 점수만. */
+export function formatHandResult(event: Extract<GameEvent, { type: "hand_end" }>, seatName: (seat: number) => string = (s) => `seat ${s}`): string[] {
+  const result = event.result;
+  if (!result) return [`국 종료. 점수: ${event.scores.join(", ")}`];
+  const lines: string[] = [];
+  if (result.kind === "agari") {
+    for (const win of result.winners) {
+      const how = win.method === "tsumo" ? "쯔모" : `론 (${seatName(win.loserSeat!)} 방총)`;
+      const size = win.yakumanUnits > 0 ? `역만 x${win.yakumanUnits}` : `${win.han}판 ${win.fu}부`;
+      lines.push(`화료! ${seatName(win.winnerSeat)} ${how} - ${size}, ${win.totalPoints}점`);
+      lines.push(`  역: ${win.yaku.map((y) => `${y.name} ${y.han}`).join(", ")}`);
+    }
+  } else if (result.kind === "exhaustive_draw") {
+    lines.push(`유국 (황패) - 텐파이: ${result.tenpaiSeats.map(seatName).join(", ") || "없음"}`);
+    if (result.nagashiManganSeats.length > 0) lines.push(`유국만관: ${result.nagashiManganSeats.map(seatName).join(", ")}`);
+  } else {
+    lines.push(`유국: ${ABORTIVE_DRAW_LABEL[result.reason] ?? result.reason}`);
+  }
+  const deltas = result.scoresAfterSettlement.map((after, seat) => {
+    const delta = after - result.scoresBeforeSettlement[seat]!;
+    return `${seatName(seat)} ${after}${delta === 0 ? "" : ` (${delta > 0 ? "+" : ""}${delta})`}`;
+  });
+  lines.push(`점수: ${deltas.join("  ")}`);
+  return lines;
+}
+
+/**
+ * 사람 한 명과 AI로 게임 전체(모든 국)를 진행한다. 국마다 `runInteractiveHand`를 부르고, 국이 끝나면 결과를 보여 준 뒤
+ * GuiSession과 같은 순서(국 종료 후 연장/종료 판단 -> 끝났으면 finalizeGame)로 다음 국이나 최종 결과로 간다.
+ * 끝난 게임의 최종 순위를 돌려준다.
+ */
+export async function runInteractiveGame(gs: GameState, io: CliIO, seatName: (seat: number) => string = (s) => `seat ${s}`): Promise<ReturnType<GameState["computeFinalStandings"]>> {
+  for (;;) {
+    await runInteractiveHand(gs, io);
+    const handEnd = [...gs.log].reverse().find((e): e is Extract<GameEvent, { type: "hand_end" }> => e.type === "hand_end");
+    io.print("");
+    io.print("=== 국 결과 ===");
+    if (handEnd) for (const line of formatHandResult(handEnd, seatName)) io.print(line);
+    gs.updateGameContinuationStateAfterHand();
+    if (gs.isGameOver()) {
+      const end = gs.finalizeGame();
+      const standings = gs.computeFinalStandings();
+      io.print("");
+      io.print("=== 게임 종료 ===");
+      for (const s of standings) io.print(`${s.placement}위 ${seatName(s.player)}: ${s.rawScore}점`);
+      void end;
+      return standings;
+    }
+    io.print("--- 다음 국으로 넘어갑니다 ---");
   }
 }

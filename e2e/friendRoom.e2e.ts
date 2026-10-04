@@ -134,4 +134,32 @@ describe("친선전 방 스모크", () => {
       if ((await host.locator("#hand-end-overlay:not(.hidden)").count()) > 0) break;
     }
   }, 180_000);
+
+  it("관전: 방 코드로 진행 중인 대국을 지켜본다 (손패는 뒷면, 응답 없음), 나가면 로비로 돌아가고 대국은 계속된다", async () => {
+    const host = await enterAs("방장");
+    const watcher = await enterAs("관전자");
+    await host.locator("section:has(> h2:text-is('친선전')) select").first().selectOption("sanma");
+    await host.locator(".friend-create").click();
+    const code = (await host.locator(".friend-code-value").textContent())!.trim();
+    await seatRow(host, "남가").locator("button.setup-seat").click();
+    await host.locator(".character-card", { hasText: "제갈 나희" }).click();
+    await seatRow(host, "서가").locator("button.setup-seat").click();
+    await host.locator(".character-card", { hasText: "제갈 미나" }).click();
+    await host.locator(".setup-start:not([disabled])", { hasText: "대국 시작" }).click();
+    await host.locator("#zone-bottom .hand img").first().waitFor();
+
+    await watcher.locator(".friend-code-input").fill(code);
+    await watcher.locator(".friend-spectate").click();
+    await watcher.locator("#zone-bottom .hand img[alt='뒷면']").first().waitFor({ timeout: 30_000 });
+    // 내 손패 자리는 전부 뒷면이고, 응답 버튼은 없으며, "관전 나가기"가 보인다
+    expect(await watcher.locator("#zone-bottom .hand img:not([alt='뒷면'])").count()).toBe(0);
+    expect(await watcher.locator("#zone-bottom .hand img").count()).toBeGreaterThanOrEqual(13);
+    await watcher.locator("#action-bar", { hasText: "관전 중" }).waitFor();
+    expect(await watcher.locator(".abandon-button").textContent()).toBe("관전 나가기");
+
+    await watcher.locator(".abandon-button").click();
+    await watcher.locator(".friend-spectate").waitFor();
+    // 방장의 대국은 그대로다
+    await host.locator("#zone-bottom .hand img.clickable").first().waitFor();
+  }, 120_000);
 });

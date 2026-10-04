@@ -222,11 +222,21 @@
 - **내 자리 (1.3)**: `GuiGameConfig.humanSeat`(0..n-1 또는 `"random"`, 생략=0)와 `GameSpec.humanSeat`. 0이 아니면 `gameFromSpec`이 `seatsAroundHuman`(상대는 사람 다음
   차례부터)으로 `createFriendGame`을 불러 만든다(사람 1명이라 `multiplayer`는 꺼짐). 랜덤은 `seatFromSeed`(FNV)로 정해 같은 시드면 같은 자리다.
   종료 화면의 "다시 하기"는 `gameConfig.humanSeat`(고른 값, 랜덤이면 `"random"`)를 이어 보낸다. 동가(생략)의 대국/리플레이 바이트는 그대로다(`tests/humanSeat.test.ts`).
+- **마작 배우기 (1.3)**: `src/gui/public/yakuGuide.js`(표시 전용 데이터: 기초 규칙 `GUIDE_BASICS`, 역 `YAKU_GUIDE`, 도라 `DORA_GUIDE`)와 `guide.js`(오버레이, `openGuide({yaku, tab})`).
+  `tests/yakuGuide.test.ts`가 (1) app.js의 `YAKU_KO`에 있는 모든 역 이름에 설명이 있는지, (2) 예시 패가 엔진 `evaluateWin`으로 그 역이 나오고 판수가 도감과 같은지 확인한다 - 역/판수를 바꾸면 도감도 함께 고친다.
+  예상 역 표시는 `HandStatus.tenpaiWaits[].hint`(`WaitYakuHint`, `GameState.waitYakuOf`가 "역 없음" 계산과 같은 평가로 만든다, 일발 제외).
+- **규칙 옵션 (1.3)**: `gameSetup.ts`의 `RuleOptions`/`parseRuleOptions`(기본값과 같은 항목은 뺀다)/`rulesFor`/`ruleOptionLabels`. `GameSpec.rules` -> `gameFromSpec`이 RuleConfig로 만든다.
+  리플레이 `meta.rules`가 실제 규칙 전체를 저장하므로 재현은 따로 손볼 것이 없다. 친선전 방과 AI 관전에는 아직 규칙 옵션이 없다. 후리텐 규칙 옵션은 엔진에 없다.
+- **리플레이 탐색 (1.3)**: `replayMode.js`의 목차 패널(`rvRenderToc`), 북마크(`localStorage seongah.replayBookmarks`, 파일별 수 번호), 링크 복사(`step` 파라미터).
+- **친선전 관전 (1.3)**: `src/gui/spectator.ts`(순수 변환: 손패/대기/위험도/요청 제거, `tests/spectator.test.ts`)를 `createGuiServer`의 `deliverAll`이 방 코드별 관전자(`spectatorsByCode`)에게 적용한다.
+  사람끼리 대국은 가장 앞 사람 좌석 시점 하나만 따라간다(`Table.spectatorViewer`). 나가기는 `/abandon`(관전 중이면 관전만 끝냄), 방이 닫히면 `ejectSpectators`. `FriendRoomStore.find`가 코드 조회(틀린 코드 제한 공유).
+- **CustomAI 공유 (1.3)**: `exportCustomAi`/`parseCustomAiImport`(`customAiSchema.ts`), 서버 `GET /api/custom-ai/<id>/export`, `POST /api/custom-ai/import`.
+- **CLI (1.3)**: `runInteractiveGame`(`humanPlayDriver.ts`)과 `npm run play -- --game`.
 - **연결 복구 (1.3)**: 새 접속 메시지(`connectMessage`)에 이 국의 마지막 공개 행동 6개(`recent`)를 실어 "최근 행동" 목록을 채운다. 클라이언트는 끊김을 `#conn-banner`로 알리고
   EventSource의 자동 재연결로 현재 상태를 다시 받는다(`e2e/reconnect.e2e.ts`).
 - `src/gui/public/`: 바닐라 JS 클라이언트 (`app.js`, `audioManager.js`, `style.css`, `index.html`). 4-position 작탁 하나로
   산마/4마를 함께 그린다(좌석 번호 하드코딩 없이 내 좌석 기준 상대 위치). 개발 중 프런트 파일은 `Cache-Control: no-store`.
-- `src/cli/humanPlayDriver.ts`(요청별 입력 처리), `src/cli/humanPlayCli.ts`(진입점, 한 국만 진행)
+- `src/cli/humanPlayDriver.ts`(요청별 입력 처리), `src/cli/humanPlayCli.ts`(진입점, 기본은 한 국, `--game`이면 게임 전체)
 
 ## 4. 테스트 체계
 
@@ -318,7 +328,7 @@
 - 새로고침은 현재 결정/국 종료/게임 종료 화면을 복구한다(종료 화면은 마지막 장면의 view로 작탁을 다시 그림). 재생 중이던 AI 턴
   장면은 다시 재생하지 않는다(재생 중에 접속하면 그 순간의 장면을 주고, 접속 메시지에 최근 공개 행동 6개를 담아 목록을 채운다).
 - GUI에서 사람 자리는 시작 화면의 "내 자리"에서 고른다(기본 동가). 상대는 시작 화면에서 고르며 기본값은 산마: 제갈 미나·제갈 나희, 4마: +변아리.
-- CLI는 한 국만 진행한다.
+- CLI는 기본으로 한 국만 진행한다(`--game`으로 게임 전체).
 - 한 판 AI 관전은 한 게임을 끝까지 돌린 뒤에 보여 준다(보통 10~30초, 뷰어 재현 시간 별도). 한 판 관전에는 취소/진행률이 없다
   (여러 판 관전에는 있다). 판 도중에는 멈출 수 없다(worker 안에서 한 번에 계산한다).
 - 여러 판 관전의 결과는 서버 메모리에만 있다(서버를 다시 켜면 사라진다. 저장한 리플레이 파일은 남는다). worker 없는 서버(테스트)에서는
@@ -395,7 +405,7 @@
 - 단계: **A(완료)** 방 코드/대기실/좌석·AI 배정, 방장 + AI로 시작. **B(완료)** 여러 사람 대국: 사람마다 장면, 사용자별 메시지,
   남이 내놓은 패에 여러 사람의 론/울기를 동시에 묻고 기존 우선순위로 결정(`multiplayer` 옵션, §3 친선전 방). **C(완료)** 시간 제한 적용, 시간 초과/연결
   끊김 시 중립 AI 대행, 재접속하면 자리 복귀. **D(완료)** 같은 멤버로 다시 하기, 참가자별 리플레이(대국이 끝난 뒤에만 저장).
-- 이후 후보: 대국 중 채팅/이모트, 관전자(방에 들어와 지켜보기), 방 설정 추가(국 길이, 규칙 옵션), 시간 초과 기준(연속 2번) 조정.
+- 이후 후보: 대국 중 채팅/이모트, 방 설정 추가(국 길이, 규칙 옵션), 시간 초과 기준(연속 2번) 조정.
 
 **모바일 대응 (1.2.0 이후 완료).** 1.2.0 확정 뒤 휴대폰에서 손패가 잘려 둘 수 없었던 문제를 고쳤다: `index.html` viewport meta,
 body와 패 크기를 `dvh`(주소창 제외 높이) 기준으로, 폭 900px 이하나 높이 520px 이하에서는 조작 막대를 "메뉴" 하나로 접음(밖을 누르면
@@ -413,8 +423,8 @@ body와 패 크기를 `dvh`(주소창 제외 높이) 기준으로, 폭 900px 이
 
 - 대국 통계(화료/방총/리치 횟수).
 - 울은 손의 타패별 텐파이 미리보기, 유효패 표시의 확장(샹텐이 같지 않은 타패의 유효패, 타패 효율 점수). (현물/스지 위험도 표시와 타패별 유효패는 구현됨)
-- CustomAI 특수 기믹 시스템과 가져오기/내보내기. 리플레이 형식 개선(치 구성 패, 적5, AI 판단과 이벤트의 직접 연결 - §3 리플레이 뷰어).
-- 캐릭터 보이스와 화료 컷인, 캐릭터 초상화, CLI의 상대/CustomAI 선택과 여러 국 진행.
+- CustomAI 특수 기믹 시스템. 리플레이 형식 개선(치 구성 패, 적5, AI 판단과 이벤트의 직접 연결 - §3 리플레이 뷰어).
+- 캐릭터 보이스와 화료 컷인, 캐릭터 초상화, CLI의 상대/CustomAI/규칙 선택.
 - 추가 presentation 옵션과 UI polish, 추가 효과음, 새로운 마작 룰, 5000판급 장기 자체 대국 검증(Phase C 기준선 참고).
 - 캐릭터 성향을 실측으로 확인할 때는 전체 국 대비 비율 대신 조건부 지표(예: 리치 가능 상태가 된 횟수 중 실제 리치 비율)를 쓸 것 -
   울기가 많은 캐릭터는 멘젠 상태가 일찍 깨져 단순 리치 비율이 의향을 반영하지 않는다.

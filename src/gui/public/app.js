@@ -712,6 +712,14 @@ function renderMySeat(view, options) {
 
   const hand = zone.querySelector(".hand");
   hand.innerHTML = "";
+  // 관전: 손패 대신 뒷면 장수만 (서버가 손패를 지우고 hiddenCount를 준다)
+  if (view.hiddenCount) {
+    for (let i = 0; i < view.hiddenCount; i++) {
+      const back = backTileImg();
+      back.className = "tile-img";
+      hand.appendChild(back);
+    }
+  }
   const drawnId = options && options.drawnTileId;
   const sorted = [...view.concealedTiles].sort(compareTilesForDisplay);
   let currentSuit = null;
@@ -1770,6 +1778,15 @@ function renderHandEnd(handEndEvent, mySeat) {
   console.log("[debug] hand_end event:", handEndEvent);
   renderHandEndPanel(handEndEvent, mySeat, false);
   const panel = document.getElementById("hand-end-panel");
+  if (spectatorMode) {
+    // 관전자는 다음 국을 시작하지 못한다: 참가자가 시작하면 다음 장면이 온다
+    const wait = el("p", "section-label");
+    wait.textContent = "다음 국을 기다리는 중...";
+    panel.insertBefore(wait, panel.firstChild.nextSibling);
+    document.getElementById("hand-end-overlay").classList.remove("hidden");
+    clearActionBar();
+    return;
+  }
   const continueBtn = el("button", "continue-button");
   continueBtn.textContent = "다음 국 시작";
   continueBtn.addEventListener("click", () => {
@@ -1959,6 +1976,18 @@ function renderFinalResultStep() {
       err.textContent = error;
       panel.appendChild(err);
     }
+  }
+
+  if (msg.spectator) {
+    const actions = el("div", "final-actions");
+    const leave = el("button", "continue-button");
+    leave.textContent = "관전 나가기";
+    leave.addEventListener("click", () => {
+      AudioManager.play("ui.confirm");
+      fetch("/abandon", { method: "POST" });
+    });
+    actions.appendChild(leave);
+    panel.appendChild(actions);
   }
 
   // 이 대국을 리플레이로 저장했으면 뷰어로 바로 간다 (새 탭: 종료 화면과 "다시 하기" 버튼은 그대로 남는다)
@@ -2311,17 +2340,22 @@ function callKeyboard(e) {
 // --- 대국 그만두기: 서버가 canAbandon을 보낸 대국 중에만 보인다. 확인 후 로비(그 모드의 설정 화면)로 돌아가며,
 // 중단한 대국의 리플레이는 저장되지 않는다. ---
 
+/** 친선전 관전 중인지 (서버 메시지의 spectator). 관전자는 응답하지 않고, 손패 대신 뒷면 장수만 보며, "그만두기" 대신 "관전 나가기"가 나온다. */
+let spectatorMode = false;
+
 function updateAbandonButton(msg) {
   const btn = document.querySelector("#audio-controls .abandon-button");
   if (!btn) return;
-  btn.classList.toggle("hidden", !(msg.canAbandon && msg.type !== "game_end" && msg.type !== "setup"));
+  btn.textContent = msg.spectator ? "관전 나가기" : "대국 그만두기";
+  btn.title = msg.spectator ? "관전을 끝내고 로비로 돌아갑니다 (대국에는 영향이 없습니다)" : "진행 중인 대국을 그만두고 로비로 돌아갑니다 (리플레이는 저장하지 않음)";
+  btn.classList.toggle("hidden", !(msg.canAbandon && msg.type !== "setup" && (msg.spectator || msg.type !== "game_end")));
 }
 
 function mountAbandonButton() {
   const btn = document.querySelector("#audio-controls .abandon-button");
   if (!btn) return;
   btn.addEventListener("click", async () => {
-    if (!window.confirm("진행 중인 대국을 그만두고 로비로 돌아갈까요?\n이 대국은 리플레이로 저장되지 않습니다.")) return;
+    if (!spectatorMode && !window.confirm("진행 중인 대국을 그만두고 로비로 돌아갈까요?\n이 대국은 리플레이로 저장되지 않습니다.")) return;
     btn.disabled = true;
     try {
       const res = await fetch("/abandon", { method: "POST" });
@@ -3394,7 +3428,11 @@ function renderFriendEntry() {
   const doJoin = () => postFriend("/friend/join", { code: setupState.friendCode }).then((ok) => ok && (setupState.friendCode = ""));
   join.addEventListener("click", doJoin);
   codeInput.addEventListener("keydown", (ev) => ev.key === "Enter" && doJoin());
-  codeRow.append(codeInput, join);
+  const spectate = el("button", "friend-button friend-spectate", { type: "button" });
+  spectate.textContent = "관전";
+  spectate.title = "코드의 방에서 진행 중인 대국을 지켜봅니다 (자리에 앉지 않고, 손패는 보이지 않습니다)";
+  spectate.addEventListener("click", () => postFriend("/friend/spectate", { code: setupState.friendCode }));
+  codeRow.append(codeInput, join, spectate);
   codeLabel.append(codeText, codeRow);
 
   return setupSection("친선전", lead, modeLabel, timeLabel, create, codeLabel);
@@ -3688,6 +3726,8 @@ function handleMessageBody(msg) {
     return;
   }
   hideSetup();
+  spectatorMode = !!msg.spectator;
+  document.body.classList.toggle("is-spectating", spectatorMode);
   pendingRequest = null; // decision 메시지면 아래에서 다시 채운다
   discardCtx = null;
   selectedTileId = null;
@@ -3702,6 +3742,21 @@ function handleMessageBody(msg) {
   if (msg.type === "hand_end" || msg.type === "game_end") {
     clearRecentFeed();
     resetAutoPlayAtHandBoundary(); // 자동 옵션은 그 국에서만 유효하다
+  }
+  if (msg.type === "spectate") {
+    // 관전: 지금 누군가의 선택을 기다리는 중 (요청 자체는 오지 않는다)
+    document.getElementById("hand-end-overlay").classList.add("hidden");
+    lastKnownMySeat = msg.view.seat;
+    renderTable(msg.view, msg.waitingFor[0] ?? null);
+    renderMySeat(msg.view, {});
+    clearActionBar();
+    const label = el("span", "section-label");
+    const names = (msg.waitingFor || []).map((seat) => displayNameForSeat(seat, -1));
+    label.textContent = names.length > 0 ? `관전 중 - ${names.join(", ")}의 선택을 기다리는 중...` : "관전 중...";
+    document.getElementById("action-bar").appendChild(label);
+    placeActionBar();
+    awaitingServer = true; // 관전자는 응답하지 않는다
+    return;
   }
   if (msg.type === "watch") {
     // AI 턴 진행 장면: 판을 그리되 행동창은 비운다 (아직 내가 할 일이 없다)
