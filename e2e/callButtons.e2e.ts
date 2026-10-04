@@ -90,4 +90,14 @@ describe("론 선택 버튼", () => {
     // 이긴 나는 순위가 1위, 방총한 쪽은 내려간다
     expect(await rows.first().locator(".score-rank").textContent()).toContain("1위");
   }, 60_000);
+
+  it("결과 화면의 역 이름을 누르면 도감에서 그 역 설명이 펼쳐진다", async () => {
+    await page.keyboard.press("Enter");
+    await page.locator("#hand-end-overlay:not(.hidden) .yaku-list").waitFor({ timeout: 15_000 });
+    await page.locator("#hand-end-overlay .yaku-link", { hasText: "탕야오" }).click();
+    await page.locator('#guide-overlay:not(.hidden) .guide-card.is-open[data-yaku="Tanyao"]').waitFor();
+    expect(await page.locator('.guide-card[data-yaku="Tanyao"] .guide-name').textContent()).toBe("탕야오");
+    await page.keyboard.press("Escape");
+    await page.locator("#guide-overlay.hidden").waitFor({ state: "attached" });
+  }, 60_000);
 });

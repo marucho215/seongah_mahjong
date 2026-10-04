@@ -80,7 +80,8 @@ describe("현재 손 상태 표시 (view.handStatus, 엔진 계산)", () => {
     const seen = collectUntilTsumo(fixture(DEFAULT_SANMA_RULES, [J0, W, J0], SANMA_DRAWS), makeRespond(1));
     const afterRiichi = seen.filter((r) => r.seat === 1 && r.view.riichi);
     expect(afterRiichi.length).toBeGreaterThan(0);
-    for (const r of afterRiichi) expect(r.view.handStatus.tenpaiWaits).toEqual(r.view.waits);
+    // 대기 종류와 장수가 같다 (handStatus 쪽에는 표시 전용 역 정보가 더 붙는다)
+    for (const r of afterRiichi) expect(r.view.handStatus.tenpaiWaits.map((w) => ({ kind: w.kind, unseenCount: w.unseenCount }))).toEqual(r.view.waits);
   });
 
   it("텐파이가 아니면 대기가 비어 있고, 샹텐은 자기 손패만으로 계산한 엔진 minShanten 값이다", () => {

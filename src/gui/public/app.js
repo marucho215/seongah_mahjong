@@ -910,6 +910,7 @@ function showWaits(zone, label, waits, furiten, status) {
     }
     box.appendChild(item);
   }
+  appendWaitHints(box, waits);
   if (furiten && furiten.active) {
     const causes = [];
     if (furiten.selfDiscard) causes.push("자기 버림패");
@@ -918,6 +919,34 @@ function showWaits(zone, label, waits, furiten, status) {
     const badge = el("span", "furiten-badge");
     badge.textContent = "후리텐" + (causes.length ? " (" + causes.join(", ") + ")" : "");
     box.appendChild(badge);
+  }
+}
+
+/** 예상 역 표시(보조 메뉴 "예상 역 표시"): 같은 역 구성의 대기끼리 묶어 "대기 3통·6통: 탕야오 + 핑후 · 2판"처럼 한 줄로 보여 준다.
+ *  엔진이 대기마다 계산한 hint(표시 전용)만 쓴다. 역 이름을 누르면 도감이 열린다. */
+function appendWaitHints(box, waits) {
+  if (!assist.yakuHint || !waits) return;
+  const groups = new Map();
+  for (const w of waits) {
+    if (!w.hint) continue;
+    const key = JSON.stringify([w.hint.yaku, w.hint.tsumoOnly ?? false]);
+    if (!groups.has(key)) groups.set(key, { hint: w.hint, kinds: [] });
+    groups.get(key).kinds.push(w.kind);
+  }
+  for (const { hint, kinds } of groups.values()) {
+    const line = el("div", "wait-hint-line");
+    const who = el("span", "wait-hint-kinds");
+    who.textContent = kinds.map((k) => koreanTileLabel(k)).join("·") + ":";
+    line.appendChild(who);
+    hint.yaku.forEach((h, i) => {
+      if (i > 0) line.appendChild(document.createTextNode(" + "));
+      const id = h.name;
+      line.appendChild(guideLink(`${translateYaku(h.name)}${h.han > 0 && hint.yakuman === 0 ? ` ${h.han}` : ""}`, id));
+    });
+    const total = el("span", "wait-hint-total");
+    total.textContent = hint.yakuman > 0 ? ` · ${hint.yakuman === 1 ? "역만" : `역만 x${hint.yakuman}`}` : ` · ${hint.han}판${hint.tsumoOnly ? " (쯔모만)" : ""}`;
+    line.appendChild(total);
+    box.appendChild(line);
   }
 }
 
@@ -1344,12 +1373,22 @@ function methodLabel(method) {
   return method === "tsumo" ? "쯔모" : "론";
 }
 
+/** 결과 화면의 역 이름: 누르면 도감에서 그 역 설명을 연다 (guide.js). */
+function guideLink(name, yakuId) {
+  const link = el("button", "yaku-link", { type: "button", title: "역 설명 보기" });
+  link.textContent = name;
+  link.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (typeof openGuide === "function") openGuide({ yaku: yakuId });
+  });
+  return link;
+}
+
 function renderYakuList(yaku) {
   const list = el("ul", "yaku-list");
   for (const hit of yaku) {
     const li = el("li");
-    const name = el("span");
-    name.textContent = translateYaku(hit.name);
+    const name = guideLink(translateYaku(hit.name), hit.name);
     const han = el("span");
     han.textContent = `${hit.han}판`;
     li.appendChild(name);
@@ -1486,14 +1525,13 @@ function renderWinYakuList(win) {
   if (!win.doraBreakdown) return renderYakuList(win.yaku);
   const rows = [];
   for (const hit of win.yaku) {
-    if (hit.name === "Dora") rows.push(...doraLines(win.doraBreakdown).map((d) => ({ label: d.name, han: d.han })));
-    else rows.push({ label: translateYaku(hit.name), han: hit.han });
+    if (hit.name === "Dora") rows.push(...doraLines(win.doraBreakdown).map((d) => ({ label: d.name, han: d.han, id: "Dora" })));
+    else rows.push({ label: translateYaku(hit.name), han: hit.han, id: hit.name });
   }
   const list = el("ul", "yaku-list");
   for (const row of rows) {
     const li = el("li");
-    const name = el("span");
-    name.textContent = row.label;
+    const name = guideLink(row.label, row.id);
     const han = el("span");
     han.textContent = `${row.han}판`;
     li.append(name, han);
@@ -2087,7 +2125,7 @@ mountAutoPlayControls();
 // 리플레이에는 아무 영향이 없다. 설정은 이 브라우저에 저장해 다음 대국에도 유지한다 (기본: 샹텐 켬, 위험도 끔). ---
 
 const ASSIST_STORAGE_KEY = "seongah.playAssist";
-const ASSIST_DEFAULTS = { shanten: true, risk: false, ukeire: false };
+const ASSIST_DEFAULTS = { shanten: true, risk: false, ukeire: false, yakuHint: false };
 // 조작 옵션 (표시/응답 내용과 무관한 입력 방식): 두 번 눌러 버리기는 마우스가 없는 터치 화면에서 기본으로 켠다
 const OPTION_STORAGE_KEY = "seongah.playOptions";
 const OPTION_DEFAULTS = {
@@ -2179,6 +2217,10 @@ function keyboardEnabled(e) {
 }
 
 function logKeyboard(e) {
+  if (e.key === "g" || e.key === "G") {
+    if (typeof openGuide === "function") openGuide({ tab: "yaku" });
+    return true;
+  }
   if (e.key !== "h" && e.key !== "H") return false;
   setLogPanelOpen(!logPanelOpen);
   return true;
@@ -2643,6 +2685,7 @@ function renderSetup() {
   }
   if (isHub) {
     side.appendChild(setupSection("대국 방식", ...modeChildren));
+    side.appendChild(renderLearnEntry());
     const watchLead = el("p", "setup-lead");
     watchLead.textContent = "사람 없이 AI끼리 한 게임을 두고, 결과를 리플레이로 봅니다.";
     side.appendChild(setupSection("AI끼리 관전", watchLead, renderModeRows(true, "watch")));
@@ -2973,6 +3016,25 @@ function renderHumanSeatPicker() {
   const hint = el("p", "setup-lead");
   hint.textContent = choice === "random" ? "자리는 시드로 정해집니다 (같은 시드면 같은 자리)." : choice === 0 ? "첫 친으로 시작합니다." : "친이 아닌 자리에서 시작합니다. 먼저 상대의 차례가 진행됩니다.";
   return setupSection("내 자리", group, hint);
+}
+
+/** 로비 허브의 "마작 배우기": 처음이어도 대국 전에 기초 규칙과 역을 볼 수 있다 (guide.js). */
+function renderLearnEntry() {
+  const lead = el("p", "setup-lead");
+  lead.textContent = "마작이 처음이라면 먼저 읽어 보세요. 대국 중에도 메뉴의 \"도감\" 버튼(또는 G 키)으로 언제든 열 수 있습니다.";
+  const row = el("div", "learn-actions");
+  for (const [label, tab] of [["기초 규칙", "basics"], ["역 도감", "yaku"]]) {
+    const btn = el("button", "setup-segment", { type: "button" });
+    const main = el("span", "segment-main");
+    main.textContent = label;
+    btn.appendChild(main);
+    btn.addEventListener("click", () => {
+      AudioManager.play("ui.confirm");
+      openGuide({ tab });
+    });
+    row.appendChild(btn);
+  }
+  return setupSection("마작 배우기", lead, row);
 }
 
 async function startGameFromSetup() {

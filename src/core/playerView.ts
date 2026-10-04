@@ -34,9 +34,21 @@ export interface WaitInfo {
  *  해저/하저/영상/창깡처럼 그 순간에만 붙는 역은 셈하지 않는다. */
 export type WaitYaku = "none" | "tsumo_only";
 
-/** HandStatus의 대기패 하나: WaitInfo + 역 유무 */
+/** 대기패로 화료할 때 예상되는 역 (표시 전용, "예상 역 표시"). 그 순간 조건으로 엔진 점수 계산을 돌린 결과이며 일발·해저·영상·창깡처럼 그 순간에만
+ *  붙는 역은 셈하지 않는다. 도라(표시패/적5)는 `Dora`로 합쳐져 들어 있다. 론으로 역이 없고 쯔모로만 되면 `tsumoOnly`. */
+export interface WaitYakuHint {
+  yaku: { name: string; han: number }[];
+  /** yaku의 판수 합 (역만이면 13의 배수) */
+  han: number;
+  /** 역만 배수 (0 = 역만 아님) */
+  yakuman: number;
+  tsumoOnly?: true;
+}
+
+/** HandStatus의 대기패 하나: WaitInfo + 역 유무 + 예상 역 */
 export interface TenpaiWaitInfo extends WaitInfo {
   yaku?: WaitYaku;
+  hint?: WaitYakuHint;
 }
 
 /**
@@ -185,6 +197,8 @@ export interface BuildPlayerViewOptions {
   tenpaiWaits?: readonly TileKind[];
   /** tenpaiWaits 중 역이 없는 대기 (엔진 계산, 표시 전용). 생략하면 모두 역이 있는 것으로 둔다. */
   tenpaiWaitYaku?: ReadonlyMap<TileKind, WaitYaku>;
+  /** tenpaiWaits 중 화료할 수 있는 대기의 예상 역 (엔진 계산, 표시 전용). */
+  tenpaiWaitHints?: ReadonlyMap<TileKind, WaitYakuHint>;
   hands: readonly Hand[];
   doraIndicators: readonly Tile[];
   /** doraIndicators마다 가리키는 도라 종류 (PlayerView.doraKinds). 생략하면 빈 배열. */
@@ -199,7 +213,7 @@ export interface BuildPlayerViewOptions {
 }
 
 export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
-  const { seat, hands, doraIndicators, doraKinds, scores, furiten, waits, tenpaiWaits, tenpaiWaitYaku, ...rest } = options;
+  const { seat, hands, doraIndicators, doraKinds, scores, furiten, waits, tenpaiWaits, tenpaiWaitYaku, tenpaiWaitHints, ...rest } = options;
   const own = hands[seat]!;
   const opponents: PlayerViewOpponent[] = hands
     .map((hand, i) => ({ hand, seat: i }))
@@ -236,7 +250,8 @@ export function buildPlayerView(options: BuildPlayerViewOptions): PlayerView {
     shanten: minShanten(tilesToCounts(own.concealed), own.melds.length),
     tenpaiWaits: withUnseenCounts(base, tenpaiWaits ?? []).map((w) => {
       const yaku = tenpaiWaitYaku?.get(w.kind);
-      return yaku ? { ...w, yaku } : w;
+      const hint = tenpaiWaitHints?.get(w.kind);
+      return { ...w, ...(yaku ? { yaku } : {}), ...(hint ? { hint } : {}) };
     }),
   };
   return { ...base, waits: withUnseenCounts(base, waits ?? []), handStatus, discardRisk: discardRiskFor(seat, hands, base) };

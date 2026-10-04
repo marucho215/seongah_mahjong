@@ -126,4 +126,20 @@ describe("보조 메뉴", () => {
     const mine = game.log.find((e) => e.type === "discard" && e.player === 0);
     expect(mine).toMatchObject({ tile: "z6", tsumogiri: true });
   }, 120_000);
+
+  it("예상 역 표시: 켜면 텐파이 대기마다 예상 역과 판수가 나온다 (끄면 없다)", async () => {
+    await hand().locator("img.clickable").first().waitFor();
+    // 이 손패(p5/p8 대기)는 평화 + 탕야오: 아직 텐파이 직전이라 z6를 버려야 텐파이다 (대기 줄은 버린 뒤에 보인다)
+    await page.keyboard.press("t");
+    await page.locator("#zone-bottom .waits .wait-item").first().waitFor({ timeout: 15_000 });
+    expect(await page.locator("#zone-bottom .wait-hint-line").count()).toBe(0);
+    await openMenu();
+    await page.locator("#assist-panel input[data-assist=yakuHint]").check();
+    const line = page.locator("#zone-bottom .wait-hint-line");
+    await line.first().waitFor();
+    const text = (await line.first().textContent())!;
+    expect(text).toContain("탕야오");
+    expect(text).toContain("평화");
+    expect(text).toContain("2판");
+  }, 60_000);
 });

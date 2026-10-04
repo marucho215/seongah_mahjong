@@ -41,6 +41,7 @@
     <button type="button" class="auto-toggle" data-auto="tsumogiri" aria-pressed="false" title="쯔모 뒤 타패 차례에 뽑은 패를 자동으로 버립니다 (리치는 선언하지 않음)">자동 쯔모기리</button>
     <button type="button" class="auto-toggle" data-auto="passCalls" aria-pressed="false" title="치·퐁·대명깡 제안을 자동으로 넘깁니다 (암깡·가깡·북 빼기는 제외)">울기 패스</button>
     <button type="button" class="auto-toggle" data-auto="autoWin" aria-pressed="false" title="론·쯔모가 가능하면 자동으로 선언합니다">자동 화료</button>
+    <button type="button" class="guide-toggle" title="마작 배우기: 기초 규칙과 역 도감">도감</button>
     <button type="button" class="log-toggle" aria-pressed="false" title="패보: 모두의 버림패 전체(울려 간 패, 쯔모기리, 리치 선언패)와 울기 내역 (H)">패보</button>
     <!-- 플레이 보조(표시 전용): 켜면 게임 진행에 도움이 되는 정보를 더 보여 준다. 메뉴 패널에서 항목별로 켜고 끈다 (app.js) -->
     <button type="button" class="assist-menu-toggle" aria-expanded="false" aria-controls="assist-panel" title="플레이 보조 표시를 켜고 끕니다 (표시 전용)">보조 ▾</button>
@@ -49,9 +50,10 @@
       <label class="assist-row"><input type="checkbox" data-assist="shanten" /><span><b>샹텐 표시</b><small>내 손의 N샹텐 / 텐파이 문구 (대기패와 후리텐은 끄더라도 보입니다)</small></span></label>
       <label class="assist-row"><input type="checkbox" data-assist="risk" /><span><b>위험도 표시</b><small>리치한 상대가 있을 때 손패마다 낮음/주의/높음. 근거(현물·스지)는 패를 고르거나 올려 보면 나옵니다</small></span></label>
       <label class="assist-row"><input type="checkbox" data-assist="ukeire" /><span><b>유효패 표시</b><small>타패마다 버린 뒤의 샹텐과 진행에 도움이 되는 패 장수</small></span></label>
+      <label class="assist-row"><input type="checkbox" data-assist="yakuHint" /><span><b>예상 역 표시</b><small>텐파이일 때 대기패마다 어떤 역으로 몇 판이 되는지 (처음이라면 켜 보세요. 역 이름을 누르면 설명이 열립니다)</small></span></label>
       <p class="assist-note assist-note-sub">입력 방식</p>
       <label class="assist-row"><input type="checkbox" data-option="confirmDiscard" /><span><b>두 번 눌러 버리기</b><small>패를 한 번 누르면 고르기만 하고, 한 번 더 누르거나 "버리기"를 눌러야 버립니다 (터치 화면은 기본으로 켜짐)</small></span></label>
-      <label class="assist-row"><input type="checkbox" data-option="keyboard" /><span><b>키보드 단축키</b><small>←/→ 패 고르기 · Enter 버리기/하기 · Esc 취소/넘기기 · T 쯔모기리 · R 리치</small></span></label>
+      <label class="assist-row"><input type="checkbox" data-option="keyboard" /><span><b>키보드 단축키</b><small>←/→ 패 고르기 · Enter 버리기/하기 · Esc 취소/넘기기 · T 쯔모기리 · R 리치 · H 패보 · G 도감</small></span></label>
     </div>
     <select class="speed-select" aria-label="AI 진행 속도">
       <option value="slow">느림</option>
@@ -77,7 +79,10 @@
   </div>
 
   <script src="/audioManager.js"></script>
+  <script src="/yakuGuide.js"></script>
   <script src="/app.js"></script>
+  <!-- 마작 배우기(기초 규칙, 역 도감): app.js의 도우미를 쓰므로 그 뒤에 -->
+  <script src="/guide.js"></script>
   <!-- 리플레이 모드(/?replay=): 같은 작탁에서 리플레이를 본다 -->
   <script src="/replayMode.js"></script>
 </body>

@@ -1868,3 +1868,44 @@ div.setup-seat { cursor: default; }
   color: #1b1b1b;
   cursor: pointer;
 }
+
+/* --- 마작 배우기 (기초 규칙, 역 도감) --- */
+.learn-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.yaku-link { font: inherit; color: inherit; background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline dotted rgba(255, 255, 255, 0.5); text-underline-offset: 3px; text-align: left; }
+.yaku-link:hover { color: #ffd54a; }
+.wait-hint-line { margin-left: 8px; font-size: 12px; opacity: 0.95; display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 2px; }
+.wait-hint-kinds { opacity: 0.75; margin-right: 4px; }
+.wait-hint-total { font-weight: 700; }
+.waits { flex-wrap: wrap; }
+.guide-overlay { z-index: 30; }
+.guide-panel { max-width: 720px; width: 94%; max-height: 90vh; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.guide-head { display: flex; align-items: center; gap: 14px; padding: 14px 18px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
+.guide-head h2 { margin: 0; font-size: 18px; }
+.guide-tabs { display: flex; gap: 6px; margin-right: auto; }
+.guide-tab, .guide-chip { font: inherit; font-size: 13px; color: inherit; padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.25); background: rgba(0, 0, 0, 0.2); cursor: pointer; }
+.guide-tab.is-on, .guide-chip.is-on { background: #ffd54a; color: #1b1b1b; border-color: #ffd54a; font-weight: 700; }
+.guide-close { font: inherit; font-size: 22px; line-height: 1; color: inherit; background: none; border: none; cursor: pointer; opacity: 0.8; }
+.guide-body { overflow-y: auto; padding: 12px 18px 18px; }
+.guide-intro { margin: 0 0 12px; font-size: 13px; opacity: 0.85; }
+.guide-section { margin-bottom: 18px; }
+.guide-section h3 { margin: 0 0 6px; font-size: 15px; color: #ffe08a; }
+.guide-section p { margin: 4px 0; font-size: 14px; line-height: 1.55; }
+.guide-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.guide-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-right: auto; }
+.guide-search { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.25); background: rgba(0, 0, 0, 0.25); color: inherit; min-width: 130px; }
+.guide-list { display: flex; flex-direction: column; gap: 6px; }
+.guide-card { border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 8px; background: rgba(0, 0, 0, 0.18); padding: 8px 12px; }
+.guide-card.is-open { border-color: #ffd54a; background: rgba(0, 0, 0, 0.28); }
+.guide-card-head { display: flex; align-items: baseline; gap: 10px; width: 100%; font: inherit; color: inherit; background: none; border: none; padding: 0; cursor: pointer; text-align: left; }
+.guide-name { font-size: 15px; font-weight: 700; }
+.guide-han { font-size: 12px; padding: 0 7px; border-radius: 4px; background: #2e6b3d; }
+.guide-han.is-yakuman { background: linear-gradient(90deg, #c62828, #f9a825); color: #fff; }
+.guide-cond { font-size: 12px; opacity: 0.7; margin-left: auto; }
+.guide-summary { margin: 4px 0 0; font-size: 13px; line-height: 1.5; opacity: 0.92; }
+.guide-tips { margin: 6px 0 0; font-size: 13px; color: #ffe08a; line-height: 1.5; }
+.guide-example { margin-top: 8px; padding: 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.25); }
+.guide-example-tiles { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.guide-group { display: inline-flex; gap: 1px; }
+.guide-example-note { margin-top: 4px; font-size: 12px; opacity: 0.7; }
+.guide-empty { opacity: 0.7; font-size: 13px; }
+body.is-setup .log-panel { display: none !important; }

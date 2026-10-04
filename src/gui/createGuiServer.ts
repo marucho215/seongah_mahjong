@@ -66,7 +66,7 @@ const MIME_TYPES: Record<string, string> = {
 
 /** The frontend files that change constantly during development are never cached, so a normal
  *  reload always shows the current UI. Tile SVGs and other static assets are left cacheable. */
-const NO_STORE_FILES = new Set(["/index.html", "/app.js", "/audioManager.js", "/style.css", "/replayMode.js", "/join.html", "/join.js"]);
+const NO_STORE_FILES = new Set(["/index.html", "/app.js", "/audioManager.js", "/yakuGuide.js", "/guide.js", "/style.css", "/replayMode.js", "/join.html", "/join.js"]);
 
 /** 입장 게이트가 켜져 있을 때 입장 전에도 열리는 경로 (입장 화면과 그 스타일). */
 const JOIN_PUBLIC_PATHS = new Set(["/join.html", "/join.js", "/style.css"]);

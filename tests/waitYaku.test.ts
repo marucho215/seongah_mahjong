@@ -73,3 +73,27 @@ describe("대기패별 역 유무", () => {
     expect(waitsOf(next!)).toEqual([{ kind: "p5", yaku: undefined }, { kind: "p8", yaku: undefined }]);
   });
 });
+
+describe("대기패별 예상 역 (HandStatus.tenpaiWaits[].hint, 표시 전용)", () => {
+  it("멘젠 탕야오·핑후 텐파이는 대기마다 예상 역과 판수를 담는다", () => {
+    const r = firstRequestOfSeat2([J0, J0, W], []);
+    for (const w of r.view.handStatus.tenpaiWaits) {
+      expect(w.hint!.yaku.map((h) => h.name).sort()).toEqual(["Pinfu", "Tanyao"]);
+      expect(w.hint!.han).toBe(2);
+      expect(w.hint!.yakuman).toBe(0);
+      expect(w.hint!.tsumoOnly).toBeUndefined();
+    }
+  });
+
+  it("론으로는 역이 없고 쯔모로만 되면 tsumoOnly로 멘젠쯔모만 담고, 울어서 아예 역이 없으면 힌트가 없다", () => {
+    const X: TileKind[] = ["s2", "s3", "s4", "s5", "s6", "s7", "m9", "m9", "m9", "z1", "z1", "p6", "p7"];
+    const only = firstRequestOfSeat2([J0, J0, X], ["p5", "z1"], undefined, (q) => q.type === "call_pon");
+    for (const w of only.view.handStatus.tenpaiWaits) {
+      expect(w.hint).toMatchObject({ tsumoOnly: true, han: 1 });
+      expect(w.hint!.yaku.map((h) => h.name)).toEqual(["Menzen Tsumo"]);
+    }
+    const Y: TileKind[] = ["p6", "p7", "s2", "s3", "s4", "s5", "s6", "s7", "m9", "m9"];
+    const none = firstRequestOfSeat2([J0, J0, Y], [], [undefined, undefined, "s9"]);
+    for (const w of none.view.handStatus.tenpaiWaits) expect(w.hint).toBeUndefined();
+  });
+});

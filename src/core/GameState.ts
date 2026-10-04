@@ -11,7 +11,7 @@ import { canRiichiAnkan } from "../actions/riichiAnkan.js";
 import { canDeclareRiichi, riichiDiscardCandidates } from "../actions/riichi.js";
 import { claimResponseProblem } from "./decisions.js";
 import type { CallDecisionRequest, CallDecisionResponse, ChiDecisionRequest, ChiDecisionResponse, ChiOption, ClaimDecisionRequest, SeatDecisionRequest, SeatDecisionResponse, DecisionRequest, DecisionResponse, DiscardDecisionRequest, EngineRequest, EngineResponse, MultiDecisionResponse, DiscardDecisionResponse, NineTerminalsDecisionRequest, NineTerminalsDecisionResponse, RonDecisionContext, RonDecisionRequest, RonDecisionResponse, TsumoDecisionRequest, TsumoDecisionResponse, WinPreview } from "./decisions.js";
-import { buildPlayerView, withUnseenCounts, type PlayerView, type WaitInfo, type WaitYaku } from "./playerView.js";
+import { buildPlayerView, withUnseenCounts, type PlayerView, type WaitInfo, type WaitYaku, type WaitYakuHint } from "./playerView.js";
 import { isKokushiAnkanRon } from "../actions/kokushiAnkan.js";
 import {
   chooseDiscard,
@@ -466,7 +466,7 @@ export class GameState {
     const cachedWinningTiles: TileKind[][] = seats.map(() => []);
     /** 대기패별 역 유무 (표시 전용, waitYakuOf). 대기를 다시 계산할 때 그 순간의 손(3n+1장)을 떠 두고, 필요할 때만 계산한다. */
     const waitYakuHand: { concealed: Tile[]; melds: ReturnType<typeof meldsToGroups> }[] = seats.map(() => ({ concealed: [], melds: [] }));
-    const waitYakuCache: (Map<TileKind, WaitYaku> | null)[] = seats.map(() => null);
+    const waitYakuCache: ({ states: Map<TileKind, WaitYaku>; hints: Map<TileKind, WaitYakuHint> } | null)[] = seats.map(() => null);
     const refreshWinningTiles = (p: number) => {
       cachedWinningTiles[p] = computeWinningTiles(tilesToCounts(hands[p]!.concealed), hands[p]!.melds.length, this.rules);
       waitYakuHand[p] = { concealed: [...hands[p]!.concealed], melds: meldsToGroups(hands[p]!.melds) };
@@ -537,32 +537,39 @@ export class GameState {
     /** 표시 전용: 지금 대기패마다 그 패로 화료할 때 역이 있는지 ("역 없음" 표시). 해저/하저/영상/창깡처럼 그 순간에만 붙는 역은
      *  빼고 평소 조건(론은 다음 좌석에게서, 쯔모는 패산에서)으로 엔진의 점수 계산을 그대로 돌린다. 게임 상태/RNG는 바꾸지 않는다.
      *  역이 있는 대기는 맵에 넣지 않는다. */
-    const waitYakuOf = (seat: number): Map<TileKind, WaitYaku> => {
+    const waitYakuOf = (seat: number): { states: Map<TileKind, WaitYaku>; hints: Map<TileKind, WaitYakuHint> } => {
       const cached = waitYakuCache[seat];
       if (cached) return cached;
-      const result = new Map<TileKind, WaitYaku>();
+      const states = new Map<TileKind, WaitYaku>();
+      const hints = new Map<TileKind, WaitYakuHint>();
       const { concealed, melds } = waitYakuHand[seat]!;
-      const hasYaku = (kind: TileKind, isTsumo: boolean): boolean => {
+      const evaluateAs = (kind: TileKind, isTsumo: boolean) => {
         const parsed = parseKind(kind);
         const winTile: Tile = { id: -1, kind, suit: parsed.suit, rank: parsed.rank, isRed: false };
-        return (
-          evaluateWin({
-            concealedTiles: [...concealed, winTile],
-            melds,
-            winTile,
-            context: scoringContextFor(seat, isTsumo, false, false, false, false, false, false),
-            rules: this.rules,
-            winner: seat,
-            dealer: this.dealerSeat,
-            ronFrom: isTsumo ? undefined : nextSeat(seat, this.rules.playerCount),
-            honba: this.honba,
-          }) !== null
-        );
+        return evaluateWin({
+          concealedTiles: [...concealed, winTile],
+          melds,
+          winTile,
+          context: scoringContextFor(seat, isTsumo, false, false, false, false, false, false),
+          rules: this.rules,
+          winner: seat,
+          dealer: this.dealerSeat,
+          ronFrom: isTsumo ? undefined : nextSeat(seat, this.rules.playerCount),
+          honba: this.honba,
+        });
       };
       for (const kind of cachedWinningTiles[seat]!) {
-        if (hasYaku(kind, false)) continue;
-        result.set(kind, hasYaku(kind, true) ? "tsumo_only" : "none");
+        const ron = evaluateAs(kind, false);
+        const tsumo = ron ? null : evaluateAs(kind, true);
+        if (!ron) states.set(kind, tsumo ? "tsumo_only" : "none");
+        const win = ron ?? tsumo;
+        if (win) {
+          // 일발은 그 순간의 조건이라 예상 역에서 뺀다 (표시 전용)
+          const yaku = win.yaku.filter((h) => h.name !== "Ippatsu").map((h) => ({ name: h.name, han: h.han }));
+          hints.set(kind, { yaku, han: yaku.reduce((n, h) => n + h.han, 0), yakuman: win.yakumanUnits, ...(ron ? {} : { tsumoOnly: true as const }) });
+        }
       }
+      const result = { states, hints };
       waitYakuCache[seat] = result;
       return result;
     };
@@ -1027,7 +1034,8 @@ export class GameState {
         ),
         waits: hands[seat]!.riichi ? cachedWinningTiles[seat]! : [],
         tenpaiWaits: cachedWinningTiles[seat]!,
-        tenpaiWaitYaku: waitYakuOf(seat),
+        tenpaiWaitYaku: waitYakuOf(seat).states,
+        tenpaiWaitHints: waitYakuOf(seat).hints,
         hands,
         doraIndicators: wall.doraIndicators(),
         doraKinds: wall.doraIndicators().map((t) => nextDoraKind(t.kind, this.rules)),
