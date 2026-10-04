@@ -32,6 +32,8 @@ import {
   type GuiGameConfig,
   type GuiGameMode,
   type HumanSeatChoice,
+  type RuleOptions,
+  ruleOptionLabels,
 } from "./gameSetup.js";
 import { CustomAiStore } from "../customai/customAiStore.js";
 import { DEFAULT_SANMA_RULES, MAJSOUL_YONMA_RULES } from "../rules/RuleConfig.js";
@@ -393,7 +395,9 @@ function createGameHost(
   let actionLogIndex = log.length;
 
   function currentStateMessage(viewer: number | null, cueFields: { cues: AudioCue[]; cueBase?: number; recent?: PublicAction[] }): string {
-    const extra = { gameId, ...cueFields };
+    // 기본과 다른 규칙이 있으면 화면에 작게 보여 주도록 이름을 함께 보낸다 (기본 규칙이면 필드가 없다)
+    const ruleLabels = ruleOptionLabels(startedConfig?.rules);
+    const extra = { gameId, ...(ruleLabels.length > 0 ? { ruleLabels } : {}), ...cueFields };
     const key = keyOf(viewer);
     const phase = snapshot.phase;
     const canAbandon = canAbandonFor(viewer);
@@ -711,6 +715,8 @@ type LobbySetup = {
   saveReplays: boolean;
   /** 내 자리 (0 = 동가/친, "random" = 시드로 정해짐) */
   humanSeat: HumanSeatChoice;
+  /** 마지막으로 고른 규칙 옵션 (기본과 다른 항목만) */
+  rules: RuleOptions;
 };
 
 /** 로비 설정 화면의 용도: 사람이 앉는 대국(play) 또는 AI끼리 관전(watch). */
@@ -871,6 +877,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
           seed: defaults.seed ?? "",
           saveReplays: defaults.saveReplays ?? false,
           humanSeat: 0,
+          rules: {},
         },
         frameDelayMs: initialFrameDelayMs,
         table: null,
@@ -1054,11 +1061,12 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       seed: config.seed ?? "",
       saveReplays: config.saveReplays,
       humanSeat: config.humanSeat ?? 0,
+      rules: { ...(config.rules ?? {}) },
     };
     room.lobbyPurpose = "play"; // 끝난 뒤 "설정 바꾸기"는 사람 대국 설정 화면으로 돌아간다
     // 내 자리: 고른 자리(랜덤이면 시드로 정한 자리). 같은 시드로 다시 하면 같은 자리다.
     const humanSeat = resolveHumanSeat(config.humanSeat, seed, config.mode);
-    const spec: GameSpec = { mode: config.mode, seed, opponents: config.opponents.map((id) => opponentSpecOf(room, id)), ...(humanSeat !== 0 ? { humanSeat } : {}) };
+    const spec: GameSpec = { mode: config.mode, seed, opponents: config.opponents.map((id) => opponentSpecOf(room, id)), ...(humanSeat !== 0 ? { humanSeat } : {}), ...(config.rules ? { rules: config.rules } : {}) };
     const options: GuiServerOptions = {
       ...(config.saveReplays
         ? {

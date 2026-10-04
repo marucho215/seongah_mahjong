@@ -456,6 +456,12 @@ function renderCenter(view, n, turnSeat) {
     chips.appendChild(chip);
   }
   main.appendChild(chips);
+  if (currentRuleLabels.length > 0) {
+    const rules = el("div", "rule-chips");
+    rules.title = "기본과 다른 규칙";
+    rules.textContent = currentRuleLabels.join(" · ");
+    main.appendChild(rules);
+  }
   // 도라: 엔진이 계산한 실제 도라 종류(view.doraKinds)를 크게, 그 옆에 공개된 표시패를 작게. 적5와 (산마) 북도 도라지만 여기에는 없다.
   const dora = el("div", "dora-row");
   const label = el("span", "section-label");
@@ -546,6 +552,8 @@ function renderTable(view, turnSeat, emphasis) {
 // 상태는 이 브라우저에 저장). ---
 
 let lastTableView = null;
+/** 지금 대국에서 기본과 다른 규칙의 이름들 (서버 메시지의 ruleLabels, 작탁 가운데에 작게 보여 준다) */
+let currentRuleLabels = [];
 const LOG_STORAGE_KEY = "seongah.logPanelOpen";
 let logPanelOpen = (() => {
   try {
@@ -1930,11 +1938,11 @@ function renderFinalResultStep() {
     const same = el("button", "continue-button");
     same.textContent = pending ? "시작하는 중..." : "같은 설정으로 다시";
     same.title = "같은 모드와 상대, 새 시드";
-    same.addEventListener("click", () => restartGame({ mode: cfg.mode, opponents: cfg.opponents, saveReplays: cfg.saveReplays, ...(cfg.humanSeat !== undefined ? { humanSeat: cfg.humanSeat } : {}) }));
+    same.addEventListener("click", () => restartGame({ mode: cfg.mode, opponents: cfg.opponents, saveReplays: cfg.saveReplays, ...(cfg.humanSeat !== undefined ? { humanSeat: cfg.humanSeat } : {}), ...(cfg.rules ? { rules: cfg.rules } : {}) }));
     const sameSeed = el("button", "secondary-button");
     sameSeed.textContent = "같은 시드로 다시";
     sameSeed.title = "같은 모드와 상대, 같은 시드";
-    sameSeed.addEventListener("click", () => restartGame({ mode: cfg.mode, opponents: cfg.opponents, seed: cfg.seed, saveReplays: cfg.saveReplays, ...(cfg.humanSeat !== undefined ? { humanSeat: cfg.humanSeat } : {}) }));
+    sameSeed.addEventListener("click", () => restartGame({ mode: cfg.mode, opponents: cfg.opponents, seed: cfg.seed, saveReplays: cfg.saveReplays, ...(cfg.humanSeat !== undefined ? { humanSeat: cfg.humanSeat } : {}), ...(cfg.rules ? { rules: cfg.rules } : {}) }));
     const change = el("button", "secondary-button");
     change.textContent = "설정 바꾸기";
     change.addEventListener("click", () => {
@@ -2422,6 +2430,9 @@ function initSetupState(msg) {
     saveReplays: prev ? prev.saveReplays : msg.defaults.saveReplays,
     // 내 자리: 0 = 동가(친), 1 = 남가 ..., "random" = 시드로 정해짐 (처음과 새로고침 뒤에는 서버가 기억한 마지막 값)
     humanSeat: prev ? prev.humanSeat : (msg.defaults.humanSeat ?? 0),
+    // 규칙 옵션: 기본과 다른 항목만 담는다 ({} = 기본 규칙, 처음과 새로고침 뒤에는 서버가 기억한 마지막 값)
+    rules: prev ? prev.rules : { ...(msg.defaults.rules ?? {}) },
+    ruleOptionsOpen: prev ? prev.ruleOptionsOpen : false,
     // AI 관전 판 수(1이면 한 판 관전 → 뷰어 자동 재생)와 여러 판일 때 판마다 리플레이 저장. 처음과 새로고침 뒤에는 서버가 기억한 마지막 값
     watchGames: prev ? prev.watchGames : (msg.defaults.watchGames ?? 1),
     watchSaveReplays: prev ? prev.watchSaveReplays : (msg.defaults.watchSaveReplays ?? false),
@@ -2703,6 +2714,7 @@ function renderSetup() {
   });
   side.appendChild(setupSection("좌석", renderSetupSeats(), randomBtn));
   if (!watching) side.appendChild(renderHumanSeatPicker());
+  if (!watching) side.appendChild(renderRuleOptions());
   side.appendChild(renderCustomAiSection());
 
   const seedLabel = el("label", "setup-field");
@@ -3063,6 +3075,87 @@ function renderLearnEntry() {
   return setupSection("마작 배우기", lead, row);
 }
 
+/** 규칙 옵션 (로비 "규칙" 절). 기본 규칙과 같게 두면 아무것도 보내지 않는다. 산마에는 치가 없어 쿠이카에 항목이 없다.
+ *  서버가 같은 값으로 RuleConfig를 만들며(`gameSetup.ts rulesFor`), 리플레이는 실제 규칙 전체를 저장해 그대로 재현한다. */
+const RULE_DEFAULTS = { gameLength: "east", akaDora: "default", kuitan: true, kuikae: true, doubleRon: "all", kazoeYakuman: true, doubleYakuman: true, kiriageMangan: false };
+
+function effectiveRules() {
+  const out = { ...setupState.rules };
+  if (setupState.mode === "sanma") delete out.kuikae;
+  return out;
+}
+
+function ruleValue(key) {
+  const v = setupState.rules[key];
+  return v === undefined ? RULE_DEFAULTS[key] : v;
+}
+
+function setRule(key, value) {
+  if (value === RULE_DEFAULTS[key]) delete setupState.rules[key];
+  else setupState.rules[key] = value;
+  renderSetup();
+}
+
+function renderRuleOptions() {
+  const changed = Object.keys(effectiveRules()).length;
+  const details = el("details", "rule-options");
+  details.open = !!setupState.ruleOptionsOpen || changed > 0;
+  details.addEventListener("toggle", () => (setupState.ruleOptionsOpen = details.open));
+  const summary = el("summary");
+  summary.textContent = changed > 0 ? `규칙 옵션 (${changed}개 변경)` : "규칙 옵션 (기본 규칙)";
+  details.appendChild(summary);
+
+  const choice = (label, key, options, hint) => {
+    const row = el("label", "rule-row");
+    const text = el("span", "rule-label");
+    text.textContent = label;
+    const select = el("select", "rule-select");
+    for (const [value, name] of options) {
+      const opt = el("option", "", { value });
+      opt.textContent = name;
+      select.appendChild(opt);
+    }
+    select.value = ruleValue(key);
+    select.addEventListener("change", () => setRule(key, select.value));
+    row.append(text, select);
+    if (hint) row.title = hint;
+    details.appendChild(row);
+  };
+  const toggle = (label, key, hint) => {
+    const row = el("label", "rule-row rule-check");
+    const input = el("input", "", { type: "checkbox" });
+    input.checked = !!ruleValue(key);
+    input.addEventListener("change", () => setRule(key, input.checked));
+    const text = el("span", "rule-label");
+    text.textContent = label;
+    row.append(input, text);
+    if (hint) row.title = hint;
+    details.appendChild(row);
+  };
+
+  choice("대국 길이", "gameLength", [["east", "동풍전 (기본)"], ["east-south", "동남전"]], "동풍전은 동장만, 동남전은 남장까지 둡니다");
+  choice("적도라", "akaDora", [["default", "기본"], ["none", "없음"], ["more", "많이 (수트마다 한 장 더)"]], "빨간 5는 한 장당 1판입니다");
+  toggle("울어서 탕야오 인정 (쿠이탕)", "kuitan", "끄면 탕야오는 멘젠(울지 않은 손)에서만 성립합니다");
+  if (setupState.mode === "yonma") toggle("쿠이카에 금지", "kuikae", "치한 직후에 같은 패(와 반대쪽 끝 패)를 바로 버리는 것을 막습니다");
+  choice("더블 론", "doubleRon", [["all", "모두 화료 (기본)"], ["atamahane", "머리박기 (가장 가까운 한 명만)"]], "한 패에 여러 명이 론할 때의 처리");
+  toggle("헤아림 역만 (13판 이상)", "kazoeYakuman", "끄면 13판 이상도 삼배만으로 끝납니다");
+  toggle("더블 역만", "doubleYakuman", "국사 13면대기·사암각 단기·순정 구련·대사희를 두 배로 칩니다");
+  toggle("절상만관", "kiriageMangan", "4판 30부, 3판 60부를 만관으로 올립니다");
+
+  const reset = el("button", "setup-link-button", { type: "button" });
+  reset.textContent = "기본 규칙으로";
+  reset.disabled = changed === 0;
+  reset.addEventListener("click", () => {
+    setupState.rules = {};
+    renderSetup();
+  });
+  details.appendChild(reset);
+  const note = el("p", "setup-lead");
+  note.textContent = "후리텐은 항상 표준 규칙(자기 버림패/일시/리치 후)을 따릅니다. 규칙을 바꾼 대국의 리플레이도 그 규칙 그대로 저장되어 다시 볼 수 있습니다.";
+  details.appendChild(note);
+  return setupSection("규칙", details);
+}
+
 async function startGameFromSetup() {
   if (!setupState || setupState.pending) return;
   AudioManager.play("ui.confirm");
@@ -3075,6 +3168,7 @@ async function startGameFromSetup() {
     seed: setupState.seed,
     saveReplays: setupState.saveReplays,
     humanSeat: effectiveHumanSeat(),
+    rules: effectiveRules(),
   };
   try {
     const res = await fetch("/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -3586,6 +3680,7 @@ function handleMessageBody(msg) {
     return;
   }
   awaitingServer = false; // 서버가 새 상태를 보냈으니 다음 응답을 보낼 수 있다
+  if (msg.type !== "watch" && msg.type !== "setup") currentRuleLabels = msg.ruleLabels || []; // (장면 메시지에는 없으므로 그대로 둔다)
   updateAbandonButton(msg);
   if (msg.type === "setup") {
     resetAutoPlay(); // 로비로 돌아가면(그만두기 등) 자동 옵션도 초기화

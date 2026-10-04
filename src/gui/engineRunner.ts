@@ -12,7 +12,7 @@ import type { CharacterProfile } from "../ai/characterProfile.js";
 import { getCharacterProfile } from "../ai/characterProfiles.js";
 import { buildGameReplayRecord, replaySeatsFromGame, type GameReplayRecord } from "../sim/replayRecorder.js";
 import { GuiSession, type GuiSessionPhase, type WatchFrame } from "./guiSession.js";
-import { createAiWatchGame, createFriendGame, createGuiGameWithProfiles, seatsAroundHuman, type GuiGameMode } from "./gameSetup.js";
+import { createAiWatchGame, createFriendGame, createGuiGameWithProfiles, rulesFor, seatsAroundHuman, type GuiGameMode, type RuleOptions } from "./gameSetup.js";
 
 /** 상대 좌석: 등록 캐릭터는 id만 넘기고(실행하는 쪽이 같은 프로필 표에서 찾는다), CustomAI는 대국 시작 시점의 프로필 스냅샷을 넘긴다. */
 export type OpponentSpec = { characterId: string } | { profile: CharacterProfile };
@@ -25,6 +25,8 @@ export interface GameSpec {
   opponents: OpponentSpec[];
   /** 사람이 앉는 좌석 (생략하거나 0이면 동가). `seats`가 있으면 쓰지 않는다. */
   humanSeat?: number;
+  /** 기본과 다른 규칙 옵션 (생략하면 기본 규칙) */
+  rules?: RuleOptions;
   /** 주면 opponents 대신 좌석 전체: null = 사람, 그 밖은 AI (친선전 대국, gameSetup.createFriendGame) */
   seats?: (OpponentSpec | null)[];
 }
@@ -32,10 +34,11 @@ export interface GameSpec {
 const profileOf = (o: OpponentSpec): CharacterProfile => ("profile" in o ? o.profile : getCharacterProfile(o.characterId));
 
 export function gameFromSpec(spec: GameSpec): GameState {
-  if (spec.seats) return createFriendGame(spec.mode, spec.seed, spec.seats.map((o) => (o === null ? null : profileOf(o))));
+  const rules = rulesFor(spec.mode, spec.rules);
+  if (spec.seats) return createFriendGame(spec.mode, spec.seed, spec.seats.map((o) => (o === null ? null : profileOf(o))), rules);
   // 동가가 아닌 자리의 사람: 상대를 사람 다음 차례부터 앉힌 좌석 배치로 만든다 (사람 1명이라 사람끼리 대국 모드는 켜지지 않는다)
-  if (spec.humanSeat) return createFriendGame(spec.mode, spec.seed, seatsAroundHuman(spec.opponents, spec.humanSeat).map((o) => (o === null ? null : profileOf(o))));
-  return createGuiGameWithProfiles(spec.mode, spec.seed, spec.opponents.map(profileOf));
+  if (spec.humanSeat) return createFriendGame(spec.mode, spec.seed, seatsAroundHuman(spec.opponents, spec.humanSeat).map((o) => (o === null ? null : profileOf(o))), rules);
+  return createGuiGameWithProfiles(spec.mode, spec.seed, spec.opponents.map(profileOf), rules);
 }
 
 /** AI 관전 대국 구성 (모든 좌석이 AI, 순수 데이터). 좌석 표기는 OpponentSpec과 같다. */

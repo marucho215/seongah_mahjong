@@ -1936,3 +1936,12 @@ body.is-setup .log-panel { display: none !important; }
 .rv-mark .rv-toc-item { flex-direction: row; }
 .rv-mark-del { font: inherit; font-size: 15px; color: inherit; background: none; border: none; cursor: pointer; opacity: 0.7; }
 #rv-bookmark.is-on { color: #ffd54a; }
+
+/* 규칙 옵션 (로비) */
+.rule-options { border: 1px solid var(--setup-line, rgba(255,255,255,0.15)); border-radius: 8px; padding: 8px 12px; background: var(--setup-panel, rgba(0,0,0,0.2)); }
+.rule-options summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.rule-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; font-size: 13px; }
+.rule-row.rule-check { justify-content: flex-start; }
+.rule-select { font: inherit; font-size: 13px; padding: 3px 6px; border-radius: 6px; background: rgba(0,0,0,0.3); color: inherit; border: 1px solid rgba(255,255,255,0.25); }
+.rule-select option { color: #111; }
+.rule-chips { margin-top: 3px; font-size: 11px; color: #ffe08a; opacity: 0.9; }
