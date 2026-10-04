@@ -44,7 +44,9 @@ import {
   customAiCharacterId,
   customAiNotices,
   customAiToProfile,
+  exportCustomAi,
   isCustomAiCharacterId,
+  parseCustomAiImport,
 } from "../customai/customAiSchema.js";
 import type { CharacterProfile } from "../ai/characterProfile.js";
 import { AccessError, AccessGate } from "./accessGate.js";
@@ -1511,6 +1513,19 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       json(200, customAiListBody(store));
       return;
     }
+    // 내보내기: 공유용 파일(내부 id 없음)을 내려받는다
+    if (req.method === "GET" && rest.length === 2 && rest[1] === "export") {
+      try {
+        const def = store.get(rest[0]!);
+        const fileName = encodeURIComponent(`${def.name}.seongah-ai.json`);
+        res
+          .writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "Content-Disposition": `attachment; filename="custom-ai.seongah-ai.json"; filename*=UTF-8''${fileName}` })
+          .end(JSON.stringify(exportCustomAi(def), null, 2));
+      } catch (err) {
+        error(err);
+      }
+      return;
+    }
     readBody(req, res, (body) => {
       try {
         let result: unknown;
@@ -1519,6 +1534,11 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
           result = store.create(JSON.parse(body));
         }
         else if (req.method === "PUT" && rest.length === 1) result = store.update(rest[0]!, JSON.parse(body));
+        else if (req.method === "POST" && rest.length === 1 && rest[0] === "import") {
+          // 내보낸 파일 가져오기: 같은 검증을 거쳐 새 id로 저장한다
+          assertCustomAiRoom(store);
+          result = store.create(parseCustomAiImport(JSON.parse(body)));
+        }
         else if (req.method === "POST" && rest.length === 2 && rest[1] === "duplicate") {
           assertCustomAiRoom(store);
           result = store.duplicate(rest[0]!);

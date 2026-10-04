@@ -181,3 +181,30 @@ export function isUsableProfileSnapshot(value: unknown): value is CharacterProfi
   if (typeof p.characterId !== "string" || typeof p.displayName !== "string" || typeof p.archetype !== "string") return false;
   return PROFILE_NUMBER_FIELDS.every((k) => typeof p[k] === "number" && Number.isFinite(p[k]));
 }
+
+/** 내보내기 파일의 표식. 다른 JSON을 잘못 가져오지 않도록 확인한다. */
+export const CUSTOM_AI_EXPORT_KIND = "seongah-custom-ai";
+
+export interface CustomAiExportFile {
+  kind: typeof CUSTOM_AI_EXPORT_KIND;
+  formatVersion: typeof CUSTOM_AI_FORMAT_VERSION;
+  name: string;
+  style: CustomAiStyle;
+}
+
+/** 공유용 파일 내용: 내부 id는 넣지 않는다(가져올 때 새 id가 붙는다). 이름과 슬라이더 값 15개만 담는다. */
+export function exportCustomAi(def: CustomAiDefinition): CustomAiExportFile {
+  return { kind: CUSTOM_AI_EXPORT_KIND, formatVersion: CUSTOM_AI_FORMAT_VERSION, name: def.name, style: { ...def.style } };
+}
+
+/** 내보낸 파일(또는 이름과 style만 있는 JSON)을 검증해 새로 만들 CustomAI의 입력으로 바꾼다. 저장할 때와 같은 이름/범위 검증을 거치고,
+ *  모르는 필드/잘못된 값은 거절한다. 파일 안의 id나 다른 필드는 쓰지 않는다. */
+export function parseCustomAiImport(value: unknown): { name: string; style: CustomAiStyle } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) fail("CustomAI 파일 내용이 객체가 아닙니다");
+  const raw = value as Record<string, unknown>;
+  if (raw.kind !== CUSTOM_AI_EXPORT_KIND) fail("성아 마작에서 내보낸 CustomAI 파일이 아닙니다");
+  if (raw.formatVersion !== CUSTOM_AI_FORMAT_VERSION) fail(`지원하지 않는 형식 버전입니다: ${String(raw.formatVersion)}`);
+  const allowed = new Set(["kind", "formatVersion", "name", "style"]);
+  for (const key of Object.keys(raw)) if (!allowed.has(key)) fail(`알 수 없는 필드입니다: ${key}`);
+  return { name: validateCustomAiName(raw.name), style: validateCustomAiStyle(raw.style) };
+}

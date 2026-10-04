@@ -2857,6 +2857,11 @@ function renderCustomAiSection() {
         renderSetup();
       }
     });
+    // 내보내기: 이름과 슬라이더 값만 담은 공유용 파일을 내려받는다 (다른 사람이 "가져오기"로 불러온다)
+    const exportLink = el("a", "setup-link-button", { href: `/api/custom-ai/${encodeURIComponent(e.id)}/export` });
+    exportLink.textContent = "내보내기";
+    exportLink.title = "이 CustomAI를 파일로 저장합니다 (다른 사람과 공유할 수 있습니다)";
+    actions.appendChild(exportLink);
     mk("삭제", async () => {
       if (!window.confirm(`"${e.name}"을(를) 삭제할까요? 지난 리플레이는 저장된 값으로 계속 재현됩니다.`)) return;
       try {
@@ -2879,7 +2884,28 @@ function renderCustomAiSection() {
   create.textContent = "새 CustomAI 만들기";
   create.disabled = !ca.schema;
   create.addEventListener("click", () => openCustomAiEditor(null));
-  const children = [list, create];
+  // 가져오기: 내보낸 파일(.json)을 골라 새 CustomAI로 만든다. 검증은 서버가 저장할 때와 같은 규칙으로 한다.
+  const importInput = el("input", "custom-ai-import", { type: "file", accept: ".json,application/json" });
+  importInput.hidden = true;
+  importInput.addEventListener("change", async () => {
+    const file = importInput.files && importInput.files[0];
+    importInput.value = "";
+    if (!file) return;
+    try {
+      if (file.size > 20000) throw new Error("CustomAI 파일이 너무 큽니다");
+      await customAiRequest("POST", "/api/custom-ai/import", JSON.parse(await file.text()));
+      ca.error = "";
+      await loadCustomAi();
+    } catch (err) {
+      ca.error = err instanceof SyntaxError ? "JSON 파일이 아닙니다" : String(err instanceof Error ? err.message : err);
+      renderSetup();
+    }
+  });
+  const importBtn = el("button", "setup-link-button", { type: "button" });
+  importBtn.textContent = "파일에서 가져오기";
+  importBtn.disabled = !ca.schema;
+  importBtn.addEventListener("click", () => importInput.click());
+  const children = [list, create, importBtn, importInput];
   if (ca.entries.length === 0) {
     const empty = el("p", "setup-lead");
     empty.textContent = "직접 성향을 정한 AI를 만들어 상대로 앉힐 수 있습니다.";
