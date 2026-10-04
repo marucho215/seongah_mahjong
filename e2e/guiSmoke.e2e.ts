@@ -122,6 +122,12 @@ describe("GUI 스모크", () => {
     await page.locator("#rv-open-hands").click();
     // 화료·유국 지점 → 다음 수(국 종료)에서 대국과 같은 결과 창이 뜨고, 이어서 보기로 넘어간다
     await page.locator(".rv-btn", { hasText: "화료·유국" }).click();
+    // 패보(H)는 리플레이에서도 쓴다: 좌석마다 구역과 그때까지의 버림패가 보인다
+    await page.keyboard.press("h");
+    await page.locator("#log-panel:not(.hidden) .log-seat").first().waitFor();
+    expect(await page.locator("#log-panel .log-seat").count()).toBe(3);
+    expect(await page.locator("#log-panel .log-tiles img").count()).toBeGreaterThan(0);
+    await page.keyboard.press("h");
     await page.locator(".rv-btn", { hasText: "▶" }).click();
     await page.locator("#hand-end-overlay:not(.hidden) .continue-button", { hasText: "이어서 보기" }).waitFor();
     await page.locator("#hand-end-overlay .continue-button").click();

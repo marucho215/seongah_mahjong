@@ -35,12 +35,42 @@ export function playerCountOf(mode: GuiGameMode): number {
   return mode === "yonma" ? 4 : 3;
 }
 
-/** 시작 화면에서 고른 대국 구성. seed가 없으면 호출자가 새로 만든다. */
+/** 사람이 앉을 자리: 0 = 동(첫 친)부터 차례로, "random" = 시드로 정해지는 자리(같은 시드면 같은 자리). 생략하면 0. */
+export type HumanSeatChoice = number | "random";
+
+/** 시작 화면에서 고른 대국 구성. seed가 없으면 호출자가 새로 만든다. `humanSeat`를 생략하면 0(동가, 친)이다. */
 export interface GuiGameConfig {
   mode: GuiGameMode;
   opponents: string[];
   seed?: string;
   saveReplays: boolean;
+  humanSeat?: HumanSeatChoice;
+}
+
+/** 시드 문자열에서 0..count-1의 자리를 정한다 (같은 시드는 항상 같은 자리). FNV-1a 해시를 쓴다. */
+export function seatFromSeed(seed: string, count: number): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0) % count;
+}
+
+/** 고른 자리를 실제 좌석 번호로 바꾼다. */
+export function resolveHumanSeat(choice: HumanSeatChoice | undefined, seed: string, mode: GuiGameMode): number {
+  if (choice === undefined) return 0;
+  return choice === "random" ? seatFromSeed(seed, playerCountOf(mode)) : choice;
+}
+
+/** 사람 좌석을 정한 좌석 배치: 상대는 사람 다음 차례부터 순서대로 앉는다(하가가 다음 차례, 상가가 이전 차례라는 관계는 그대로). */
+export function seatsAroundHuman<T>(opponents: readonly T[], humanSeat: number): (T | null)[] {
+  const n = opponents.length + 1;
+  const seats: (T | null)[] = new Array(n).fill(null);
+  opponents.forEach((o, i) => {
+    seats[(humanSeat + 1 + i) % n] = o;
+  });
+  return seats;
 }
 
 const MAX_SEED_LENGTH = 100;
@@ -67,7 +97,13 @@ export function parseGuiGameConfig(input: unknown, resolveProfile: (id: string) 
     if (trimmed !== "") seed = trimmed;
   }
   if (raw.saveReplays !== undefined && typeof raw.saveReplays !== "boolean") throw new Error("saveReplays는 true/false여야 합니다");
-  return { mode, opponents, ...(seed !== undefined ? { seed } : {}), saveReplays: raw.saveReplays === true };
+  let humanSeat: HumanSeatChoice | undefined;
+  if (raw.humanSeat !== undefined && raw.humanSeat !== null) {
+    if (raw.humanSeat === "random") humanSeat = "random";
+    else if (typeof raw.humanSeat === "number" && Number.isInteger(raw.humanSeat) && raw.humanSeat >= 0 && raw.humanSeat < playerCountOf(mode)) humanSeat = raw.humanSeat;
+    else throw new Error(`내 자리(humanSeat)는 0~${playerCountOf(mode) - 1} 또는 "random"이어야 합니다`);
+  }
+  return { mode, opponents, ...(seed !== undefined ? { seed } : {}), saveReplays: raw.saveReplays === true, ...(humanSeat !== undefined ? { humanSeat } : {}) };
 }
 
 /** AI 관전 대국의 기본 좌석 (seat 0부터 전부 AI). 로비 관전 설정 화면의 초기값. */

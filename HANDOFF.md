@@ -211,6 +211,19 @@
   자동 플레이 옵션(자동 쯔모기리/울기 패스/자동 화료, 기본 꺼짐)은 클라이언트(`app.js`의 `autoResponseFor`)가 해당 결정에 정해진
   응답을 기존 `/respond`로 보내는 것뿐이라 사람 결정 기록과 리플레이 재현에 그대로 포함된다. 자동 쯔모기리는 엔진이 쯔모 뒤 타패
   요청에만 넣는 `DiscardDecisionRequest.drawnTileId`만 쓴다(울기 직후 타패에는 없음, 리치 후 쯔모기리는 원래 엔진이 요청 없이 처리).
+  **자동 옵션은 국마다 초기화한다**: `app.js`의 `resetAutoPlay()`가 hand_end/game_end 메시지, 설정(로비) 메시지, 새 gameId에서 모두 끄고 토스트로 알린다
+  (`e2e/autoPlayReset.e2e.ts`). 표시/입력 옵션(보조 메뉴 `assist`, `uiOptions`)은 `localStorage`에 남긴다.
+- **보조 메뉴와 표시 전용 엔진 필드 (1.3)**: `DiscardDecisionRequest.discardUkeire`(`src/ai/discardUkeire.ts`: 손패 종류별 버린 뒤 샹텐 + 유효패와 미확인 장수. 샹텐이
+  가장 낮은 타패에만 유효패를 센다 - 일반형은 이웃 패만 시도, 칠대자/국사는 전부. 전수 계산과 같은 결과임을 `tests/discardUkeire.test.ts`가 무작위 손패로 확인),
+  `PlayerView.discardRisk[].against/unseenCount`(현물/스지 근거, 등급 계산은 그대로), `PlayerView.discardLog`/`PlayerViewOpponent.discardLog`(패보: 울려 간 패, 쯔모기리,
+  리치 선언패 포함 전체 버림패, `tests/discardLog.test.ts`). 모두 view/요청에만 있고 리플레이에는 담기지 않는다. 클라이언트는 표시만 한다.
+  입력은 `chooseDiscardTile`(두 번 눌러 버리기), `discardKeyboard`/`callKeyboard`(단축키; 버튼의 `data-key="accept|decline"`), `confirmDangerousPass`(론 넘기기 두 번 눌러
+  확정), `armActionBar`(터치 오조작 방지)다. 선택한 패/올려 본 패의 상세 줄(`assist-detail`)은 자리를 미리 잡아 두어 손패가 밀리며 깜빡이지 않게 한다.
+- **내 자리 (1.3)**: `GuiGameConfig.humanSeat`(0..n-1 또는 `"random"`, 생략=0)와 `GameSpec.humanSeat`. 0이 아니면 `gameFromSpec`이 `seatsAroundHuman`(상대는 사람 다음
+  차례부터)으로 `createFriendGame`을 불러 만든다(사람 1명이라 `multiplayer`는 꺼짐). 랜덤은 `seatFromSeed`(FNV)로 정해 같은 시드면 같은 자리다.
+  종료 화면의 "다시 하기"는 `gameConfig.humanSeat`(고른 값, 랜덤이면 `"random"`)를 이어 보낸다. 동가(생략)의 대국/리플레이 바이트는 그대로다(`tests/humanSeat.test.ts`).
+- **연결 복구 (1.3)**: 새 접속 메시지(`connectMessage`)에 이 국의 마지막 공개 행동 6개(`recent`)를 실어 "최근 행동" 목록을 채운다. 클라이언트는 끊김을 `#conn-banner`로 알리고
+  EventSource의 자동 재연결로 현재 상태를 다시 받는다(`e2e/reconnect.e2e.ts`).
 - `src/gui/public/`: 바닐라 JS 클라이언트 (`app.js`, `audioManager.js`, `style.css`, `index.html`). 4-position 작탁 하나로
   산마/4마를 함께 그린다(좌석 번호 하드코딩 없이 내 좌석 기준 상대 위치). 개발 중 프런트 파일은 `Cache-Control: no-store`.
 - `src/cli/humanPlayDriver.ts`(요청별 입력 처리), `src/cli/humanPlayCli.ts`(진입점, 한 국만 진행)
@@ -303,8 +316,8 @@
 - 리플레이 뷰어의 재현은 한 판에 수 초 걸린다. `npm run play:gui`는 대국과 재현을 엔진 worker에서 돌리므로 서버는 멈추지 않는다
   (1.2 3단계). worker를 쓰지 않는 서버(테스트, `createGuiServer`)에서는 여전히 같은 스레드에서 돈다.
 - 새로고침은 현재 결정/국 종료/게임 종료 화면을 복구한다(종료 화면은 마지막 장면의 view로 작탁을 다시 그림). 재생 중이던 AI 턴
-  장면은 다시 재생하지 않는다.
-- GUI는 사람을 seat 0에 앉힌다. 상대는 시작 화면에서 고르며 기본값은 산마: 제갈 미나·제갈 나희, 4마: +변아리. 사람 좌석 선택은 없다.
+  장면은 다시 재생하지 않는다(재생 중에 접속하면 그 순간의 장면을 주고, 접속 메시지에 최근 공개 행동 6개를 담아 목록을 채운다).
+- GUI에서 사람 자리는 시작 화면의 "내 자리"에서 고른다(기본 동가). 상대는 시작 화면에서 고르며 기본값은 산마: 제갈 미나·제갈 나희, 4마: +변아리.
 - CLI는 한 국만 진행한다.
 - 한 판 AI 관전은 한 게임을 끝까지 돌린 뒤에 보여 준다(보통 10~30초, 뷰어 재현 시간 별도). 한 판 관전에는 취소/진행률이 없다
   (여러 판 관전에는 있다). 판 도중에는 멈출 수 없다(worker 안에서 한 번에 계산한다).
@@ -399,9 +412,9 @@ body와 패 크기를 `dvh`(주소창 제외 높이) 기준으로, 폭 900px 이
   분리해서 정한다.
 
 - 대국 통계(화료/방총/리치 횟수).
-- 유효패(현재 손/타패 후보별), 울은 손의 타패별 텐파이 미리보기 - 각각 별도 기능으로 설계. (현물/스지 위험도 표시는 구현됨, 확장은 위 항목)
+- 울은 손의 타패별 텐파이 미리보기, 유효패 표시의 확장(샹텐이 같지 않은 타패의 유효패, 타패 효율 점수). (현물/스지 위험도 표시와 타패별 유효패는 구현됨)
 - CustomAI 특수 기믹 시스템과 가져오기/내보내기. 리플레이 형식 개선(치 구성 패, 적5, AI 판단과 이벤트의 직접 연결 - §3 리플레이 뷰어).
-- 캐릭터 보이스와 화료 컷인, 캐릭터 초상화, 사람 좌석 선택, CLI의 상대/CustomAI 선택과 여러 국 진행.
+- 캐릭터 보이스와 화료 컷인, 캐릭터 초상화, CLI의 상대/CustomAI 선택과 여러 국 진행.
 - 추가 presentation 옵션과 UI polish, 추가 효과음, 새로운 마작 룰, 5000판급 장기 자체 대국 검증(Phase C 기준선 참고).
 - 캐릭터 성향을 실측으로 확인할 때는 전체 국 대비 비율 대신 조건부 지표(예: 리치 가능 상태가 된 횟수 중 실제 리치 비율)를 쓸 것 -
   울기가 많은 캐릭터는 멘젠 상태가 일찍 깨져 단순 리치 비율이 의향을 반영하지 않는다.

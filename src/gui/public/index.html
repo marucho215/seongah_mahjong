@@ -24,6 +24,12 @@
     <button type="button" class="away-return">복귀</button>
   </div>
 
+  <!-- 서버와의 연결이 끊겼을 때 (app.js): 자동으로 다시 연결하며, 다시 연결되면 현재 상태를 서버에서 받아 이어 둔다 -->
+  <div id="conn-banner" class="hidden" role="status" aria-live="polite">
+    <span class="conn-text">연결이 끊어졌습니다. 다시 연결하는 중...</span>
+    <button type="button" class="conn-reload">새로고침</button>
+  </div>
+
   <!-- 최근 공개 행동 몇 개만 작게 (AI 턴 장면 재생 중 상황 파악용) -->
   <div id="recent-feed" class="hidden"></div>
 

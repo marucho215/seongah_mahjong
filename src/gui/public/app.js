@@ -1007,7 +1007,7 @@ async function sendResponse(response) {
     }
   } catch (err) {
     awaitingServer = false;
-    showActionError("서버에 연결하지 못했습니다. 새로고침 후 다시 시도해 주세요.");
+    showActionError("서버에 연결하지 못했습니다. 연결이 돌아오면 같은 요청이 다시 나오니 그때 다시 선택해 주세요 (계속 안 되면 새로고침).");
   }
 }
 
@@ -1892,11 +1892,11 @@ function renderFinalResultStep() {
     const same = el("button", "continue-button");
     same.textContent = pending ? "시작하는 중..." : "같은 설정으로 다시";
     same.title = "같은 모드와 상대, 새 시드";
-    same.addEventListener("click", () => restartGame({ mode: cfg.mode, opponents: cfg.opponents, saveReplays: cfg.saveReplays }));
+    same.addEventListener("click", () => restartGame({ mode: cfg.mode, opponents: cfg.opponents, saveReplays: cfg.saveReplays, ...(cfg.humanSeat !== undefined ? { humanSeat: cfg.humanSeat } : {}) }));
     const sameSeed = el("button", "secondary-button");
     sameSeed.textContent = "같은 시드로 다시";
     sameSeed.title = "같은 모드와 상대, 같은 시드";
-    sameSeed.addEventListener("click", () => restartGame({ mode: cfg.mode, opponents: cfg.opponents, seed: cfg.seed, saveReplays: cfg.saveReplays }));
+    sameSeed.addEventListener("click", () => restartGame({ mode: cfg.mode, opponents: cfg.opponents, seed: cfg.seed, saveReplays: cfg.saveReplays, ...(cfg.humanSeat !== undefined ? { humanSeat: cfg.humanSeat } : {}) }));
     const change = el("button", "secondary-button");
     change.textContent = "설정 바꾸기";
     change.addEventListener("click", () => {
@@ -2376,6 +2376,8 @@ function initSetupState(msg) {
     watchSeats: { sanma: keepSeats("watchSeats", "sanma"), yonma: keepSeats("watchSeats", "yonma") },
     seed: prev ? prev.seed : msg.defaults.seed,
     saveReplays: prev ? prev.saveReplays : msg.defaults.saveReplays,
+    // 내 자리: 0 = 동가(친), 1 = 남가 ..., "random" = 시드로 정해짐 (처음과 새로고침 뒤에는 서버가 기억한 마지막 값)
+    humanSeat: prev ? prev.humanSeat : (msg.defaults.humanSeat ?? 0),
     // AI 관전 판 수(1이면 한 판 관전 → 뷰어 자동 재생)와 여러 판일 때 판마다 리플레이 저장. 처음과 새로고침 뒤에는 서버가 기억한 마지막 값
     watchGames: prev ? prev.watchGames : (msg.defaults.watchGames ?? 1),
     watchSaveReplays: prev ? prev.watchSaveReplays : (msg.defaults.watchSaveReplays ?? false),
@@ -2655,6 +2657,7 @@ function renderSetup() {
     renderSetup();
   });
   side.appendChild(setupSection("좌석", renderSetupSeats(), randomBtn));
+  if (!watching) side.appendChild(renderHumanSeatPicker());
   side.appendChild(renderCustomAiSection());
 
   const seedLabel = el("label", "setup-field");
@@ -2939,6 +2942,37 @@ function renderCustomAiEditor() {
   return overlay;
 }
 
+/** 내 자리 선택: 랜덤 / 동가(첫 친) / 남가 / 서가 / (4마) 북가. 상대는 내 다음 차례부터 같은 순서(하가, 대면, 상가)로 앉는다. */
+const HUMAN_SEAT_NAMES = ["동가 (친)", "남가", "서가", "북가"];
+
+function effectiveHumanSeat() {
+  const n = setupState.playerCounts[setupState.mode];
+  const choice = setupState.humanSeat;
+  return typeof choice === "number" && choice >= n ? 0 : choice; // 3인 모드로 바꾸면 북가는 동가로
+}
+
+function renderHumanSeatPicker() {
+  const n = setupState.playerCounts[setupState.mode];
+  const choice = effectiveHumanSeat();
+  const group = el("div", "setup-segmented seat-picker", { role: "radiogroup", "aria-label": "내 자리" });
+  group.style.gridTemplateColumns = `repeat(${n === 4 ? 3 : 2}, 1fr)`;
+  const options = [["random", "랜덤"], ...Array.from({ length: n }, (_, i) => [i, HUMAN_SEAT_NAMES[i]])];
+  for (const [value, label] of options) {
+    const btn = el("button", "setup-segment", { type: "button", role: "radio", "aria-checked": String(value === choice) });
+    const main = el("span", "segment-main");
+    main.textContent = label;
+    btn.appendChild(main);
+    btn.addEventListener("click", () => {
+      setupState.humanSeat = value;
+      renderSetup();
+    });
+    group.appendChild(btn);
+  }
+  const hint = el("p", "setup-lead");
+  hint.textContent = choice === "random" ? "자리는 시드로 정해집니다 (같은 시드면 같은 자리)." : choice === 0 ? "첫 친으로 시작합니다." : "친이 아닌 자리에서 시작합니다. 먼저 상대의 차례가 진행됩니다.";
+  return setupSection("내 자리", group, hint);
+}
+
 async function startGameFromSetup() {
   if (!setupState || setupState.pending) return;
   AudioManager.play("ui.confirm");
@@ -2950,6 +2984,7 @@ async function startGameFromSetup() {
     opponents: currentOpponents(),
     seed: setupState.seed,
     saveReplays: setupState.saveReplays,
+    humanSeat: effectiveHumanSeat(),
   };
   try {
     const res = await fetch("/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -3473,6 +3508,12 @@ function handleMessageBody(msg) {
   selectedTileId = null;
   currentCharacterNames = msg.characterNames ?? [];
   updatePresence(msg);
+  // 새로고침/재접속 직후의 첫 메시지: 이 국의 최근 공개 행동을 목록에 채운다 (장면은 다시 재생하지 않는다)
+  if (msg.recent && msg.recent.length > 0 && msg.type !== "hand_end" && msg.type !== "game_end") {
+    const seat = msg.request?.view?.seat ?? msg.view?.seat ?? lastKnownMySeat;
+    clearRecentFeed();
+    pushRecentFeed(msg.recent, seat);
+  }
   if (msg.type === "hand_end" || msg.type === "game_end") {
     clearRecentFeed();
     resetAutoPlayAtHandBoundary(); // 자동 옵션은 그 국에서만 유효하다
@@ -3528,9 +3569,22 @@ function handleMessageBody(msg) {
 
 if (!IS_REPLAY_MODE) {
   const events = new EventSource("/events");
-  events.onmessage = (ev) => handleMessage(JSON.parse(ev.data));
+  // 연결이 끊기면 브라우저가 스스로 다시 연결하고, 다시 연결되면 서버가 현재 상태(진행 중인 요청, 국/대국 결과)를 처음부터 보내 준다.
+  // 그 사이 화면은 마지막 상태로 두고 안내만 띄운다 (끊긴 동안 보낸 응답은 서버가 받지 못했을 수 있으므로 다시 연결된 상태를 따른다).
+  const connBanner = document.getElementById("conn-banner");
+  const setConnected = (connected) => connBanner && connBanner.classList.toggle("hidden", connected);
+  events.onopen = () => setConnected(true);
+  events.onmessage = (ev) => {
+    setConnected(true);
+    handleMessage(JSON.parse(ev.data));
+  };
+  connBanner?.querySelector(".conn-reload")?.addEventListener("click", () => location.reload());
+  window.addEventListener("online", () => {
+    if (events.readyState === EventSource.CLOSED) location.reload();
+  });
   // 입장 세션이 없으면(온라인 서버에서 쿠키가 없거나 무효) 이벤트 연결이 401로 끊긴다: 입장 화면으로 보낸다.
   events.onerror = () => {
+    setConnected(false);
     fetch("/api/me")
       .then((res) => {
         if (res.status === 401) location.href = "/join.html";

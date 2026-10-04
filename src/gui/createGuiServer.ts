@@ -26,10 +26,12 @@ import {
   parseGuiGameConfig,
   parseGuiMode,
   playerCountOf,
+  resolveHumanSeat,
   type AiWatchBatchConfig,
   type AiWatchConfig,
   type GuiGameConfig,
   type GuiGameMode,
+  type HumanSeatChoice,
 } from "./gameSetup.js";
 import { CustomAiStore } from "../customai/customAiStore.js";
 import { DEFAULT_SANMA_RULES, MAJSOUL_YONMA_RULES } from "../rules/RuleConfig.js";
@@ -180,6 +182,8 @@ const AWAY_ANSWER_DELAY_MS = 400;
 
 /** 대국마다 새 번호. 메시지의 `gameId`로 보내 클라이언트가 새 대국을 알아채게 한다 (효과음 seq가 새 대국에서 1부터 다시 매겨지므로). */
 let nextGameId = 1;
+/** 새로 접속한 클라이언트에 함께 보내는 최근 공개 행동의 최대 개수 */
+const RECENT_ACTIONS_ON_CONNECT = 6;
 
 /** `startedConfig`: 시작 화면이 있는 서버에서 시작한 대국이면 그 구성. 있으면 종료 화면에 새 대국/다시 하기 버튼이 나온다. */
 /** `frameDelayMs`: 재생 속도 설정. 장면마다 새로 읽는다 (재생 중에 바꾸면 다음 장면부터 적용). */
@@ -386,7 +390,7 @@ function createGameHost(
   /** 최근 행동 목록을 만들 때 어디까지 읽었는지 (로그 인덱스) */
   let actionLogIndex = log.length;
 
-  function currentStateMessage(viewer: number | null, cueFields: { cues: AudioCue[]; cueBase?: number }): string {
+  function currentStateMessage(viewer: number | null, cueFields: { cues: AudioCue[]; cueBase?: number; recent?: PublicAction[] }): string {
     const extra = { gameId, ...cueFields };
     const key = keyOf(viewer);
     const phase = snapshot.phase;
@@ -442,7 +446,22 @@ function createGameHost(
     // 재생 중에 접속하면 가장 최근 장면을 보여준다 (최종 상태는 재생이 끝난 뒤 보낸다).
     const watching = lastWatchMessage.get(keyOf(viewer));
     if (playing && watching) return watching;
-    return currentStateMessage(viewer, { cues: [], cueBase: cueTracker.latestSeq() });
+    // 새로고침/재접속 직후에도 "최근 행동" 목록이 비지 않게 이 국의 마지막 공개 행동 몇 개를 함께 보낸다 (장면은 다시 재생하지 않는다)
+    const recent = recentPublicActions();
+    return currentStateMessage(viewer, { cues: [], cueBase: cueTracker.latestSeq(), ...(recent.length > 0 ? { recent } : {}) });
+  }
+
+  /** 지금 국의 마지막 공개 행동들 (오래된 것부터, 최대 RECENT_ACTIONS_ON_CONNECT개). 로그의 공개 정보만 쓴다. */
+  function recentPublicActions(): PublicAction[] {
+    const out: PublicAction[] = [];
+    for (let i = log.length - 1; i >= 0 && out.length < RECENT_ACTIONS_ON_CONNECT; i--) {
+      const e = log[i]!;
+      if (e.type === "hand_start") break;
+      if (e.type === "hand_end") continue; // 끝난 국의 결과 창은 hand_end 메시지가 따로 보여준다
+      const a = toPublicAction(e);
+      if (a) out.unshift(a);
+    }
+    return out;
   }
 
   /** 한 순간(좌석마다의 장면 묶음)의 공개 정보를 한 번만 계산하고, 받는 쪽마다 자기 시점의 장면 메시지를 만든다. */
@@ -688,6 +707,8 @@ type LobbySetup = {
   watchSaveReplays: boolean;
   seed: string;
   saveReplays: boolean;
+  /** 내 자리 (0 = 동가/친, "random" = 시드로 정해짐) */
+  humanSeat: HumanSeatChoice;
 };
 
 /** 로비 설정 화면의 용도: 사람이 앉는 대국(play) 또는 AI끼리 관전(watch). */
@@ -847,6 +868,7 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
           watchSaveReplays: false,
           seed: defaults.seed ?? "",
           saveReplays: defaults.saveReplays ?? false,
+          humanSeat: 0,
         },
         frameDelayMs: initialFrameDelayMs,
         table: null,
@@ -1029,9 +1051,12 @@ function buildServer(initial: { game: GameState; options: GuiServerOptions } | n
       opponents: { ...room.lastSetup.opponents, [config.mode]: [...config.opponents] },
       seed: config.seed ?? "",
       saveReplays: config.saveReplays,
+      humanSeat: config.humanSeat ?? 0,
     };
     room.lobbyPurpose = "play"; // 끝난 뒤 "설정 바꾸기"는 사람 대국 설정 화면으로 돌아간다
-    const spec: GameSpec = { mode: config.mode, seed, opponents: config.opponents.map((id) => opponentSpecOf(room, id)) };
+    // 내 자리: 고른 자리(랜덤이면 시드로 정한 자리). 같은 시드로 다시 하면 같은 자리다.
+    const humanSeat = resolveHumanSeat(config.humanSeat, seed, config.mode);
+    const spec: GameSpec = { mode: config.mode, seed, opponents: config.opponents.map((id) => opponentSpecOf(room, id)), ...(humanSeat !== 0 ? { humanSeat } : {}) };
     const options: GuiServerOptions = {
       ...(config.saveReplays
         ? {
