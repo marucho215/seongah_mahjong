@@ -47,7 +47,33 @@ const rv = {
   aiOpen: false,
   speed: "normal",
   feed: [],
+  file: "", // 지금 보는 리플레이 파일 이름
+  tocOpen: false,
 };
+
+const REPLAY_BOOKMARK_KEY = "seongah.replayBookmarks";
+
+/** 북마크: 파일마다 [{step, label}] (이 브라우저에 저장). 수 번호는 현재 엔진으로 재현한 수순 기준이다. */
+function rvLoadBookmarks() {
+  try {
+    const all = JSON.parse(localStorage.getItem(REPLAY_BOOKMARK_KEY) || "{}");
+    const list = all && typeof all === "object" ? all[rv.file] : null;
+    return Array.isArray(list) ? list.filter((b) => b && Number.isInteger(b.step) && typeof b.label === "string") : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function rvSaveBookmarks(list) {
+  try {
+    const all = JSON.parse(localStorage.getItem(REPLAY_BOOKMARK_KEY) || "{}") || {};
+    if (list.length > 0) all[rv.file] = list;
+    else delete all[rv.file];
+    localStorage.setItem(REPLAY_BOOKMARK_KEY, JSON.stringify(all));
+  } catch (_) {
+    /* 저장소를 못 쓰면 이번 접속에서만 보이지 않는다 */
+  }
+}
 
 function rvLoadPrefs() {
   try {
@@ -173,7 +199,16 @@ function rvBuildChrome() {
     rvRender();
   }, "rv-toggle");
   ai.id = "rv-ai-toggle";
-  view.append(speed, anchor, hands, ai);
+  const toc = rvButton("목차", "국 목차와 북마크 열기/닫기", () => {
+    rv.tocOpen = !rv.tocOpen;
+    rvRender();
+  }, "rv-toggle");
+  toc.id = "rv-toc-toggle";
+  const star = rvButton("☆", "이 수에 북마크 (한 번 더 누르면 해제)", () => rvToggleBookmark(), "rv-toggle");
+  star.id = "rv-bookmark";
+  const share = rvButton("링크 복사", "지금 보는 수로 바로 가는 링크를 복사합니다 (같은 서버에서 이 리플레이를 볼 수 있는 사람용)", () => rvCopyLink(), "rv-toggle");
+  share.id = "rv-share";
+  view.append(speed, anchor, hands, ai, toc, star, share);
 
   const status = el("span", "rv-status", { role: "status" });
   status.id = "rv-status";
@@ -203,6 +238,9 @@ function rvBuildChrome() {
   list.id = "rv-ai";
   panel.append(h2, note, list);
   document.body.appendChild(panel);
+  const tocPanel = el("aside", "rv-toc-panel hidden", { "aria-label": "국 목차와 북마크" });
+  tocPanel.id = "rv-toc-panel";
+  document.body.appendChild(tocPanel);
   window.addEventListener("resize", rvPlaceAiPanel);
 
   document.addEventListener("keydown", (e) => {
@@ -242,6 +280,7 @@ async function rvLoadList(wanted) {
 async function rvLoadReplay(name) {
   rvStop();
   rv.data = null;
+  rv.file = name;
   for (const id of ["rv-nav", "rv-view"]) rv$(id).classList.add("hidden");
   document.body.classList.remove("rv-ready");
   document.getElementById("hand-end-overlay").classList.add("hidden");
@@ -433,6 +472,7 @@ function rvRender() {
   rv$("rv-ai-toggle").setAttribute("aria-pressed", String(rv.aiOpen));
   rv$("rv-ai-panel").classList.toggle("hidden", !rv.aiOpen);
   rvPlaceAiPanel();
+  rvRenderToc();
 
   const table = rvTableAt(rv.pos);
   if (table) {
@@ -458,7 +498,10 @@ function rvRender() {
 /** AI 패널은 조작 막대 바로 아래부터 (막대는 화면 폭에 따라 줄 수가 바뀐다) */
 function rvPlaceAiPanel() {
   const bar = rv$("rv-bar");
-  if (bar) rv$("rv-ai-panel").style.top = Math.round(bar.getBoundingClientRect().bottom + 6) + "px";
+  if (!bar) return;
+  const top = Math.round(bar.getBoundingClientRect().bottom + 6) + "px";
+  rv$("rv-ai-panel").style.top = top;
+  rv$("rv-toc-panel").style.top = top;
 }
 
 function rvCurrentHand() {
@@ -626,6 +669,127 @@ function rvPlay() {
   rv.playTimer = setTimeout(tick, REPLAY_SPEEDS[rv.speed] * rvHoldOf(rv.data.reproduction.steps[rv.pos].event));
 }
 
+// --- 국 목차, 북마크, 링크 복사 ---
+
+/** 한 국의 결과 한 줄 (엔진이 기록한 hand_end.result를 그대로 읽는다). */
+function rvHandResultText(h) {
+  const steps = rv.data.reproduction.steps;
+  let endEvent = null;
+  for (let i = h.lastStep; i >= h.firstStep; i--) {
+    if (steps[i].event.type === "hand_end") {
+      endEvent = steps[i].event;
+      break;
+    }
+  }
+  const result = endEvent && endEvent.result;
+  if (!result) return "";
+  if (result.kind === "agari") {
+    return result.winners
+      .map((w) => {
+        const who = rvSeatName(w.winnerSeat);
+        const how = w.method === "tsumo" ? "쯔모" : `론 (${rvSeatName(w.loserSeat)} 방총)`;
+        const size = w.yakumanUnits > 0 ? (w.yakumanUnits === 1 ? "역만" : `${w.yakumanUnits}배 역만`) : (LIMIT_NAME_BY_BASE[w.basePoints] ?? `${w.han}판 ${w.fu}부`);
+        return `${who} ${how} ${size} ${formatPoints(w.totalPoints)}점`;
+      })
+      .join(" / ");
+  }
+  if (result.kind === "exhaustive_draw") return `유국 (텐파이 ${result.tenpaiSeats.length}명${result.nagashiManganSeats.length ? ", 유국만관" : ""})`;
+  return `유국 (${ABORTIVE_DRAW_KO[result.reason] ?? result.reason})`;
+}
+
+function rvHandLabel(h) {
+  return `${ROUND_WIND_KO[h.roundWind]}${h.roundHandNumber}국${h.honba ? ` ${h.honba}본장` : ""}`;
+}
+
+function rvRenderToc() {
+  const panel = rv$("rv-toc-panel");
+  panel.classList.toggle("hidden", !(rv.tocOpen && rv.data));
+  rv$("rv-toc-toggle").setAttribute("aria-pressed", String(rv.tocOpen));
+  const bookmarks = rv.data ? rvLoadBookmarks() : [];
+  const marked = bookmarks.some((b) => b.step === rv.pos);
+  const star = rv$("rv-bookmark");
+  star.textContent = marked ? "★" : "☆";
+  star.classList.toggle("is-on", marked);
+  if (!rv.tocOpen || !rv.data) return;
+  panel.innerHTML = "";
+  const h2 = el("h2");
+  h2.textContent = "국 목차";
+  panel.appendChild(h2);
+  const current = rvCurrentHand();
+  const list = el("ol", "rv-toc-list");
+  for (const h of rv.data.reproduction.hands) {
+    const li = el("li");
+    const btn = el("button", "rv-toc-item" + (current && current.firstStep === h.firstStep ? " is-current" : ""), { type: "button" });
+    const label = el("b");
+    label.textContent = rvHandLabel(h);
+    const result = el("span", "rv-toc-result");
+    result.textContent = rvHandResultText(h);
+    btn.append(label, result);
+    btn.addEventListener("click", () => {
+      rvStop();
+      rvGoTo(h.firstStep);
+    });
+    li.appendChild(btn);
+    list.appendChild(li);
+  }
+  panel.appendChild(list);
+
+  const h3 = el("h2");
+  h3.textContent = "북마크";
+  panel.appendChild(h3);
+  if (bookmarks.length === 0) {
+    const empty = el("p", "rv-toc-empty");
+    empty.textContent = "막대의 ☆로 지금 보는 수를 북마크해 두면 여기서 바로 돌아옵니다.";
+    panel.appendChild(empty);
+  }
+  const marks = el("ul", "rv-toc-list");
+  for (const b of [...bookmarks].sort((x, y) => x.step - y.step)) {
+    const li = el("li", "rv-mark");
+    const go = el("button", "rv-toc-item" + (b.step === rv.pos ? " is-current" : ""), { type: "button" });
+    go.textContent = b.label;
+    go.addEventListener("click", () => {
+      rvStop();
+      rvGoTo(b.step);
+    });
+    const del = el("button", "rv-mark-del", { type: "button", "aria-label": "북마크 삭제", title: "북마크 삭제" });
+    del.textContent = "×";
+    del.addEventListener("click", () => {
+      rvSaveBookmarks(rvLoadBookmarks().filter((x) => x.step !== b.step));
+      rvRenderToc();
+    });
+    li.append(go, del);
+    marks.appendChild(li);
+  }
+  panel.appendChild(marks);
+  rvPlaceAiPanel();
+}
+
+function rvToggleBookmark() {
+  if (!rv.data) return;
+  const list = rvLoadBookmarks();
+  if (list.some((b) => b.step === rv.pos)) {
+    rvSaveBookmarks(list.filter((b) => b.step !== rv.pos));
+  } else {
+    const hand = rvCurrentHand();
+    list.push({ step: rv.pos, label: `${hand ? rvHandLabel(hand) + " · " : ""}${rvDescribe(rv.data.reproduction.steps[rv.pos].event)}` });
+    rvSaveBookmarks(list);
+  }
+  rvRenderToc();
+}
+
+/** 지금 보는 수로 바로 가는 링크 (`/?replay=<파일>&step=<수>`)를 복사한다. 클립보드를 못 쓰면 주소창을 바꿔 직접 복사하게 한다. */
+async function rvCopyLink() {
+  if (!rv.data || !rv.file) return;
+  const url = `${location.origin}${replayUrl(rv.file)}&step=${rv.pos}`;
+  history.replaceState(null, "", `${replayUrl(rv.file)}&step=${rv.pos}`);
+  try {
+    await navigator.clipboard.writeText(url);
+    rvSetStatus("링크를 복사했습니다. 이 서버에서 이 리플레이를 열 수 있는 사람이 같은 수로 바로 볼 수 있습니다.");
+  } catch (_) {
+    rvSetStatus("주소창의 링크를 복사하세요 (지금 수가 들어 있습니다).");
+  }
+}
+
 function rvAct(name) {
   if (!rv.data) return;
   const hand = rvCurrentHand();
@@ -655,6 +819,9 @@ async function startReplayMode() {
     await rvLoadReplay(wanted);
     // autoplay=1: 로비의 AI 관전이 방금 저장한 대국을 열 때. 재현이 끝나면 첫 국부터 자동 재생한다.
     if (params.get("autoplay") === "1" && rv.data && !rv.playTimer) rvPlay();
+    // step=<수>: 공유 링크로 열면 그 수에서 시작한다
+    const step = Number(params.get("step"));
+    if (rv.data && params.has("step") && Number.isInteger(step) && step >= 0) rvGoTo(step);
   } else if (wanted) {
     rvSetStatus("그 리플레이 파일을 찾을 수 없습니다. 목록에서 고르세요.");
   }

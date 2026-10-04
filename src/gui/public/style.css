@@ -1909,3 +1909,30 @@ div.setup-seat { cursor: default; }
 .guide-example-note { margin-top: 4px; font-size: 12px; opacity: 0.7; }
 .guide-empty { opacity: 0.7; font-size: 13px; }
 body.is-setup .log-panel { display: none !important; }
+
+/* 리플레이: 국 목차와 북마크 패널 (왼쪽) */
+.rv-toc-panel {
+  position: fixed;
+  left: 10px;
+  z-index: 4;
+  width: min(300px, 44vw);
+  max-height: calc(100dvh - 90px);
+  overflow-y: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(10, 30, 16, 0.94);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+  color: #f0f0f0;
+}
+.rv-toc-panel.hidden { display: none; }
+.rv-toc-panel h2 { margin: 4px 0; font-size: 14px; }
+.rv-toc-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.rv-toc-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; font: inherit; color: inherit; text-align: left; padding: 4px 8px; border-radius: 5px; border: 1px solid rgba(255, 255, 255, 0.15); background: rgba(0, 0, 0, 0.2); cursor: pointer; }
+.rv-toc-item.is-current { border-color: #ffd54a; background: rgba(255, 213, 74, 0.12); }
+.rv-toc-result { opacity: 0.8; font-size: 11px; }
+.rv-toc-empty { opacity: 0.65; margin: 2px 0 8px; }
+.rv-mark { display: flex; gap: 4px; align-items: stretch; }
+.rv-mark .rv-toc-item { flex-direction: row; }
+.rv-mark-del { font: inherit; font-size: 15px; color: inherit; background: none; border: none; cursor: pointer; opacity: 0.7; }
+#rv-bookmark.is-on { color: #ffd54a; }
