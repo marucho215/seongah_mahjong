@@ -1871,6 +1871,9 @@ div.setup-seat { cursor: default; }
 
 /* --- 마작 배우기 (기초 규칙, 역 도감) --- */
 .learn-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.learn-actions .setup-segment:first-child:nth-last-child(3) { grid-column: 1 / -1; }
+#audio-controls .fullscreen-toggle { font: inherit; font-size: 12px; padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.25); background: rgba(0,0,0,0.3); color: rgba(240,240,240,0.85); cursor: pointer; }
+#audio-controls .fullscreen-toggle.hidden { display: none !important; }
 .yaku-link { font: inherit; color: inherit; background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline dotted rgba(255, 255, 255, 0.5); text-underline-offset: 3px; text-align: left; }
 .yaku-link:hover { color: #ffd54a; }
 .wait-hint-line { margin-left: 8px; font-size: 12px; opacity: 0.95; display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 2px; }

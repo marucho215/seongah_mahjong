@@ -2168,6 +2168,8 @@ const OPTION_STORAGE_KEY = "seongah.playOptions";
 const OPTION_DEFAULTS = {
   confirmDiscard: typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches,
   keyboard: true,
+  // 대국을 시작할 때 전체 화면으로 (주소창을 숨긴다). 터치 화면은 기본으로 켠다.
+  autoFullscreen: typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches,
 };
 
 function loadFlags(key, defaults) {
@@ -2233,6 +2235,58 @@ function mountAssistControls() {
 
 mountAssistControls();
 mountLogToggle();
+
+// --- 전체 화면: 휴대폰 크롬의 주소창이 화면 위를 차지하지 않게 한다. 웹 페이지가 주소창을 직접 숨길 수는 없으므로 (1) 전체 화면 API(사용자가
+// 누른 순간에만 허용된다: 버튼, 대국 시작/다시 하기)를 쓰고, (2) 홈 화면에 추가하면 manifest의 display: fullscreen으로 주소창 없이 열린다. ---
+
+function fullscreenSupported() {
+  const installed = typeof matchMedia === "function" && (matchMedia("(display-mode: fullscreen)").matches || matchMedia("(display-mode: standalone)").matches);
+  return !installed && !!document.fullscreenEnabled && typeof document.documentElement.requestFullscreen === "function";
+}
+
+async function enterFullscreen() {
+  if (!fullscreenSupported() || document.fullscreenElement) return;
+  try {
+    await document.documentElement.requestFullscreen({ navigationUI: "hide" });
+    // 가로 화면 고정 (지원하지 않거나 거절되면 그대로 둔다)
+    if (screen.orientation && screen.orientation.lock) await screen.orientation.lock("landscape").catch(() => {});
+  } catch (_) {
+    /* 거절되면(권한/제스처 없음) 조용히 넘어간다 - 버튼으로 다시 누를 수 있다 */
+  }
+}
+
+async function toggleFullscreen() {
+  if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+  else await enterFullscreen();
+}
+
+function syncFullscreenButtons() {
+  const on = !!document.fullscreenElement;
+  for (const btn of document.querySelectorAll(".fullscreen-toggle")) {
+    btn.classList.toggle("hidden", !fullscreenSupported() && !on);
+    btn.textContent = on ? "전체 화면 끄기" : "전체 화면";
+    btn.setAttribute("aria-pressed", String(on));
+  }
+}
+
+for (const btn of document.querySelectorAll(".fullscreen-toggle")) {
+  btn.addEventListener("click", () => {
+    toggleFullscreen();
+    btn.blur();
+  });
+}
+document.addEventListener("fullscreenchange", syncFullscreenButtons);
+syncFullscreenButtons();
+
+// 대국을 시작하거나 다시 하는 눌림에서 전체 화면으로 (옵션 "대국 시작 시 전체 화면")
+document.addEventListener(
+  "click",
+  (e) => {
+    if (!uiOptions.autoFullscreen || document.fullscreenElement || !fullscreenSupported()) return;
+    if (e.target.closest && e.target.closest(".setup-start, .final-actions .continue-button")) enterFullscreen();
+  },
+  true
+);
 
 // --- 키보드 (옵션 "키보드 단축키", 기본 켬): 타패 요청에서 ←/→ 패 고르기, Enter 버리기(리치 가능한 패면 리치 선택으로),
 // Esc 고르기 취소, T 쯔모패 그대로 버리기. 리치 선택 중에는 R 리치, Enter 그냥 버리기, Esc 다른 패 고르기.
@@ -3095,6 +3149,15 @@ function renderLearnEntry() {
   const lead = el("p", "setup-lead");
   lead.textContent = "마작이 처음이라면 먼저 읽어 보세요. 대국 중에도 메뉴의 \"도감\" 버튼(또는 G 키)으로 언제든 열 수 있습니다.";
   const row = el("div", "learn-actions");
+  if (fullscreenSupported() && matchMedia("(pointer: coarse)").matches) {
+    // 휴대폰: 주소창을 숨기는 전체 화면 (로비에서 미리 켤 수 있다)
+    const fs = el("button", "setup-segment", { type: "button" });
+    const main = el("span", "segment-main");
+    main.textContent = "전체 화면 (주소창 숨김)";
+    fs.appendChild(main);
+    fs.addEventListener("click", () => enterFullscreen());
+    row.appendChild(fs);
+  }
   for (const [label, tab] of [["기초 규칙", "basics"], ["역 도감", "yaku"]]) {
     const btn = el("button", "setup-segment", { type: "button" });
     const main = el("span", "segment-main");

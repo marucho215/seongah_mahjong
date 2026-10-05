@@ -4,6 +4,9 @@
 <meta charset="utf-8" />
 <!-- 휴대폰이 PC 폭으로 그린 뒤 축소하지 않도록 (join.html과 같다) -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#173f24" />
+<meta name="mobile-web-app-capable" content="yes" />
 <title>Seongah Majak — Human Play</title>
 <link rel="stylesheet" href="/style.css" />
 </head>
@@ -41,6 +44,7 @@
     <button type="button" class="auto-toggle" data-auto="tsumogiri" aria-pressed="false" title="쯔모 뒤 타패 차례에 뽑은 패를 자동으로 버립니다 (리치는 선언하지 않음)">자동 쯔모기리</button>
     <button type="button" class="auto-toggle" data-auto="passCalls" aria-pressed="false" title="치·퐁·대명깡 제안을 자동으로 넘깁니다 (암깡·가깡·북 빼기는 제외)">울기 패스</button>
     <button type="button" class="auto-toggle" data-auto="autoWin" aria-pressed="false" title="론·쯔모가 가능하면 자동으로 선언합니다">자동 화료</button>
+    <button type="button" class="fullscreen-toggle hidden" title="전체 화면: 휴대폰 크롬의 주소창을 숨겨 화면을 넓게 씁니다">전체 화면</button>
     <button type="button" class="guide-toggle" title="마작 배우기: 기초 규칙과 역 도감">도감</button>
     <button type="button" class="log-toggle" aria-pressed="false" title="패보: 모두의 버림패 전체(울려 간 패, 쯔모기리, 리치 선언패)와 울기 내역 (H)">패보</button>
     <!-- 플레이 보조(표시 전용): 켜면 게임 진행에 도움이 되는 정보를 더 보여 준다. 메뉴 패널에서 항목별로 켜고 끈다 (app.js) -->
@@ -53,6 +57,7 @@
       <label class="assist-row"><input type="checkbox" data-assist="yakuHint" /><span><b>예상 역 표시</b><small>텐파이일 때 대기패마다 어떤 역으로 몇 판이 되는지 (처음이라면 켜 보세요. 역 이름을 누르면 설명이 열립니다)</small></span></label>
       <p class="assist-note assist-note-sub">입력 방식</p>
       <label class="assist-row"><input type="checkbox" data-option="confirmDiscard" /><span><b>두 번 눌러 버리기</b><small>패를 한 번 누르면 고르기만 하고, 한 번 더 누르거나 "버리기"를 눌러야 버립니다 (터치 화면은 기본으로 켜짐)</small></span></label>
+      <label class="assist-row"><input type="checkbox" data-option="autoFullscreen" /><span><b>대국 시작 시 전체 화면</b><small>대국을 시작할 때 주소창을 숨기고 가로 화면으로 (휴대폰 기본 켜짐). 아이폰은 사파리의 "홈 화면에 추가"로 설치하면 주소창 없이 열립니다</small></span></label>
       <label class="assist-row"><input type="checkbox" data-option="keyboard" /><span><b>키보드 단축키</b><small>←/→ 패 고르기 · Enter 버리기/하기 · Esc 취소/넘기기 · T 쯔모기리 · R 리치 · H 패보 · G 도감</small></span></label>
     </div>
     <select class="speed-select" aria-label="AI 진행 속도">

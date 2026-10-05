@@ -63,6 +63,8 @@ const MIME_TYPES: Record<string, string> = {
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
   ".md": "text/plain; charset=utf-8",
   ".mp3": "audio/mpeg",
   ".ogg": "audio/ogg",
@@ -74,7 +76,8 @@ const MIME_TYPES: Record<string, string> = {
 const NO_STORE_FILES = new Set(["/index.html", "/app.js", "/audioManager.js", "/yakuGuide.js", "/guide.js", "/style.css", "/replayMode.js", "/join.html", "/join.js"]);
 
 /** 입장 게이트가 켜져 있을 때 입장 전에도 열리는 경로 (입장 화면과 그 스타일). */
-const JOIN_PUBLIC_PATHS = new Set(["/join.html", "/join.js", "/style.css"]);
+// (앱 설치용 manifest와 아이콘은 입장 전에도 열려야 한다: 브라우저가 쿠키 없이 가져간다)
+const JOIN_PUBLIC_PATHS = new Set(["/join.html", "/join.js", "/style.css", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"]);
 /** 입장 전이면 입장 화면으로 보내는 페이지 (그 밖의 경로는 401). */
 const GATED_PAGES = new Set(["/", "/index.html", "/replay.html"]);
 
